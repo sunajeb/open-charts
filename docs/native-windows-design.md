@@ -70,11 +70,20 @@ applyDrag(spec: ChartSpec, h: Handle, dxPt: number, dyPt: number): ChartSpec   /
 
 ## 3. Chart identity and storage
 
-Same **tag contract v1** as the Office.js plan (§4.3 there) so the CLI, the web add-in and this add-in interoperate: on the group `OC_SPEC` (compact JSON spec + style overrides), `OC_V` (engine version), `OC_FRAME`; on each child `OC_ROLE` (`bar:s1:c2`, `label:value:s1:c2`, `axis`, `arrow:cagr`, …). Tags persist in the .pptx (`p:custDataLst` → `ppt/tags/tagN.xml`), survive copy/paste between decks, and are invisible to users. PowerPoint upper-cases tag names. `Shape.Tags.Add/Item/Delete` is the OM. The group `Name` stays human (`open-charts: stacked`), alt text (`AlternativeText`) stays prose.
+**Identity and storage follow tag contract v1 in `docs/plan/03-officejs-and-mac.md` §4.3 verbatim** — it is the single interop format for the CLI writer, the Office.js add-in and this add-in; this document defines no second scheme. Recap (group tags unless noted): `OC_V` contract version (`"1"`), `OC_ENGINE` engine version (migrations), `OC_SPEC` compact JSON spec + style overrides (chunked `OC_SPEC_0…n` + `OC_SPEC_N` over the size limit), `OC_FRAME` `"x,y,w,h"` pt, `OC_FONT`, `OC_HIDDEN` roles the user deleted, and `OC_ROLE` on every child (`bar:s1:c2`, `label:value:s1:c2`, `axis`, `arrow:cagr`, …). Native reads them through `Shape.Tags.Item(name)` and writes through `Tags.Add` (PowerPoint upper-cases names; values are strings). Tags live in `p:custDataLst` → `ppt/tags/tagN.xml`, survive copy/paste and are invisible to users. Group `Name` stays human, `AlternativeText` stays prose. Why tags and not the alternatives: `CustomXMLParts` are presentation-level with no stable per-shape key (shape IDs change on paste); names are user-editable and length-limited.
 
-Why not the alternatives: `CustomXMLParts` are presentation-level and keyed by nothing stable (shape IDs change on paste); custom group names are user-editable and length-limited; `Shape.Tags` is the one per-shape store that round-trips.
+Reading rules: `OC_V` > 1 → chart is read-only in this add-in (banner: "made with a newer open-charts"); `OC_ENGINE` older than ours → migrate the spec on first edit and rewrite `OC_ENGINE`; `OC_FRAME` ≠ current group bounds → the user resized/moved natively, offer/perform re-layout (§3 re-render, §4.5).
 
-Additionally this add-in stores `OC_BASE` on the group: the last *rendered* value of override-able properties per role (`{"bar:s1:c2":{"fill":"1F3A5F"},"label:total:c2":{"size":12,"bold":false,…}}`). It enables the three-way merge below. ⚠️ Tag value size limit is undocumented (S6 measures; fallback: chunk `OC_SPEC_0…n`).
+**Extensions native needs** (proposed as contract v1 additions — additive, ignorable by other hosts, to be merged into §4.3 of the plan):
+
+| Key | On | Value | Why native needs it |
+|---|---|---|---|
+| `OC_BASE` | group | JSON `{role: {fill?, size?, bold?, color?}}` — the *last rendered* value of override-able properties per role | three-way merge in the in-place differ (below): detects user formatting overrides without a full rebuild. The web add-in's §4.6 "read back common manual edits before deletion" can use the same key |
+| `OC_LINK` | group | JSON `{path, sheet, range\|name, hash}` | Excel link (M7); other hosts ignore it |
+| spec fields, not tags | in `OC_SPEC.options` | `labelOffsets: {role: {dx,dy}}`, `arrowLevel`, `axisMax` | written by drag handles; plain `ChartOptions` additions in `src/core`, so CLI and web honour them |
+| `Scene.roles` | engine output, not a tag | `string[]` parallel to `shapes` | the engine, not each host, decides roles; one-line change in `common.ts`; the CLI writer and web add-in need it too to emit `OC_ROLE` |
+
+⚠️ Tag value size limit is undocumented; the plan's S2 and this doc's S6 measure it (same spike, run once). No new size risk from `OC_BASE`: ≈ 40 bytes × roles ≈ 10 KB for a 250-shape chart; chunk like `OC_SPEC` if needed.
 
 **Re-render strategy: in-place diff, never delete-and-recreate on the hot path.**
 
@@ -93,7 +102,6 @@ new scene (role → shape)      current group items (OC_ROLE → Shape)       OC
 - Adding or removing children (series/category count changed) requires `Ungroup()` → edit `ShapeRange` → `Group()`. That creates a new group shape (new ID, lost tags, top z-order), so the writer: records `ZOrderPosition`, name, alt text, tags before; re-applies after; restores z-order by `ZOrder(msoSendBackward)` N times. Rare path, acceptable.
 - Z-order inside the group follows scene order; the differ only calls `ZOrder` when a role's relative order changed (rare: label moved above/below a bar).
 - Frame: the group's *current* `Left/Top/Width/Height` is the frame — the user resizes or moves the group natively, we re-plan into the new frame (`WindowSelectionChange` + bounds compare, or `AfterShapeSizeChange` ⚠️ exists in the PowerPoint 2010+ event set).
-- A selected group whose `OC_V` is newer than the add-in → read-only banner. Older → migrate spec on first edit.
 
 ## 4. Direct manipulation
 
@@ -183,7 +191,7 @@ Per-element items (all also reachable from the contextual tab; every action is o
 
 | Clicked element (role) | Items |
 |---|---|
-| `bar:*` / `marker:*` / `segment:*` | Series colour… · Move series up/down · Show/hide value labels for series · Add difference arrow from here… · Add CAGR arrow from here… |
+| `bar:*` / `marker:*` | Series colour… · Move series up/down · Show/hide value labels for series · Add difference arrow from here… · Add CAGR arrow from here… |
 | `label:value:*` | Hide · Inside / Above / Below · Reset position · Decimals ▸ 0/1/2/auto · Unit… |
 | `label:total:*` | Hide totals · Decimals ▸ · Bold on/off |
 | `label:category:*` | Edit text (opens pane row) · Rotate 0°/45°/90° (later) · Hide |
