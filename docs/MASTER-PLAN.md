@@ -11,7 +11,7 @@ open-charts is an Apache-2.0, clean-room engine that turns a JSON chart spec int
 | Area | State | Evidence |
 |---|---|---|
 | Engine `src/core` | ~1,050 lines pure TS, zero deps, scene-first, real font metrics (opentype.js, kerning off, Arial line height 1.149), Heckbert/Talbot ticks, largest-remainder rounding, Liang–Barsky label/line hits | `src/core/*.ts` |
-| Chart types | ✅ stacked, 100 %, clustered column; ✅ line; ✅ waterfall (running sum, totals/subtotals, connectors, below-zero bridges, `ee50240`); 🔶 Mekko % and unit — code + tests written, **uncommitted** (`src/core/charts/mekko.ts`, `test/mekko.test.ts`, `examples/mekko.json`) | `git status` |
+| Chart types | ✅ stacked, 100 %, clustered column; ✅ line; ✅ waterfall (running sum, totals/subtotals, connectors, below-zero bridges, `ee50240`); ✅ Mekko % and unit (`98f2913`) | `git log` |
 | Decorations | ✅ totals, CAGR arrow (explicit `years` option; index-distance fallback), total-difference arrow, right-hand series labels, one-row legend, value axis, contrast text | `column.ts` |
 | Renderers | ✅ dependency-free OOXML writer (one flat `grpSp`, alt text), ✅ SVG mirror, ✅ zip writer (no timestamps) | `src/render` |
 | Surfaces | ✅ CLI (`deck.json → .pptx`, `--svg`), ✅ local editor (datasheet, Excel paste, live preview, download), ✅ `serve` | `src/cli.ts`, `src/server.ts`, `src/web/editor.html` |
@@ -89,7 +89,7 @@ Rules that keep this honest: `src/core` imports nothing outside itself and never
 | 8 verify | core gate | scene → metrics (§9) | shared |
 | 9 fallback | core | shrink one role one step (≥ `theme.fonts.min`) → re-run 7–8 → hide by priority → report | shared |
 
-**Shared tag contract v1** (resolves doc 03 §4.3 vs native §3 vs doc 04 §A.1):
+**Shared tag contract v1** — defined once in doc 03 §4.3; native §3 adopts it verbatim; doc 04 §A.1's "`OC_V` carries the spec version" is superseded (the spec version lives inside `OC_SPEC`). Rows marked *ext.* are native's additive v1 extensions, **decided unless objected**: ignorable by any host, no new keys needed to read a chart.
 
 | Key | On | Value | Who writes |
 |---|---|---|---|
@@ -100,8 +100,12 @@ Rules that keep this honest: `src/core` imports nothing outside itself and never
 | `OC_FONT` | group | measured font family | all |
 | `OC_ROLE` | each child | `bar:s1:c2`, `label:total:c2`, `axis`, `arrow:cagr`, … | all |
 | `OC_HIDDEN` | group | JSON `string[]` of roles the user deleted | add-ins |
-| `OC_BASE` | group | last-rendered overridable props per role (three-way merge) | native (optional, others ignore) |
-| `OC_LINK` | group | `{path, sheet, range, hash}` — mirrors `data.source` | P5 |
+| `OC_BASE` *ext.* | group | JSON `{role: {fill?, size?, bold?, color?}}` — last-*rendered* value of override-able props per role; ≈ 10 KB for 250 shapes, chunked like `OC_SPEC` if needed | native differ (three-way merge: current ≠ base ⇒ user override, kept and written into `OC_SPEC`); Office.js override read-back (03 §4.6) uses the same key |
+| `OC_LINK` *ext.* | group | JSON `{path, sheet, range\|name, hash}` — mirrors `data.source` | P5 Excel links; others ignore |
+| *(spec fields, not tags)* *ext.* | `OC_SPEC.options` | `labelOffsets: {role: {dx, dy}}`, `arrowLevel`, `axisMax` | written by drag handles (P4) and by the pane; plain `ChartOptions` additions in `src/core`, so CLI, editor and Office.js honour them |
+| *(engine output, not a tag)* *ext.* | `Scene.roles` | `string[]` parallel to shapes/nodes | the **engine assigns roles**, never a host; CLI writer, Office.js and native all emit `OC_ROLE` from it (lands with the scene graph in P1 week 3) |
+
+Reading rules shared by all hosts: `OC_V` > known → read-only with a "made with a newer open-charts" banner; `OC_ENGINE` older → migrate spec on first edit and rewrite `OC_ENGINE`; `OC_FRAME` ≠ current group bounds → user resized/moved natively, offer re-layout. The tag-size limit is measured by **one** spike (OJ-S2; native's former S6 is the same spike).
 
 ## 4. Unified roadmap
 
@@ -130,9 +134,9 @@ Effort = engineer-weeks (ew) of people who know the codebase; calendar = team va
 | Total | 01: 18 mo. 04: 36.5 EM, ~18 mo | **36 EM, ~17 months** with the staffing in §5 |
 | Spec version field | 02: `"version": 2` (today = v1). 04: `specVersion: 1` optional, 0.x until P1 | **`specVersion`** at deck and chart root. Today's unversioned spec is **v0**; the restructured spec (decorations list, `orientation`, `labels`/`axis` objects) ships as **v1** and freezes at P1 exit = **1.0**. `migrate()` upgrades v0 forever |
 | Schema source of truth | 02: generated from TS types. 04: hand-written, TS mirrors it | **Hand-written JSON Schema 2020-12** + zero-dep validator + "kitchen-sink" sync test (ajv dev-only). Keeps the no-dependency promise |
-| `OC_V` meaning | 03 table: contract version. 03 code sample + native: engine version. 04: spec version | **Contract version** (§3). Engine → `OC_ENGINE`; spec version lives inside `OC_SPEC` |
+| `OC_V` meaning | 03 table: contract version. 03 code sample and the *original* native §3: engine version. 04: spec version | **Contract version** (§3); native §3 now adopts 03 §4.3 verbatim. Engine → `OC_ENGINE`; spec version lives inside `OC_SPEC` |
 | `OC_FRAME` format | 03 code: JSON. 03 table + native: `"x,y,w,h"` | `"x,y,w,h"` |
-| Extra tags | native adds `OC_BASE`; 04 adds `OC_LINK` | Both admitted to contract v1 as **optional** keys; hosts ignore unknown `OC_*` |
+| Contract extensions | native proposes `OC_BASE`, `OC_LINK`, drag-written spec fields (`labelOffsets`, `arrowLevel`, `axisMax`) and engine-emitted `Scene.roles` | All four admitted to v1 as **additive, decided-unless-objected** (§3); hosts ignore unknown `OC_*`; roles are assigned by the engine only |
 | When the CLI writes tags | 03: P3 milestone 3. native: P4 M1. 01: needed for P1 exit (`import` recovers spec) | **P1** (≈ 1 day) plus `open-charts inspect` |
 | Line height | 02 B7: hard-coded 1.2. native: 1.2. code today: 1.149 constant | Still open: **read from font `hhea`/`OS/2`**, verify per family in the text-parity spike |
 | Kerning (B6) | measure `kerning:false` vs emit `kern="1200"` | **Decided & done**: measure without kerning; writer never sets `kern` |
@@ -227,12 +231,12 @@ Two tracks. Track E (engine) is the critical path and applies to both variants; 
 
 | Week | Track E — engine (A) | Track S — spikes & infra (B) |
 |---|---|---|
-| **1** (Oct 12–16) | Commit Mekko with tests. Fix B5, B10, B13 and `tasks/todo.md`. `npm test` green from a clean clone in CI (GitHub Actions, Node 22 + 24). Text parity [2]: line height from `hhea`/`OS/2` (B7), bold face check, measurement LRU cache. Start `docs/behaviour-spec.md` (rule → public source) and `docs/CLEAN-ROOM.md`; PR template with attestation | Order: Windows VM + 3 × M365 licences, Mac test machine, EV/Trusted Signing cert. **OJ-S2*** tag size & persistence (1/32/256 KB; copy/paste; Keynote/LibreOffice re-save). **OJ-S7*** browser measurer parity (Chromium + WebKit vs Node, bundled Liberation). OJ-S1 API-set matrix + manifest format on Win/Mac/web/iPad |
+| **1** (Oct 12–16) | Fix B5, B10, B13 and `tasks/todo.md`. `npm test` green from a clean clone in CI (GitHub Actions, Node 22 + 24). Text parity [2]: line height from `hhea`/`OS/2` (B7), bold face check, measurement LRU cache. Start `docs/behaviour-spec.md` (rule → public source) and `docs/CLEAN-ROOM.md`; PR template with attestation | Order: Windows VM + 3 × M365 licences, Mac test machine, EV/Trusted Signing cert. **OJ-S2*** tag size & persistence (1/32/256 KB; copy/paste; Keynote/LibreOffice re-save). **OJ-S7*** browser measurer parity (Chromium + WebKit vs Node, bundled Liberation). OJ-S1 API-set matrix + manifest format on Win/Mac/web/iPad |
 | **2** (Oct 19–23) | Numbers & locale service [3]: Excel-style format strings, locale table, unit prefix/suffix/space, parentheses, magnitude, consistent rounding across segments + total (closes B14; bench slide 4). Start spec v1 [4]: `specVersion`, `migrate(v0)`, hand-written JSON Schema, path-addressed validation (B15), decorations as a list | OJ-S3 undo granularity, OJ-S4 shape-creation perf (50/150/300), OJ-S5 settable props (arrowheads, rotation, roundRect, margins/wrap/autosize), OJ-S6 selection event + groups, OJ-S9 `insertSlidesFromBase64` theme mapping. **NW-S4*** Jint timing on a 250-shape chart (console harness, no Office needed) |
-| **3** (Oct 26–30) | Finish spec v1 (v0 fixtures migrate byte-identically; schema published). Scene graph [5]: node ids, owners, roles, layers, nested groups, text runs, `path`; writer emits nested `grpSp` with names, `custGeom`; SVG mirrors. Writer emits **tag contract v1**; `open-charts inspect` reads it back | OJ-S8 offline/service worker (WebView2, WKWebView). Decisive native spikes **NW-S1** (hook sees/swallows mouse-down; pointer vs mouse), **NW-S2** (`PointsToScreenPixels` at 100/150/200 % + mixed DPI), **NW-S3** (owned layered overlay) — team variant only; informs the P4 budget line. Write `docs/plan/spike-results.md`; manifest decision (XML unless OJ-S1 shows unified covers Mac + iPad) |
+| **3** (Oct 26–30) | Finish spec v1 (v0 fixtures migrate byte-identically; schema published). Scene graph [5]: node ids, owners, roles, layers, nested groups, text runs, `path`; writer emits nested `grpSp` with names, `custGeom`; SVG mirrors. Engine emits `Scene.roles`; writer emits **tag contract v1** (`OC_ROLE` from engine roles); `open-charts inspect` reads it back | OJ-S8 offline/service worker (WebView2, WKWebView). Decisive native spikes **NW-S1** (hook sees/swallows mouse-down; pointer vs mouse), **NW-S2** (`PointsToScreenPixels` at 100/150/200 % + mixed DPI), **NW-S3** (owned layered overlay) — team variant only; informs the P4 budget line. Write `docs/plan/spike-results.md`; manifest decision (XML unless OJ-S1 shows unified covers Mac + iPad) |
 | **4** (Nov 2–6) | Space-reservation ledger [6] (removes both 3-pass loops; identical output on fixtures). Plugin interface + pipeline [7]; split `column.ts` into model/reserve/plot/labels. Begin label solver v1 [8]: candidates table, cost function, greedy + improvement, obstacle grid | Windows golden runner skeleton on the VM (PowerShell COM `Slide.Export` → PNG → diff). LibreOffice golden pipeline in Actions (`soffice` → `pdftoppm` → SSIM + block test) [10, part]. First 10 bench fixtures with expected `scene.json`. Text-parity numbers: 50 strings vs PowerPoint `BoundWidth` for Arial/Calibri at 10–18 pt (NW-S9 ≡ item 2 check) |
 
-**Day-30 checkpoint (must all hold):** Mekko committed; B5/B7/B10/B13/B14/B15 closed; spec v1 + schema + migration merged; scene graph + tags in the writer; ledger + pipeline merged; solver v1 branch passing bench slides 1–5; CI green on PR (unit + scene goldens + LibreOffice goldens); Windows runner exporting PNGs; all nine OJ spikes and NW-S1/S2/S4 answered in `spike-results.md`; behaviour-spec has an entry for every rule the six types already implement; `CLEAN-ROOM.md` published.
+**Day-30 checkpoint (must all hold):** B5/B7/B10/B13/B14/B15 closed; spec v1 + schema + migration merged; scene graph + tags in the writer; ledger + pipeline merged; solver v1 branch passing bench slides 1–5; CI green on PR (unit + scene goldens + LibreOffice goldens); Windows runner exporting PNGs; all nine OJ spikes and NW-S1/S2/S4 answered in `spike-results.md`; behaviour-spec has an entry for every rule the six types already implement; `CLEAN-ROOM.md` published.
 
 Solo variant: Track E as written; from Track S only the starred items (OJ-S2, OJ-S7, NW-S4 — none needs Windows; OJ-S2 runs on Mac) plus the LibreOffice golden pipeline; defer the Windows VM to week 6–8 and the NW spikes to the M7 gate.
 
@@ -250,7 +254,7 @@ Solo variant: Track E as written; from Track S only the starred items (OJ-S2, OJ
 | Bundled Liberation metrics primary in the browser, canvas fallback, `.ttf` upload later | 03 §3.2 |
 | Office.js: XML manifest first (pending OJ-S1), PowerPointApi 1.2 floor, feature-detect 1.3–1.5; Path A always ships; Path B per-platform via `hostCaps` | 03 §2, §4.1 |
 | Native: C#/.NET Fx 4.8 shared COM add-in, no VSTO; Jint; thread-local `WH_GETMESSAGE` hook; ghost-preview drags; in-place diff, never delete-and-recreate on the hot path | native §1–5 |
-| Tag contract v1 as in §3; `OC_V` = contract version | this doc |
+| Tag contract v1 as in §3; `OC_V` = contract version; native's four additive extensions (`OC_BASE`, `OC_LINK`, drag-written options, `Scene.roles`) accepted unless objected | 03 §4.3, native §3, this doc |
 | `specVersion` naming; v0 → v1 migration; 1.0 at P1 exit | this doc |
 | Hand-written JSON Schema + zero-dep validator | 04 A.1 |
 | AI split: model chooses *what to say*, engine does numbers/geometry; reference mode + verifier; separate `@open-charts/ai` package; rules-first recommendation | 04 B |
@@ -350,7 +354,7 @@ Phase 4 alone is ~$95k–150k of the team budget and is the first line to cut (O
 | [`plan/02-engine-and-quality.md`](plan/02-engine-and-quality.md) | Bug list B1–B15; spec v1 shape; scene graph; plugin pipeline; ledger; label solver (candidates, cost, optimisation); chart catalogue with edge cases; 22 bench slides; metrics; golden-image CI; human rubric; "indistinguishable" definition; 25-item ordered backlog | How to build the engine and prove its quality |
 | [`plan/03-officejs-and-mac.md`](plan/03-officejs-and-mac.md) | Manifest, API requirement sets, browser engine build and font metrics, Path A/B insertion, tag contract, edit/re-layout flows, Mac specifics, distribution/offline/security, 6 milestones, spikes OJ-S1–S9 | The cross-platform add-in |
 | [`plan/04-data-ai-and-engineering.md`](plan/04-data-ai-and-engineering.md) | Schema/validator/versioning, SDKs, template fill, inputs, Excel links design, batch/CI; AI integration, guardrails, eval; repo layout, build, test pyramid, golden CI, releases, docs site, governance, licence, clean-room, security; team, solo variant, budget, risks, KPIs | Everything around the engine, and the money |
-| [`native-windows-design.md`](native-windows-design.md) | COM add-in type, Jint engine host, DirectWrite, tag storage + in-place differ, calibrator/overlay/hook/drag sessions, undo/perf/threading, ribbon and context menus, WebView2 datasheet, packaging/resiliency, testing, 7 milestones, spikes NW-S1–S9 | On-slide direct manipulation on Windows |
+| [`native-windows-design.md`](native-windows-design.md) | COM add-in type, Jint engine host, DirectWrite, tag contract v1 (adopted from 03) + `OC_BASE` three-way in-place differ, calibrator/overlay/hook/drag sessions, undo/perf/threading, ribbon and context menus, WebView2 datasheet, packaging/resiliency, testing, 7 milestones, spikes NW-S1–S9 | On-slide direct manipulation on Windows |
 | `plan/spike-results.md` (to be written, week 3) | Answers to all OJ-* and NW-* spikes | Go/no-go evidence |
 | `behaviour-spec.md`, `CLEAN-ROOM.md` (to be written, week 1) | Rule provenance; IP policy | Clean-room trail |
 | [`../tasks/todo.md`](../tasks/todo.md) | Live checklist (stale — refresh in week 1) | Day-to-day tracking |

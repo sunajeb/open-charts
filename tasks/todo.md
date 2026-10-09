@@ -1,18 +1,27 @@
-# open-charts — plan
+# open-charts — live checklist
 
-## Phase 1 — engine + PowerPoint output
-- [x] Core types, scene graph, font-metric text measurement (Arial / Liberation Sans)
-- [x] Nice ticks, number formatting, contrast text colour, label spreading
-- [x] Stacked, 100%, clustered column charts with totals, CAGR + difference arrows, series labels, legend, value axis
-- [x] Dependency-free OOXML writer (grouped native shapes, alt text) + SVG preview
-- [x] CLI: deck.json → deck.pptx (+ --svg), layout quality gate (overlaps, out-of-frame)
-- [ ] Behaviour spec from manual research (docs/behaviour-spec.md)
-- [ ] Waterfall (subtotals, connectors, negatives)
-- [ ] Mekko (variable widths, % and unit)
-- [ ] Line chart (markers, end labels)
-- [ ] Horizontal bar
-- [ ] 100% rounding that sums to 100 (largest remainder)
-- [ ] Tests + golden checks over all examples
-- [ ] Web editor: datasheet + live preview + download .pptx
+Plan of record: docs/MASTER-PLAN.md (shareable page: https://claude.ai/artifact/QZPFXp9NmZSUwYaFBhujWH)
+
+## Done (9 Oct 2026)
+- [x] Engine core: scene graph, font-metric measurement (no kerning, Arial 1.149 line height), nice ticks, exact-100% rounding, label spreading, segment/box clipping
+- [x] Chart types: stacked, 100%, clustered, line, waterfall, Mekko
+- [x] Decorations: totals, CAGR (+years), difference arrows, series labels, legend, value axis
+- [x] Zero-dependency OOXML writer (grouped shapes, alt text) + SVG preview
+- [x] CLI and local editor (datasheet, Excel paste, live preview, pptx download)
+- [x] 20 tests passing (`npm test`)
+- [x] Plan: docs/plan/01–04, docs/native-windows-design.md, docs/MASTER-PLAN.md
+
+## Next: P1 first 30 days (see MASTER-PLAN §6)
+- [ ] Week 1: fix B5, B10, B13; CI on PRs; line height from font hhea/OS2; behaviour-spec.md; CLEAN-ROOM.md
+- [ ] Week 2: numbers/locale service (B14); start spec v1 + JSON Schema + migration (B15)
+- [ ] Week 3: finish spec v1; scene ids/roles; writer emits tag contract v1; `inspect`
+- [ ] Week 4: reservation ledger; plugin pipeline; label solver v1; LibreOffice golden CI; 10 bench fixtures
+
+## Open decisions (owner)
+- [ ] O1 staffing: hybrid recommended
+- [ ] O2 native Windows: gate at M7 recommended
+- [ ] O3 spec freeze: P1 exit recommended
 
 ## Review
+- Session result: six chart types at near-consulting quality, rendered and visually checked through LibreOffice; full five-phase plan.
+- Process miss: four agents sat idle for ~2h on the folder-trust prompt because they were spawned from a new, untrusted folder (see tasks/lessons.md).
