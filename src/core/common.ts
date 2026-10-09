@@ -23,7 +23,7 @@ export interface Ctx {
 export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer): Ctx {
   const defaults = {
     gap: 0.5,
-    seriesLabels: spec.type === 'clustered' || spec.type === 'line' ? 'legend' : 'right',
+    seriesLabels: spec.type === 'clustered' ? 'legend' : 'right',
     totals: spec.type === 'stacked',
   } as const;
   const o = { ...defaults, ...spec.options };
@@ -127,4 +127,14 @@ export function cagrLabel(ctx: Ctx, a: number, b: number, years: number): string
   if (a <= 0 || b <= 0 || years <= 0) return null;
   const r = ((b / a) ** (1 / years) - 1) * 100;
   return formatNumber(r, 1, '%', true);
+}
+
+/** Left value axis: vertical line, tick marks and right-aligned tick labels. */
+export function valueAxis(ctx: Ctx, ticks: number[], yOf: (v: number) => number, px: number, axisW: number, fmt: (v: number) => string) {
+  const { style, frame, lh, pad } = ctx;
+  ctx.shapes.push({ kind: 'line', x1: px, y1: yOf(ticks[0]), x2: px, y2: yOf(ticks[ticks.length - 1]), color: style.axis, width: 0.75 });
+  for (const t of ticks) {
+    ctx.shapes.push({ kind: 'line', x1: px - 3, y1: yOf(t), x2: px, y2: yOf(t), color: style.axis, width: 0.75 });
+    text(ctx, { x: frame.x, y: yOf(t) - lh / 2, w: axisW - pad, h: lh, text: fmt(t), align: 'right', color: style.muted, role: 'axis' });
+  }
 }

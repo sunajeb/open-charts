@@ -24,7 +24,7 @@ class Ids { n = 1; next() { return ++this.n; } }
 function shapeXml(s: Shape, ids: Ids, font: string): string {
   const id = ids.next();
   if (s.kind === 'rect') {
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Bar ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Bar ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${s.ellipse ? 'ellipse' : 'rect'}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
   }
   if (s.kind === 'line') {
     const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2);

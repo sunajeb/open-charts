@@ -17,6 +17,8 @@ export interface ChartOptions {
   difference?: { from: number; to: number } | null;
   /** Show a value axis with ticks. Default: off (values are labelled on the chart). */
   valueAxis?: boolean;
+  /** Force the value axis to include zero. Default: on, except narrow-range line charts. */
+  zeroBased?: boolean;
   /** Fixed number of decimals. Default: inferred from the data. */
   decimals?: number;
   /** Suffix appended to every value label, e.g. "m" or "k". */
@@ -54,6 +56,8 @@ export interface RectShape {
   fill: string;
   stroke?: string;
   strokeWidth?: number;
+  /** Draw as an ellipse inscribed in the box (line chart markers). */
+  ellipse?: boolean;
 }
 
 export interface LineShape {

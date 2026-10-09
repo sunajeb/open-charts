@@ -1,22 +1,26 @@
-/** "Nice" axis ticks (Heckbert, Graphics Gems 1990): steps of 1, 2 or 5 × 10^n. */
+/**
+ * "Nice" axis ticks: steps of 1, 2, 2.5 or 5 × 10^n. Picks the step that wastes the least
+ * axis length while keeping close to the requested tick count (simplified Talbot et al. 2010).
+ */
 export function niceTicks(min: number, max: number, count = 5): number[] {
   if (min === max) max = min + 1;
-  const range = niceNum(max - min, false);
-  const step = niceNum(range / Math.max(1, count - 1), true);
-  const lo = Math.floor(min / step) * step;
-  const hi = Math.ceil(max / step) * step;
-  const ticks: number[] = [];
-  for (let v = lo; v <= hi + step / 2; v += step) ticks.push(round(v, 10));
-  return ticks;
-}
-
-function niceNum(x: number, roundIt: boolean): number {
-  const exp = Math.floor(Math.log10(x));
-  const f = x / 10 ** exp;
-  const nf = roundIt
-    ? f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10
-    : f <= 1 ? 1 : f <= 2 ? 2 : f <= 5 ? 5 : 10;
-  return nf * 10 ** exp;
+  const span = max - min;
+  let best: { lo: number; step: number; n: number; score: number } | null = null;
+  const base = 10 ** Math.floor(Math.log10(span / count));
+  for (const mult of [0.1, 1, 10]) {
+    for (const q of [1, 2, 2.5, 5]) {
+      const step = q * base * mult;
+      const lo = Math.floor(min / step + 1e-9) * step;
+      const hi = Math.ceil(max / step - 1e-9) * step;
+      const n = Math.round((hi - lo) / step) + 1;
+      if (n < 3 || n > 9) continue;
+      const waste = (hi - lo - span) / (hi - lo);
+      const score = waste * 2 + Math.abs(n - count) * 0.15 + (q === 2.5 ? 0.1 : 0);
+      if (!best || score < best.score) best = { lo, step, n, score };
+    }
+  }
+  const { lo, step, n } = best ?? { lo: min, step: span, n: 2 };
+  return Array.from({ length: n }, (_, i) => round(lo + i * step, 10));
 }
 
 const round = (v: number, d: number) => Math.round(v * 10 ** d) / 10 ** d;
@@ -33,6 +37,24 @@ export function formatNumber(v: number, decimals: number, unit = '', signed = fa
   const s = Math.abs(v).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
   const sign = v < 0 && Number(s.replace(/,/g, '')) !== 0 ? '−' : signed && v > 0 ? '+' : '';
   return `${sign}${s}${unit}`;
+}
+
+/**
+ * Round values so the rounded figures add up exactly to the rounded total
+ * (largest-remainder method), e.g. shares that always show 100%.
+ */
+export function roundToTotal(values: number[], decimals = 0): number[] {
+  const f = 10 ** decimals;
+  const scaled = values.map((v) => v * f);
+  const floors = scaled.map(Math.floor);
+  let short = Math.round(scaled.reduce((a, v) => a + v, 0)) - floors.reduce((a, v) => a + v, 0);
+  const order = scaled.map((v, i) => i).sort((a, b) => (scaled[b] - floors[b]) - (scaled[a] - floors[a]));
+  for (const i of order) {
+    if (short <= 0) break;
+    floors[i] += 1;
+    short--;
+  }
+  return floors.map((v) => v / f);
 }
 
 /** Black or white text, whichever reads better on the given fill (WCAG relative luminance). */

@@ -1,9 +1,9 @@
 import type { Ctx } from '../common.ts';
 import {
   arrowRowHeight, bracketArrow, cagrLabel, categoryHeight, categoryLabels, legend,
-  seriesLabelWidth, seriesLabelsRight, text,
+  seriesLabelWidth, seriesLabelsRight, text, valueAxis,
 } from '../common.ts';
-import { niceTicks, textOn } from '../numbers.ts';
+import { formatNumber, inferDecimals, niceTicks, roundToTotal, textOn } from '../numbers.ts';
 
 /** Stacked, 100% and clustered column charts. */
 export function layoutColumns(ctx: Ctx) {
@@ -21,6 +21,9 @@ export function layoutColumns(ctx: Ctx) {
   const total = cats.map((c) => pos[c] + neg[c]);
   const shown = (s: number, c: number) => (percent ? (pos[c] ? (Math.max(0, raw(s, c)) / pos[c]) * 100 : 0) : raw(s, c));
   if (percent && neg.some((v) => v < 0)) ctx.hidden.push('negative values ignored in 100% chart');
+  // 100% labels are rounded together so every column reads exactly 100%.
+  const pctDecimals = o.decimals ?? 0;
+  const shares = cats.map((c) => roundToTotal(sers.map((s) => shown(s, c)), pctDecimals));
 
   // Value domain.
   let [dmin, dmax] = percent ? [0, 100]
@@ -29,7 +32,8 @@ export function layoutColumns(ctx: Ctx) {
   if (dmax === dmin) dmax = dmin + 1;
   const ticks = o.valueAxis ? niceTicks(dmin, dmax) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
-  const axisFmt = (v: number) => ctx.fmt(v, percent ? '%' : o.unit);
+  const axisDecimals = ticks ? inferDecimals(ticks) : 0;
+  const axisFmt = (v: number) => formatNumber(v, axisDecimals, percent ? '%' : o.unit ?? '');
 
   // Reserve space: legend and arrows on top, totals above columns, axis on the left, series labels right, categories below.
   const legendH = legend(ctx);
@@ -55,14 +59,7 @@ export function layoutColumns(ctx: Ctx) {
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const cx = (c: number) => px + slot * (c + 0.5);
 
-  // Value axis.
-  if (ticks) {
-    ctx.shapes.push({ kind: 'line', x1: px, y1: yOf(dmin), x2: px, y2: yOf(dmax), color: style.axis, width: 0.75 });
-    for (const t of ticks) {
-      ctx.shapes.push({ kind: 'line', x1: px - 3, y1: yOf(t), x2: px, y2: yOf(t), color: style.axis, width: 0.75 });
-      text(ctx, { x: frame.x, y: yOf(t) - lh / 2, w: axisW - pad, h: lh, text: axisFmt(t), align: 'right', color: style.muted, role: 'axis' });
-    }
-  }
+  if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
 
   const tops: number[] = [];
   const lastSegs: { name: string; y: number }[] = [];
@@ -99,7 +96,7 @@ export function layoutColumns(ctx: Ctx) {
       const y1 = yOf(b), y2 = yOf(a), h = y2 - y1;
       const fill = ctx.color(s);
       ctx.shapes.push({ kind: 'rect', x, y: y1, w: colW, h, fill, stroke: style.background, strokeWidth: 0.75 });
-      const label = percent ? ctx.fmt(shown(s, c), '%') : ctx.fmt(raw(s, c));
+      const label = percent ? formatNumber(shares[c][s], pctDecimals, '%') : ctx.fmt(raw(s, c));
       const tw = m.width(label, fs);
       if (tw + 2 <= colW && lh * 0.9 <= h) {
         text(ctx, { x: x + colW / 2 - tw / 2 - 1, y: y1 + h / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
