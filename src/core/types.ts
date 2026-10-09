@@ -23,6 +23,8 @@ export interface ChartOptions {
   decimals?: number;
   /** Suffix appended to every value label, e.g. "m" or "k". */
   unit?: string;
+  /** Mekko: stack every column to 100% (default) or keep absolute segment heights. Widths always encode totals. */
+  mekko?: 'percent' | 'unit';
   /** Gap between columns as a fraction of the column width. Default 0.5. */
   gap?: number;
   /** Series identification: labels to the right of the last column, a legend, or none. */

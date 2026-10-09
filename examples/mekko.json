@@ -1,0 +1,46 @@
+{
+  "slides": [
+    {
+      "title": "Market map: Enterprise is the largest pool and the one we lead",
+      "chart": {
+        "type": "mekko",
+        "categories": ["Enterprise", "Mid-market", "SMB", "Public sector", "Consumer"],
+        "series": [
+          { "name": "Us", "values": [410, 180, 90, 60, 20] },
+          { "name": "Competitor A", "values": [290, 240, 160, 70, 90] },
+          { "name": "Competitor B", "values": [180, 150, 210, 40, 160] },
+          { "name": "Others", "values": [120, 130, 240, 130, 230] }
+        ],
+        "options": { "unit": "m" }
+      }
+    },
+    {
+      "title": "Cost base by region: EMEA carries the heaviest overhead",
+      "chart": {
+        "type": "mekko",
+        "categories": ["North America", "EMEA", "Asia Pacific", "Latin America"],
+        "series": [
+          { "name": "Cost of sales", "values": [320, 210, 150, 60] },
+          { "name": "Sales & marketing", "values": [140, 120, 70, 25] },
+          { "name": "R&D", "values": [110, 60, 55, 10] },
+          { "name": "G&A", "values": [50, 70, 25, 15] }
+        ],
+        "options": { "mekko": "unit", "unit": "m", "valueAxis": true }
+      }
+    },
+    {
+      "title": "Stress test: a very narrow column and long category names",
+      "chart": {
+        "type": "mekko",
+        "categories": ["North America & Canada", "Europe, Middle East and Africa", "Asia Pacific (excluding Japan)", "Japan", "Rest of world"],
+        "series": [
+          { "name": "Core platform licences", "values": [240, 170, 95, 40, 2] },
+          { "name": "Add-ons", "values": [60, 50, 30, 12, 1] },
+          { "name": "Professional services", "values": [45, 40, 25, 8, 0.5] },
+          { "name": "Other", "values": [15, 10, 5, 3, 0.5] }
+        ],
+        "options": { "unit": "m", "valueAxis": true }
+      }
+    }
+  ]
+}
