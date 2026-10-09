@@ -1,0 +1,364 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-charts editor</title>
+<style>
+  :root {
+    --bg: #f3f4f1; --panel: #ffffff; --ink: #1c2330; --muted: #5f6877; --rule: #dde0da;
+    --accent: #1f3a5f; --accent-soft: #e6edf6; --warn: #b4541c; --warn-soft: #fbeee4;
+    --font: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); }
+  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
+  header h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .01em; }
+  .tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+  .tab { border: 1px solid var(--rule); background: var(--panel); padding: 5px 10px; border-radius: 6px; cursor: pointer; font: inherit; color: var(--muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tab[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
+  button { font: inherit; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  main { display: grid; grid-template-columns: minmax(360px, 460px) 1fr; gap: 16px; padding: 16px; align-items: start; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0; }
+  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  input, select { font: inherit; color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; background: #fff; min-width: 0; }
+  .grid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .check { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
+  .range { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; }
+  .sheet-wrap { overflow: auto; border: 1px solid var(--rule); border-radius: 8px; max-height: 420px; }
+  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  td, th { border: 1px solid var(--rule); padding: 0; }
+  th { background: #f7f8f5; }
+  td input, th input { border: 0; border-radius: 0; width: 84px; padding: 6px 8px; background: transparent; }
+  td input { text-align: right; font-family: var(--mono); font-size: 13px; }
+  td.name input { text-align: left; font-family: var(--font); width: 140px; font-weight: 600; }
+  th input { font-weight: 600; text-align: center; }
+  .corner { width: 140px; font-size: 11px; color: var(--muted); padding: 0 8px; text-align: left; font-weight: 400; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0; }
+  .preview { background: #fff; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .preview svg { width: 100%; height: auto; display: block; }
+  .issues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+  .issues li { background: var(--warn-soft); color: var(--warn); padding: 4px 8px; border-radius: 4px; }
+  .issues li.ok { background: var(--accent-soft); color: var(--accent); }
+  .issues li.info { background: #f1f2ef; color: var(--muted); }
+  .error { color: var(--warn); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>open-charts</h1>
+  <div class="tabs" id="tabs" role="tablist"></div>
+  <button id="addSlide" type="button">+ Slide</button>
+  <button id="delSlide" type="button">Delete slide</button>
+  <button id="importBtn" type="button">Import JSON</button>
+  <input id="importFile" type="file" accept=".json,application/json" hidden>
+  <button id="exportBtn" type="button">Export JSON</button>
+  <button id="downloadBtn" class="primary" type="button">Download .pptx</button>
+</header>
+
+<main>
+  <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+    <section>
+      <h2>Slide</h2>
+      <label>Title<input id="title" type="text"></label>
+      <div class="grid2">
+        <label>Chart type
+          <select id="type">
+            <option value="stacked">Stacked</option>
+            <option value="percent">100%</option>
+            <option value="clustered">Clustered</option>
+            <option value="line">Line</option>
+            <option value="waterfall">Waterfall</option>
+            <option value="mekko">Mekko</option>
+          </select>
+        </label>
+        <label>Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
+        <label>Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
+        <label>Series labels
+          <select id="seriesLabels">
+            <option value="">Auto</option>
+            <option value="right">Right of chart</option>
+            <option value="legend">Legend</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label>Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
+        <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:4px">
+          <label class="check"><input id="totals" type="checkbox"> Totals</label>
+          <label class="check"><input id="valueAxis" type="checkbox"> Value axis</label>
+        </div>
+      </div>
+      <div class="range"><span>CAGR arrow</span><select id="cagrFrom"></select><select id="cagrTo"></select></div>
+      <div class="range"><span>Difference arrow</span><select id="diffFrom"></select><select id="diffTo"></select></div>
+    </section>
+
+    <section>
+      <h2>Datasheet</h2>
+      <p class="hint">Paste a block from Excel into any cell. Pasting into the top-left cell reads the first row as categories and the first column as series names.</p>
+      <div class="sheet-wrap"><table id="sheet"></table></div>
+      <div class="row">
+        <button id="addCat" type="button">+ Category</button>
+        <button id="addSer" type="button">+ Series</button>
+        <button id="delCat" type="button">− Category</button>
+        <button id="delSer" type="button">− Series</button>
+      </div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Preview</h2>
+    <div class="preview" id="preview"></div>
+    <ul class="issues" id="issues"></ul>
+  </section>
+</main>
+
+<script>
+const STORE = 'open-charts-deck-v1';
+const SAMPLE = {
+  slides: [{
+    title: 'Revenue grew 2.4x in four years, led by Enterprise',
+    chart: {
+      type: 'stacked',
+      categories: ['2021', '2022', '2023', '2024', '2025E'],
+      series: [
+        { name: 'Enterprise', values: [42, 58, 75, 96, 118] },
+        { name: 'Mid-market', values: [31, 36, 44, 51, 60] },
+        { name: 'SMB', values: [18, 21, 22, 26, 29] },
+        { name: 'Services', values: [6, 5, 7, 8, 9] },
+      ],
+      options: { unit: 'm', totals: true, cagr: { from: 0, to: 4 } },
+    },
+  }],
+};
+
+let deck = load();
+let cur = 0;
+const $ = (id) => document.getElementById(id);
+
+function load() {
+  try { const d = JSON.parse(localStorage.getItem(STORE)); if (d?.slides?.length) return d; } catch {}
+  return structuredClone(SAMPLE);
+}
+function save() { try { localStorage.setItem(STORE, JSON.stringify(deck)); } catch {} }
+const slide = () => deck.slides[cur];
+const chart = () => slide().chart;
+const opts = () => (chart().options ??= {});
+
+function parseCell(text) {
+  const t = text.trim();
+  if (t === '') return null;
+  if (/^e$/i.test(t)) return 'e';
+  const n = Number(t.replace(/[,\s%]/g, '').replace(/^\((.*)\)$/, '-$1').replace('−', '-'));
+  return Number.isFinite(n) ? n : null;
+}
+const showCell = (v) => (v == null ? '' : String(v));
+
+function renderTabs() {
+  const tabs = $('tabs');
+  tabs.replaceChildren(...deck.slides.map((s, i) => {
+    const b = document.createElement('button');
+    b.className = 'tab'; b.type = 'button'; b.role = 'tab';
+    b.setAttribute('aria-selected', String(i === cur));
+    b.textContent = `${i + 1}. ${s.title || 'Untitled'}`;
+    b.onclick = () => { cur = i; renderAll(); };
+    return b;
+  }));
+}
+
+function renderForm() {
+  const c = chart(), o = opts();
+  $('title').value = slide().title ?? '';
+  $('type').value = c.type;
+  $('unit').value = o.unit ?? '';
+  $('decimals').value = o.decimals ?? '';
+  $('gap').value = o.gap ?? '';
+  $('seriesLabels').value = o.seriesLabels ?? '';
+  $('totals').checked = o.totals ?? c.type === 'stacked';
+  $('valueAxis').checked = o.valueAxis ?? c.type === 'line';
+  for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
+    for (const id of [from, to]) {
+      const sel = $(id);
+      sel.replaceChildren(new Option('—', ''), ...c.categories.map((cat, i) => new Option(cat || `#${i + 1}`, String(i))));
+    }
+    $(from).value = o[key] ? String(o[key].from) : '';
+    $(to).value = o[key] ? String(o[key].to) : '';
+  }
+}
+
+function renderSheet() {
+  const c = chart();
+  const table = $('sheet');
+  const head = document.createElement('tr');
+  const corner = document.createElement('th');
+  corner.className = 'corner';
+  const cornerInput = document.createElement('input');
+  cornerInput.placeholder = 'paste table here';
+  cornerInput.style.width = '140px';
+  cornerInput.dataset.r = '-1'; cornerInput.dataset.c = '-1';
+  corner.append(cornerInput);
+  head.append(corner);
+  c.categories.forEach((cat, j) => {
+    const th = document.createElement('th');
+    const inp = document.createElement('input');
+    inp.value = cat; inp.dataset.r = '-1'; inp.dataset.c = String(j);
+    inp.oninput = () => { c.categories[j] = inp.value; changed(false); };
+    th.append(inp); head.append(th);
+  });
+  const rows = c.series.map((s, i) => {
+    const tr = document.createElement('tr');
+    const name = document.createElement('td');
+    name.className = 'name';
+    const ni = document.createElement('input');
+    ni.value = s.name; ni.dataset.r = String(i); ni.dataset.c = '-1';
+    ni.oninput = () => { s.name = ni.value; changed(false); };
+    name.append(ni); tr.append(name);
+    s.values.forEach((v, j) => {
+      const td = document.createElement('td');
+      const inp = document.createElement('input');
+      inp.value = showCell(v); inp.dataset.r = String(i); inp.dataset.c = String(j);
+      inp.inputMode = 'decimal';
+      inp.oninput = () => { s.values[j] = parseCell(inp.value); changed(false); };
+      td.append(inp); tr.append(td);
+    });
+    return tr;
+  });
+  table.replaceChildren(head, ...rows);
+}
+
+function renderAll() { renderTabs(); renderForm(); renderSheet(); schedule(); }
+
+// Excel-style navigation and paste.
+$('sheet').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const t = e.target; if (!t.dataset) return;
+  const next = $('sheet').querySelector(`input[data-r="${+t.dataset.r + (e.shiftKey ? -1 : 1)}"][data-c="${t.dataset.c}"]`);
+  if (next) { e.preventDefault(); next.focus(); next.select(); }
+});
+$('sheet').addEventListener('paste', (e) => {
+  const t = e.target; if (!t.dataset?.r) return;
+  const text = e.clipboardData.getData('text/plain');
+  if (!/[\t\n]/.test(text.trim())) return;
+  e.preventDefault();
+  const grid = text.replace(/\r/g, '').replace(/\n$/, '').split('\n').map((l) => l.split('\t'));
+  const c = chart();
+  const r0 = +t.dataset.r, c0 = +t.dataset.c;
+  if (r0 === -1 && c0 === -1) {
+    const [head, ...body] = grid;
+    c.categories = head.slice(1).map((s) => s.trim());
+    c.series = body.filter((r) => r.some((x) => x.trim())).map((r) => ({
+      name: r[0].trim(), values: c.categories.map((_, j) => parseCell(r[j + 1] ?? '')),
+    }));
+  } else {
+    grid.forEach((cells, di) => cells.forEach((cell, dj) => {
+      const r = r0 + di, col = c0 + dj;
+      while (col >= c.categories.length) { c.categories.push(`Cat ${c.categories.length + 1}`); c.series.forEach((s) => s.values.push(null)); }
+      while (r >= c.series.length) c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
+      if (r === -1 && col >= 0) c.categories[col] = cell.trim();
+      else if (col === -1 && r >= 0) c.series[r].name = cell.trim();
+      else if (r >= 0 && col >= 0) c.series[r].values[col] = parseCell(cell);
+    }));
+  }
+  changed(true);
+});
+
+function changed(rebuild) {
+  save();
+  if (rebuild) { renderForm(); renderSheet(); }
+  renderTabs();
+  schedule();
+}
+
+// Settings form.
+$('title').oninput = (e) => { slide().title = e.target.value; changed(false); };
+$('type').onchange = (e) => { chart().type = e.target.value; changed(true); };
+$('unit').oninput = (e) => { setOpt('unit', e.target.value || undefined); };
+$('decimals').oninput = (e) => { setOpt('decimals', e.target.value === '' ? undefined : +e.target.value); };
+$('gap').oninput = (e) => { setOpt('gap', e.target.value === '' ? undefined : +e.target.value); };
+$('seriesLabels').onchange = (e) => { setOpt('seriesLabels', e.target.value || undefined); };
+$('totals').onchange = (e) => { setOpt('totals', e.target.checked); };
+$('valueAxis').onchange = (e) => { setOpt('valueAxis', e.target.checked); };
+for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
+  const update = () => {
+    const a = $(from).value, b = $(to).value;
+    setOpt(key, a !== '' && b !== '' ? { from: +a, to: +b } : undefined);
+  };
+  $(from).onchange = update; $(to).onchange = update;
+}
+function setOpt(k, v) { if (v === undefined) delete opts()[k]; else opts()[k] = v; changed(false); }
+
+// Datasheet buttons.
+$('addCat').onclick = () => { const c = chart(); c.categories.push(`Cat ${c.categories.length + 1}`); c.series.forEach((s) => s.values.push(null)); changed(true); };
+$('addSer').onclick = () => { const c = chart(); c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) }); changed(true); };
+$('delCat').onclick = () => { const c = chart(); if (c.categories.length > 1) { c.categories.pop(); c.series.forEach((s) => s.values.pop()); changed(true); } };
+$('delSer').onclick = () => { const c = chart(); if (c.series.length > 1) { c.series.pop(); changed(true); } };
+
+// Slides.
+$('addSlide').onclick = () => {
+  const copy = structuredClone(slide());
+  copy.title = 'New slide';
+  deck.slides.splice(cur + 1, 0, copy); cur++; changed(true);
+};
+$('delSlide').onclick = () => {
+  if (deck.slides.length === 1) return;
+  deck.slides.splice(cur, 1); cur = Math.max(0, cur - 1); changed(true);
+};
+$('exportBtn').onclick = () => download(new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' }), 'charts.json');
+$('importBtn').onclick = () => $('importFile').click();
+$('importFile').onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text());
+    deck = Array.isArray(d.slides) ? d : { slides: [{ title: '', chart: d }] };
+    cur = 0; changed(true);
+  } catch (err) { showError(`Couldn't read ${f.name}: ${err.message}`); }
+  e.target.value = '';
+};
+$('downloadBtn').onclick = async () => {
+  const res = await fetch('/api/pptx', { method: 'POST', body: JSON.stringify(deck) });
+  if (!res.ok) return showError((await res.json()).error);
+  download(await res.blob(), 'charts.pptx');
+};
+function download(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// Live preview.
+let timer = null, seq = 0;
+function schedule() { clearTimeout(timer); timer = setTimeout(preview, 150); }
+async function preview() {
+  const id = ++seq;
+  try {
+    const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [slide()] }) });
+    const data = await res.json();
+    if (id !== seq) return;
+    if (!res.ok) return showError(data.error);
+    const s = data.slides[0];
+    $('preview').innerHTML = s.svg;
+    const issues = s.issues;
+    $('issues').replaceChildren(...(issues.length ? issues : ['Layout check passed: no overlaps']).map((t) => {
+      const li = document.createElement('li');
+      li.textContent = t.replace(/^hidden: /, 'Label hidden (no room): ');
+      li.className = !issues.length ? 'ok' : t.startsWith('hidden') ? 'info' : '';
+      return li;
+    }));
+  } catch (err) { showError(`Preview failed: ${err.message}`); }
+}
+function showError(msg) {
+  const li = document.createElement('li');
+  li.className = 'error'; li.textContent = msg;
+  $('issues').replaceChildren(li);
+}
+
+renderAll();
+</script>
+</body>
+</html>
