@@ -1,0 +1,47 @@
+{
+  "slides": [
+    {
+      "title": "EBITDA grew €12m despite input-cost headwinds",
+      "chart": {
+        "type": "waterfall",
+        "categories": ["EBITDA 2024", "Volume", "Price", "Mix", "Raw materials", "Labour", "Operating EBITDA", "FX", "One-offs", "EBITDA 2025"],
+        "series": [
+          { "name": "EBITDA", "values": [100, 18, 9, -4, -15, -7, null, -6, 3, null] }
+        ],
+        "options": { "unit": "m", "totalsAt": [0, 6, 9] }
+      }
+    },
+    {
+      "title": "Cash went negative before the equity raise closed the gap",
+      "chart": {
+        "type": "waterfall",
+        "categories": ["Opening cash", "Capex", "Operating loss", "Working capital", "Pre-financing", "Equity raise", "Debt drawdown", "Closing cash"],
+        "series": [
+          { "name": "Cash", "values": [12, -30, -8, 2, null, 40, 10, null] }
+        ],
+        "options": { "unit": "m", "totalsAt": [0, 4, 7], "valueAxis": true }
+      }
+    },
+    {
+      "title": "Stress test: long driver names, organic vs. acquired contribution",
+      "chart": {
+        "type": "waterfall",
+        "categories": [
+          "Group revenue FY2024 (reported, constant currency)",
+          "Existing customer expansion and upsell",
+          "New logo wins in North America and EMEA",
+          "Churn and contraction across SMB segment",
+          "Pricing and packaging changes effective H2",
+          "Revenue from acquired businesses (pro forma)",
+          "Discontinued legacy product lines",
+          "Group revenue FY2025 (reported)"
+        ],
+        "series": [
+          { "name": "Organic", "values": [184.5, 21.3, 14.8, -9.6, 6.2, 0, -3.1, null] },
+          { "name": "Acquired", "values": [0, 0, 0, 0, 0, 27.4, -1.2, null] }
+        ],
+        "options": { "unit": "m" }
+      }
+    }
+  ]
+}
