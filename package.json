@@ -1,0 +1,17 @@
+{
+  "name": "open-charts",
+  "version": "0.1.0",
+  "description": "Open-source, consulting-quality charts for PowerPoint",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "open-charts": "./bin/open-charts.js"
+  },
+  "scripts": {
+    "examples": "node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o out/deck",
+    "test": "node --experimental-strip-types --no-warnings --test test/"
+  },
+  "engines": {
+    "node": ">=22.6"
+  }
+}

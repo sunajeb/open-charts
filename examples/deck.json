@@ -1,0 +1,59 @@
+{
+  "slides": [
+    {
+      "title": "Revenue grew 2.4x in four years, led by Enterprise",
+      "chart": {
+        "type": "stacked",
+        "categories": ["2021", "2022", "2023", "2024", "2025E"],
+        "series": [
+          { "name": "Enterprise", "values": [42, 58, 75, 96, 118] },
+          { "name": "Mid-market", "values": [31, 36, 44, 51, 60] },
+          { "name": "SMB", "values": [18, 21, 22, 26, 29] },
+          { "name": "Services", "values": [6, 5, 7, 8, 9] }
+        ],
+        "options": { "unit": "m", "cagr": { "from": 0, "to": 4 } }
+      }
+    },
+    {
+      "title": "Enterprise is now half of the mix",
+      "chart": {
+        "type": "percent",
+        "categories": ["2021", "2022", "2023", "2024", "2025E"],
+        "series": [
+          { "name": "Enterprise", "values": [42, 58, 75, 96, 118] },
+          { "name": "Mid-market", "values": [31, 36, 44, 51, 60] },
+          { "name": "SMB", "values": [18, 21, 22, 26, 29] },
+          { "name": "Services", "values": [6, 5, 7, 8, 9] }
+        ]
+      }
+    },
+    {
+      "title": "Win rate by region: North America leads in every segment",
+      "chart": {
+        "type": "clustered",
+        "categories": ["North America", "Europe", "Asia Pacific", "Latin America"],
+        "series": [
+          { "name": "Enterprise", "values": [38, 31, 27, 22] },
+          { "name": "Mid-market", "values": [29, 26, 24, 19] },
+          { "name": "SMB", "values": [21, 18, 20, 15] }
+        ],
+        "options": { "unit": "%", "valueAxis": true }
+      }
+    },
+    {
+      "title": "Stress test: many thin segments and a difference arrow",
+      "chart": {
+        "type": "stacked",
+        "categories": ["Q1 FY24", "Q2 FY24", "Q3 FY24", "Q4 FY24", "Q1 FY25", "Q2 FY25", "Q3 FY25", "Q4 FY25"],
+        "series": [
+          { "name": "Core platform licences", "values": [120, 126, 131, 140, 146, 151, 160, 171] },
+          { "name": "Add-ons", "values": [14, 15, 15, 16, 18, 19, 21, 22] },
+          { "name": "Support", "values": [3, 3, 4, 4, 4, 5, 5, 5] },
+          { "name": "Training", "values": [2, 1, 2, 2, 1, 2, 2, 3] },
+          { "name": "Other", "values": [1, 1, 1, 1, 2, 1, 1, 2] }
+        ],
+        "options": { "unit": "m", "difference": { "from": 0, "to": 7 } }
+      }
+    }
+  ]
+}
