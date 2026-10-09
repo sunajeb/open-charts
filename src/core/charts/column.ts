@@ -90,7 +90,11 @@ export function layoutColumns(ctx: Ctx) {
     const x = cx(c) - colW / 2;
     for (const s of sers) {
       const v = percent ? Math.max(0, shown(s, c)) : raw(s, c);
-      if (!v) continue;
+      if (!v) {
+        // Keep the series label anchored at the stack edge even when this segment is empty.
+        if (c === nCat - 1) lastSegs.push({ name: spec.series[s].name, y: yOf(up) });
+        continue;
+      }
       const [a, b] = v > 0 ? [up, up + v] : [down + v, down];
       if (v > 0) up += v; else down += v;
       const y1 = yOf(b), y2 = yOf(a), h = y2 - y1;
@@ -129,7 +133,7 @@ export function layoutColumns(ctx: Ctx) {
     const { from: a, to: b } = ref;
     if (a < 0 || b >= nCat || a >= b) { ctx.hidden.push(`${kind}: invalid category range`); continue; }
     const label = kind === 'cagr'
-      ? cagrLabel(ctx, totalsFor(a), totalsFor(b), b - a)
+      ? cagrLabel(ctx, totalsFor(a), totalsFor(b), ('years' in ref && ref.years) || b - a)
       : ctx.fmt(totalsFor(b) - totalsFor(a), o.unit, true);
     if (!label) { ctx.hidden.push(`${kind}: needs positive totals`); continue; }
     const yLine = frame.y + legendH + row * arrowRowHeight(ctx) + arrowRowHeight(ctx) / 2;

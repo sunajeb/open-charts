@@ -12,7 +12,7 @@ export interface ChartOptions {
   /** Total label above each stacked column. Default: on for stacked, off otherwise. */
   totals?: boolean;
   /** Compound annual growth arrow between two category indices (uses column totals). */
-  cagr?: { from: number; to: number } | null;
+  cagr?: { from: number; to: number; years?: number } | null;
   /** Difference arrow between the totals of two categories. */
   difference?: { from: number; to: number } | null;
   /** Show a value axis with ticks. Default: off (values are labelled on the chart). */
@@ -27,6 +27,8 @@ export interface ChartOptions {
   gap?: number;
   /** Series identification: labels to the right of the last column, a legend, or none. */
   seriesLabels?: 'right' | 'legend' | 'none';
+  /** Waterfall: category indices drawn as totals anchored at the baseline. Default: first and last category. */
+  totalsAt?: number[];
 }
 
 export interface ChartSpec {

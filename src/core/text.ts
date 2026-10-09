@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { parse } from '../../vendor/opentype.module.js';
 
-interface Font { getAdvanceWidth(text: string, size: number): number }
+interface Font { getAdvanceWidth(text: string, size: number, options?: { kerning?: boolean }): number }
 
 export interface Measurer {
   width(text: string, size: number, bold?: boolean): number;
@@ -40,9 +40,10 @@ export function createMeasurer(fontFile?: string, boldFile?: string): Measurer {
     width(text, size, isBold = false) {
       const font = isBold ? bold ?? regular : regular;
       const scale = isBold && !bold ? 1.06 : 1;
-      return Math.max(...lines(text).map((l) => font.getAdvanceWidth(l, size) * scale));
+      return Math.max(...lines(text).map((l) => font.getAdvanceWidth(l, size, { kerning: false }) * scale));
     },
-    lineHeight: (size) => size * 1.2,
+    // PowerPoint single spacing for Arial ≈ (ascent + descent) / em = 1.149; kerning is off by default.
+    lineHeight: (size) => size * 1.149,
   };
 }
 

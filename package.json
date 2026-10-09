@@ -5,11 +5,11 @@
   "license": "Apache-2.0",
   "type": "module",
   "bin": {
-    "open-charts": "./bin/open-charts.js"
+    "open-charts": "./src/cli.ts"
   },
   "scripts": {
     "examples": "node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o out/deck",
-    "test": "node --experimental-strip-types --no-warnings --test test/"
+    "test": "node --experimental-strip-types --no-warnings --test 'test/*.test.ts'"
   },
   "engines": {
     "node": ">=22.6"
