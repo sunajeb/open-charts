@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis } from '../common.ts';
+import { axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 
@@ -58,7 +58,7 @@ export function layoutWaterfall(ctx: Ctx) {
   const bounds = cols.flatMap((col) => col.segs.flatMap((g) => [g.lo, g.hi]).concat(col.entry, col.exit));
   let dmin = Math.min(0, ...bounds), dmax = Math.max(0, ...bounds);
   if (dmax === dmin) dmax = dmin + 1;
-  const ticks = o.valueAxis ? niceTicks(dmin, dmax) : null;
+  const ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
   const axisFmt = axisFormatter(ctx, ticks);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;

@@ -175,7 +175,8 @@ export interface Scene {
    * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
    * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
    * `shade:<k>` (Gantt shaded period), `bracket:<k>` (Gantt bracket), `today` (Gantt today line),
-   * `legend:size` (bubble size legend); `leader:c<j>` also links a scatter label to its point. Always set by `layoutChart`.
+   * `legend:size` (bubble size legend), `placeholder` (frame outline and message of a chart below its
+   * minimum size); `leader:c<j>` also links a scatter label to its point. Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

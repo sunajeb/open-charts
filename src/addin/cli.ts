@@ -10,12 +10,8 @@ import { addinHome, httpSessions, serveAddin, stopServer } from './server.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
 
-export const ADDIN_USAGE = `Usage: open-charts addin build [-o dist/open-charts.ppam]
-       open-charts addin install [--no-register]
-       open-charts addin uninstall
-       open-charts addin types
-       open-charts addin run <request.txt|->   (called by the add-in)
-       open-charts addin serve                 (edit-data server, started by the add-in)`;
+export { ADDIN_USAGE } from './usage.ts';
+import { ADDIN_USAGE } from './usage.ts';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 const SCRIPT_TEMPLATE = join(ROOT, 'addin', 'applescript', 'open-charts.applescript');
