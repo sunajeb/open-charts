@@ -76,15 +76,24 @@ const layouts: Record<ChartSpec['type'], Layout> = {
 export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle): Scene {
   const s = prepareSpec(spec);
   const min = minimumSize(s);
-  if (frame.w < min.w || frame.h < min.h) return placeholder(s, frame, min, m, style);
-  const ctx = makeCtx(s, style, frame, m);
-  try {
-    layouts[s.type](ctx);
-  } catch (e) {
-    if (!(e instanceof TooSmall)) throw e;
-    return placeholder(s, frame, { w: Math.max(min.w, e.need.w ?? 0), h: Math.max(min.h, e.need.h ?? 0) }, m, style, e.message);
+  // Lay out at the frame, or — when it is too small — find the size to ask for: at least the type's
+  // minimum, grown by what the content says it needs (a table's columns, a category axis).
+  let size = { w: Math.max(frame.w, min.w), h: Math.max(frame.h, min.h) };
+  let why: string | undefined;
+  for (let k = 0; k < 6; k++) {
+    const ctx = makeCtx(s, style, { ...frame, ...size }, m);
+    try {
+      layouts[s.type](ctx);
+    } catch (e) {
+      if (!(e instanceof TooSmall)) throw e;
+      why = e.message;
+      size = { w: Math.max(size.w, Math.ceil(e.need.w ?? 0)), h: Math.max(size.h, Math.ceil(e.need.h ?? 0)) };
+      continue;
+    }
+    if (size.w !== frame.w || size.h !== frame.h) break;
+    if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
+    ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m));
+    return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden };
   }
-  if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
-  ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m));
-  return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden };
+  return placeholder(s, frame, size, m, style, why);
 }

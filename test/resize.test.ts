@@ -31,7 +31,12 @@ for (const c of allCases()) {
       for (const p of resizeProblems(scene, m, reference)) failures.push(`${at}: ${p}`);
       const small = f.w < min.w || f.h < min.h;
       if (small && !isPlaceholder(scene)) failures.push(`${at}: below the minimum ${min.w}×${min.h} but no placeholder`);
-      if (isPlaceholder(scene) && !scene.hidden.some((h) => h.startsWith('chart too small'))) failures.push(`${at}: placeholder not reported`);
+      if (isPlaceholder(scene)) {
+        // The size the placeholder asks for is enough: there the chart lays out.
+        const need = scene.hidden[0]?.match(/^chart too small: \w+ needs at least (\d+) × (\d+) pt/);
+        if (!need) failures.push(`${at}: placeholder not reported`);
+        else if (isPlaceholder(layoutChart(c.spec, { ...f, w: Math.max(f.w, +need[1]), h: Math.max(f.h, +need[2]) }, m))) failures.push(`${at}: still too small at the size it asks for (${need[1]}×${need[2]})`);
+      }
     }
     assert.deepEqual(failures, []);
   });
@@ -54,7 +59,7 @@ test('resize: below the minimum the chart is an outlined placeholder with a read
   assert.deepEqual([outline.kind, msg.kind], ['rect', 'text']);
   assert.match((msg as TextShape).text.replace(/\n/g, ' '), /too small/i);
   assert.ok((msg as TextShape).size >= MIN_TEXT);
-  assert.match(scene.hidden[0], /^chart too small: waterfall needs at least 200 × 120 pt, frame is 150 × 80 pt/);
+  assert.match(scene.hidden[0], /^chart too small: waterfall needs at least \d+ × 120 pt, frame is 150 × 80 pt/);
   // Too small for even the shortest message: the outline alone, still reported.
   const tiny = layoutChart(spec, { x: 0, y: 0, w: 20, h: 8 }, m);
   assert.deepEqual(tiny.shapes.map((s) => s.kind), ['rect']);
