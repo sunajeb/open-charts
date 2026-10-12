@@ -14,7 +14,8 @@
 // uses the bounding box there and the outline in `points`. Text with a box behind it (fill or
 // line set) is drawn as an autoshape of `textGeom` (rect | roundRect) carrying the text. Numbers use "." and at most 2 decimals,
 // so VBA's locale-independent Val() reads them. Colours are RRGGBB, "" = none.
-import type { Shape, TextShape } from '../core/types.ts';
+import type { PathCmd, Shape, TextShape } from '../core/types.ts';
+import { flattenPath } from '../core/path.ts';
 
 export const FORMAT_VERSION = '1';
 
@@ -38,39 +39,6 @@ const flag = (b?: boolean) => (b ? '1' : '0');
 
 export const record = (...fields: string[]) => fields.map(escapeField).join('\t');
 
-/** Arcs are flattened to segments of at most this many degrees. */
-const ARC_STEP = 3;
-
-type PathCmd =
-  | { op: 'M' | 'L'; x: number; y: number }
-  | { op: 'A'; cx: number; cy: number; r: number; start: number; sweep: number }
-  | { op: 'Z' };
-
-/**
- * Flattens path commands to sub-paths of points. `A` is a circular arc (degrees, 0 = 3 o'clock,
- * clockwise positive) that first draws a straight segment to its start point.
- */
-export function flattenPath(commands: PathCmd[]): { points: [number, number][]; closed: boolean }[] {
-  const subs: { points: [number, number][]; closed: boolean }[] = [];
-  let cur: { points: [number, number][]; closed: boolean } | undefined;
-  const to = (x: number, y: number, move = false) => {
-    if (move || !cur || cur.closed) { cur = { points: [], closed: false }; subs.push(cur); }
-    cur.points.push([x, y]);
-  };
-  for (const c of commands) {
-    if (c.op === 'M') to(c.x, c.y, true);
-    else if (c.op === 'L') to(c.x, c.y);
-    else if (c.op === 'A') {
-      const n = Math.max(1, Math.ceil(Math.abs(c.sweep) / ARC_STEP));
-      for (let i = 0; i <= n; i++) {
-        const a = ((c.start + (c.sweep * i) / n) * Math.PI) / 180;
-        to(c.cx + c.r * Math.cos(a), c.cy + c.r * Math.sin(a));
-      }
-    } else if (c.op === 'Z' && cur) cur.closed = true;
-  }
-  return subs.filter((s) => s.points.length > 1);
-}
-
 /** Bounding box of a shape as PowerPoint will report it (lines: their end points). */
 export function shapeBounds(s: Shape): { x0: number; y0: number; x1: number; y1: number } {
   const any = s as Shape & { kind: string; commands?: PathCmd[] };
@@ -81,7 +49,7 @@ export function shapeBounds(s: Shape): { x0: number; y0: number; x1: number; y1:
   if (any.kind === 'path') {
     const pts = flattenPath(any.commands ?? []).flatMap((p) => p.points);
     if (!pts.length) return { x0: 0, y0: 0, x1: 0, y1: 0 };
-    const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+    const xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
     return { x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) };
   }
   const r = s as { x: number; y: number; w: number; h: number };
@@ -126,14 +94,14 @@ export function shapeRecord(s: Shape, font: string, role = '', name = ''): strin
     }
     case 'path': {
       const p = any as unknown as { commands: PathCmd[]; fill?: string; stroke?: string; strokeWidth?: number; dash?: boolean };
-      const subs = flattenPath(p.commands ?? []);
+      const subs = flattenPath(p.commands ?? []); // the same points every renderer draws
       const b = shapeBounds(s);
       Object.assign(base, {
         kind: 'path', x: num(b.x0), y: num(b.y0), w: num(b.x1 - b.x0), h: num(b.y1 - b.y0),
         fill: hex(p.fill), lineColor: hex(p.stroke), lineWidth: p.stroke ? num(p.strokeWidth ?? 0.75) : '',
         dash: flag(p.dash),
         // "x,y x,y ...", sub-paths separated by "|", a trailing "z" marks a closed sub-path.
-        points: subs.map((sp) => sp.points.map(([x, y]) => `${num(x)},${num(y)}`).join(' ') + (sp.closed ? ' z' : '')).join('|'),
+        points: subs.map((sp) => sp.points.map((p) => `${num(p.x)},${num(p.y)}`).join(' ') + (sp.closed ? ' z' : '')).join('|'),
       });
       break;
     }

@@ -4,7 +4,8 @@ import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createMeasurer } from '../src/fonts.ts';
-import { escapeField, flattenPath, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
+import { flattenPath } from '../src/core/path.ts';
+import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { DEFAULT_FRAME, handleRequest, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
 import { fileEdits, editPage, editRoutes } from '../src/addin/edit.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
@@ -46,9 +47,9 @@ test('path shapes flatten arcs into polygon points', () => {
   const subs = flattenPath([...cmds] as never);
   assert.equal(subs.length, 1);
   assert.equal(subs[0].closed, true);
-  assert.deepEqual(subs[0].points[0], [100, 100]);
+  assert.deepEqual(subs[0].points[0], { x: 100, y: 100 });
   const last = subs[0].points.at(-1)!;
-  assert.ok(Math.abs(last[0] - 150) < 1e-9 && Math.abs(last[1] - 100) < 1e-9, 'arc ends at 3 o\'clock');
+  assert.ok(Math.abs(last.x - 150) < 1e-9 && Math.abs(last.y - 100) < 1e-9, 'arc ends at 3 o\'clock');
   const rec = parseResponse(shapeRecord({ kind: 'path', commands: [...cmds], fill: 'FF0000' } as unknown as Shape, 'Arial')).shapes[0];
   assert.equal(rec.kind, 'path');
   assert.match(rec.points, /^100,100 100,50 .* 150,100 z$/);
