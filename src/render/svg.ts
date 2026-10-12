@@ -1,9 +1,11 @@
 // SVG preview of a slide. Uses the same scene as the PowerPoint writer, so the two always match.
 import type { Scene, Shape } from '../core/types.ts';
 import { flattenPath, rectGeom } from '../core/path.ts';
+import { colorHex } from '../core/theme.ts';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const c = (v?: string) => (v ? `#${v.replace('#', '')}` : 'none');
+// A theme colour is drawn as the hex it was resolved to ("1F3A5F@accent1" → #1F3A5F).
+const c = (v?: string) => (v ? `#${colorHex(v)}` : 'none');
 const n = (v: number) => +v.toFixed(2);
 
 function shape(s: Shape, font: string): string {

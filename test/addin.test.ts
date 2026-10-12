@@ -65,7 +65,7 @@ test('path shapes flatten arcs into polygon points', async () => {
 test('insert answers with group, tags and one shape per scene shape, roles and names', async () => {
   const r = parseResponse(await handleRequest(req('insert', 'stacked', '48,96,864,408'), m));
   assert.deepEqual(r.errors, []);
-  assert.equal(r.version, '1');
+  assert.equal(r.version, '2');
   assert.equal(r.group?.name, 'Stacked column chart');
   const tags = Object.fromEntries(r.tags);
   assert.equal(tags.OC_V, '1');

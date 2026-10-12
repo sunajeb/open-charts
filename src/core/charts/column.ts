@@ -1,7 +1,7 @@
 import type { Ctx } from '../common.ts';
 import {
-  arrowBubble, arrowRowHeight, axisFormatter, bracketArrow, bracketArrowH, cagrLabel, categoryHeight, categoryLabels,
-  fitCategories, legend, num, reportFit, seriesLabelWidth, seriesLabelsRight, text, valueAxis, type ArrowKind, valueTicks,
+  arrowBubble, arrowRowHeight, axisFormatter, axisWidth, bracketArrow, bracketArrowH, cagrLabel, categoryHeight, categoryLabels,
+  fitCategories, legend, num, reportFit, seriesLabelWidth, seriesLabelsRight, sharedScale, text, valueAxis, type ArrowKind, valueTicks,
 } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { cagrYears } from '../dates.ts';
@@ -71,15 +71,15 @@ export function layoutColumns(ctx: Ctx) {
 
 function layoutVertical(ctx: Ctx, md: Model) {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
-  const { nCat, nSer, percent, clustered, raw, val, cats, sers, total, shown, segLabel, ticks, axisFmt, showTotals } = md;
-  let { dmin, dmax } = md;
+  const { nCat, nSer, percent, clustered, raw, val, cats, sers, total, shown, segLabel, showTotals } = md;
+  let { dmin, dmax, ticks, axisFmt } = md;
 
   // Reserve space: legend and arrows on top, totals above columns, axis on the left, series labels right, categories below.
   const legendH = legend(ctx);
   const arrowsH = md.arrows.length * arrowRowHeight(ctx);
   const totalsH = showTotals ? lh + pad * 0.3 : 0;
   const barLabelH = clustered ? lh + pad * 0.3 : 0;
-  const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
+  const axisW = axisWidth(ctx, dmin, ticks, axisFmt, percent);
 
   let rightW = 0, slot = 0, colW = 0, catH = 0;
   for (let i = 0; i < 3; i++) {
@@ -92,6 +92,8 @@ function layoutVertical(ctx: Ctx, md: Model) {
   const pw = frame.w - axisW - rightW;
   const py = frame.y + legendH + arrowsH + Math.max(totalsH + barLabelH, ticks ? lh / 2 : 0); // room for the top tick label
   const ph = frame.y + frame.h - catH - (clustered && dmin < 0 ? barLabelH : 0) - py;
+  ({ dmin: dmin, dmax: dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks, percent);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const cx = (c: number) => px + slot * (c + 0.5);
@@ -193,8 +195,8 @@ function layoutVertical(ctx: Ctx, md: Model) {
 /** Horizontal bars: categories down the left, values to the right, totals and arrows beyond the bar ends. */
 function layoutBars(ctx: Ctx, md: Model) {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
-  const { nCat, nSer, percent, clustered, raw, val, cats, sers, total, shown, segLabel, ticks, axisFmt, showTotals } = md;
-  const { dmin, dmax } = md;
+  const { nCat, nSer, percent, clustered, raw, val, cats, sers, total, shown, segLabel, showTotals } = md;
+  let { dmin, dmax, ticks, axisFmt } = md;
   if (o.seriesLabels === 'right') ctx.o.seriesLabels = 'legend';
 
   const legendH = legend(ctx);
@@ -216,6 +218,8 @@ function layoutBars(ctx: Ctx, md: Model) {
   const pw = frame.x + frame.w - totalsW - barLabelR - arrowsW - px;
   const py = frame.y + legendH;
   const ph = frame.y + frame.h - axisH - py;
+  ({ dmin: dmin, dmax: dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks, percent);
   if (pw < lh * 2 || ph < lh * nCat * 0.5) ctx.hidden.push('chart frame too small');
   const slot = ph / nCat;
   const barT = slot / (1 + o.gap);

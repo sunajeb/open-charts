@@ -136,7 +136,11 @@ Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
     End If
     gBusy = True
     gEngineMs = 0: gDrawMs = 0
+    Dim sld As Object, oldGroup As String
+    Set sld = target.Parent
+    oldGroup = TagValue(target, "OC_SGROUP")
     Set target = Relayout(target, True, sessionId)
+    If Not target Is Nothing Then SyncAfter sld, target, oldGroup
     gBusy = False
     If Not target Is Nothing Then
         Set gEditShape = target
@@ -243,7 +247,7 @@ Private Sub InsertChart(ByVal itemId As String)
     Else
         frame = Fmt(placeholder.Left) & "," & Fmt(placeholder.Top) & "," & Fmt(placeholder.Width) & "," & Fmt(placeholder.Height)
     End If
-    response = Engine("insert" & vbLf & itemId & vbLf & frame & vbLf & "" & vbLf)
+    response = Engine("insert" & vbLf & itemId & vbLf & frame & vbLf & "" & vbLf & ThemeLine(sld))
     If response = "" Then Exit Sub
     Set grp = Draw(sld, response)
     If grp Is Nothing Then Exit Sub
@@ -252,11 +256,15 @@ Private Sub InsertChart(ByVal itemId As String)
 End Sub
 
 Private Sub UpdateChart()
-    Dim chart As Object
+    Dim chart As Object, sld As Object, oldGroup As String
     Set chart = SelectedChart()
     If chart Is Nothing Then Exit Sub
+    Set sld = chart.Parent
+    oldGroup = TagValue(chart, "OC_SGROUP")
     Set chart = Relayout(chart, True, "")
-    If Not chart Is Nothing Then chart.Select
+    If chart Is Nothing Then Exit Sub
+    SyncAfter sld, chart, oldGroup
+    chart.Select
 End Sub
 
 Private Sub EditData()
@@ -279,7 +287,8 @@ End Sub
 Private Function Relayout(ByVal old As Object, ByVal force As Boolean, ByVal sessionId As String) As Object
     Dim response As String, bounds As String, grp As Object
     bounds = Fmt(old.Left) & "," & Fmt(old.Top) & "," & Fmt(old.Width) & "," & Fmt(old.Height)
-    response = Engine(IIf(force, "update", "relayout") & vbLf & sessionId & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf & SpecOf(old))
+    response = Engine(IIf(force, "update", "relayout") & vbLf & sessionId & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf & _
+        ThemeLine(old.Parent) & ScaleLine(old) & SpecOf(old))
     If response = "" Then Exit Function
     Set grp = Draw(old.Parent, response)
     If gNothing Then Set Relayout = old: Exit Function
@@ -302,6 +311,8 @@ Private Sub CheckResized()
         If IsChart(shp) Then charts.Add shp
     Next shp
     Dim t As Single, result As Object, sel As Object, selectedId As Long, wasSelected As Boolean
+    Dim groups As Collection, g As Variant
+    Set groups = New Collection
     For Each shp In charts
         f = Split(TagValue(shp, "OC_FRAME"), ",")
         If UBound(f) = 3 Then
@@ -312,6 +323,7 @@ Private Sub CheckResized()
                 Set sel = FindSelectedChart()
                 If Not sel Is Nothing Then selectedId = sel.Id
                 wasSelected = (selectedId = shp.Id)
+                If TagValue(shp, "OC_SGROUP") <> "" Then groups.Add TagValue(shp, "OC_SGROUP")
                 Set result = Relayout(shp, False, "")
                 If wasSelected And Not result Is Nothing Then result.Select
                 Report "RELAYOUT " & IIf(result Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
@@ -320,6 +332,11 @@ Private Sub CheckResized()
             End If
         End If
     Next shp
+    ' A resized chart changes its own scale: its same-scale partners follow (after the loop, which
+    ' still holds the shapes the re-layout replaces).
+    For Each g In groups
+        SyncGroup sld, CStr(g), 0
+    Next g
 End Sub
 
 ' ---- Bridge to the engine -----------------------------------------------------------------
@@ -466,7 +483,7 @@ Private Function DrawShape(ByVal sld As Object, f() As String) As Object
             Set s = sld.Shapes.AddLine(x, y, w, h)
             With s.Line
                 .Visible = -1
-                .ForeColor.RGB = HexColor(f(7))
+                SetColor .ForeColor, f(7)
                 .Weight = Val(f(8))
                 If f(9) = "1" Then .DashStyle = 4 ' msoLineDash
                 If f(10) = "1" Then .EndArrowheadStyle = 2 ' msoArrowheadTriangle
@@ -507,14 +524,14 @@ Private Sub FillAndLine(ByVal s As Object, ByVal fillHex As String, ByVal lineHe
     Else
         s.Fill.Visible = -1
         s.Fill.Solid
-        s.Fill.ForeColor.RGB = HexColor(fillHex)
+        SetColor s.Fill.ForeColor, fillHex
         s.Fill.Transparency = 0
     End If
     If lineHex = "" Then
         s.Line.Visible = 0
     Else
         s.Line.Visible = -1
-        s.Line.ForeColor.RGB = HexColor(lineHex)
+        SetColor s.Line.ForeColor, lineHex
         s.Line.Weight = Val(lineWidth)
         If dash = "1" Then s.Line.DashStyle = 4
     End If
@@ -544,7 +561,7 @@ Private Sub SetText(ByVal s As Object, f() As String)
         ' Kerning is the size from which pairs are kerned (0 = all sizes), so push it past any text.
         .Font.Kerning = 4000
         .Font.Fill.Visible = -1
-        .Font.Fill.ForeColor.RGB = HexColor(f(15))
+        SetColor .Font.Fill.ForeColor, f(15)
         Select Case f(16)
             Case "c": .ParagraphFormat.Alignment = 2 ' msoAlignCenter
             Case "r": .ParagraphFormat.Alignment = 3 ' msoAlignRight
@@ -705,6 +722,93 @@ End Function
 Private Function Fmt(ByVal v As Double) As String
     Fmt = Replace(Trim$(Str$(Round(v, 2))), ",", ".")
 End Function
+
+' A colour field of the line format: RRGGBB, or a theme colour name. A theme colour is set as such
+' (ObjectThemeColor), so the chart follows the presentation's theme like PowerPoint's own shapes.
+Private Sub SetColor(ByVal cf As Object, ByVal v As String)
+    Dim t As Long
+    t = ThemeIndex(v)
+    If t > 0 Then cf.ObjectThemeColor = t Else cf.RGB = HexColor(v)
+End Sub
+
+' msoThemeColorIndex of a theme colour name (src/core/theme.ts), 0 for anything else.
+Private Function ThemeIndex(ByVal v As String) As Long
+    Select Case v
+        Case "dk1": ThemeIndex = 1 ' msoThemeColorDark1
+        Case "lt1": ThemeIndex = 2 ' msoThemeColorLight1
+        Case "dk2": ThemeIndex = 3 ' msoThemeColorDark2
+        Case "lt2": ThemeIndex = 4 ' msoThemeColorLight2
+        Case "accent1": ThemeIndex = 5 ' msoThemeColorAccent1 ... Accent6 = 10
+        Case "accent2": ThemeIndex = 6
+        Case "accent3": ThemeIndex = 7
+        Case "accent4": ThemeIndex = 8
+        Case "accent5": ThemeIndex = 9
+        Case "accent6": ThemeIndex = 10
+        Case "tx1": ThemeIndex = 13 ' msoThemeColorText1: follows the slide master's colour map
+        Case "bg1": ThemeIndex = 14 ' msoThemeColorBackground1
+        Case "tx2": ThemeIndex = 15 ' msoThemeColorText2
+        Case "bg2": ThemeIndex = 16 ' msoThemeColorBackground2
+    End Select
+End Function
+
+' Request line with the slide's theme colours (ThemeColorScheme order), so the engine decides
+' label contrast on the colours PowerPoint will show. "" if PowerPoint cannot say.
+Private Function ThemeLine(ByVal sld As Object) As String
+    Dim scheme As Object, i As Long, c As Long, out As String
+    On Error GoTo Done
+    Set scheme = sld.ThemeColorScheme
+    For i = 1 To 12
+        c = scheme.Colors(i).RGB
+        out = out & IIf(i > 1, ",", "") & Right$("0" & Hex$(c And 255), 2) & Right$("0" & Hex$((c \ 256) And 255), 2) & Right$("0" & Hex$((c \ 65536) And 255), 2)
+    Next i
+    ThemeLine = "theme=" & out & vbLf
+Done:
+End Function
+
+' ---- Same-scale groups ------------------------------------------------------------------------
+' Charts on one slide whose spec has the same options.scaleGroup carry OC_SGROUP (the group) and
+' OC_SCALE (their own scale, pt per unit). Each one is laid out with the smallest OC_SCALE of its
+' partners, so equal values are equally tall across the group.
+
+' Request line "scale=" with the smallest own scale of the chart's partners, "" outside a group.
+Private Function ScaleLine(ByVal chart As Object) As String
+    Dim g As String, shp As Object, best As String, v As Double
+    g = TagValue(chart, "OC_SGROUP")
+    If g = "" Then Exit Function
+    For Each shp In chart.Parent.Shapes
+        If IsChart(shp) Then
+            If shp.Id <> chart.Id And TagValue(shp, "OC_SGROUP") = g Then
+                v = Val(TagValue(shp, "OC_SCALE"))
+                If v > 0 And (best = "" Or v < Val(best)) Then best = TagValue(shp, "OC_SCALE")
+            End If
+        End If
+    Next shp
+    If best <> "" Then ScaleLine = "scale=" & best & vbLf
+End Function
+
+' Re-lays out every chart of group g on the slide except the one with id skipId.
+Private Sub SyncGroup(ByVal sld As Object, ByVal g As String, ByVal skipId As Long)
+    Dim shp As Object, peers As Collection, n As Long
+    If g = "" Then Exit Sub
+    Set peers = New Collection
+    For Each shp In sld.Shapes
+        If IsChart(shp) Then
+            If shp.Id <> skipId And TagValue(shp, "OC_SGROUP") = g Then peers.Add shp
+        End If
+    Next shp
+    For Each shp In peers
+        If Not Relayout(shp, True, "") Is Nothing Then n = n + 1
+    Next shp
+    If peers.Count > 0 Then Report "SYNC " & g & " " & n & " of " & peers.Count & " charts"
+End Sub
+
+' After a chart was laid out again: its group follows, and so does the group it just left.
+Private Sub SyncAfter(ByVal sld As Object, ByVal chart As Object, ByVal oldGroup As String)
+    Dim g As String
+    g = TagValue(chart, "OC_SGROUP")
+    SyncGroup sld, g, chart.Id
+    If oldGroup <> "" And oldGroup <> g Then SyncGroup sld, oldGroup, 0
+End Sub
 
 Private Function HexColor(ByVal h As String) As Long
     If Len(h) <> 6 Then HexColor = 0: Exit Function

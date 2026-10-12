@@ -1,7 +1,9 @@
 import type { ChartSpec, Frame, Scene, Style } from './types.ts';
 import type { Measurer } from './text.ts';
-import { makeCtx } from './common.ts';
-import { prepareSpec } from './spec.ts';
+import { makeCtx, type LayoutHints } from './common.ts';
+export type { LayoutHints } from './common.ts';
+import { resolveColor, resolveStyle, themeOf } from './theme.ts';
+import { appliesTo, prepareSpec } from './spec.ts';
 import { resolveCollisions } from './resolve.ts';
 import { minimumSize, placeholder, TooSmall } from './minsize.ts';
 import { layoutColumns } from './charts/column.ts';
@@ -26,21 +28,29 @@ export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
 export {
   SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError, OPTIONS, LIMITS, appliesTo, optionDefaults, editorSpec,
-  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, CHART_TYPES,
+  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES,
 } from './spec.ts';
 export type { SpecError, OptionInfo, OptionKey } from './spec.ts';
 export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
 export type { NumberStyle, Locale } from './numbers.ts';
 export { parseCategoryDate, years360, cagrYears } from './dates.ts';
+export { THEME_SLOTS, MAPPED_SLOTS, COLOR_NAMES, DEFAULT_THEME, isColor, isColorName, themeOf, resolveColor, resolveStyle, colorHex, colorSlot } from './theme.ts';
+export type { ThemeSlot, ThemeColors, ColorName } from './theme.ts';
 
+
+/**
+ * The open-charts style. Series, text and background use theme slots, so a chart takes the colours
+ * of the presentation it is in; in previews and CLI decks the slots are the open-charts theme
+ * (DEFAULT_THEME: the same navy-to-grey ramp and near-black text as before themes).
+ */
 export const defaultStyle: Style = {
   font: 'Arial',
   fontSize: 12,
-  text: '222222',
+  text: 'tx1',
   muted: '595959',
   axis: '7F7F7F',
-  background: 'FFFFFF',
-  palette: ['1F3A5F', '3E6A9E', '7FA3CC', 'B9CDE5', 'A6A6A6', 'D9D9D9'],
+  background: 'bg1',
+  palette: ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'],
   positive: '3E8E5E',
   negative: 'C0504D',
 };
@@ -73,15 +83,22 @@ const layouts: Record<ChartSpec['type'], Layout> = {
  * The spec is migrated to the current version and validated first; an invalid
  * spec throws InvalidSpecError whose message lists every "/path: problem" (also on `.errors`).
  */
-export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle): Scene {
-  const s = prepareSpec(spec);
+export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle, hints: LayoutHints = {}): Scene {
+  const prepared = prepareSpec(spec);
+  // The chart's own style wins over the one passed in; theme slots resolve once, here (theme.ts).
+  const merged: Style = prepared.style ? { ...style, ...prepared.style } : style;
+  style = resolveStyle(merged);
+  const theme = themeOf(merged);
+  const s: ChartSpec = prepared.series.some((x) => x.color)
+    ? { ...prepared, series: prepared.series.map((x) => (x.color ? { ...x, color: resolveColor(x.color, theme) } : x)) }
+    : prepared;
   const min = minimumSize(s);
   // Lay out at the frame, or — when it is too small — find the size to ask for: at least the type's
   // minimum, grown by what the content says it needs (a table's columns, a category axis).
   let size = { w: Math.max(frame.w, min.w), h: Math.max(frame.h, min.h) };
   let why: string | undefined;
   for (let k = 0; k < 6; k++) {
-    const ctx = makeCtx(s, style, { ...frame, ...size }, m);
+    const ctx = makeCtx(s, style, { ...frame, ...size }, m, hints);
     try {
       layouts[s.type](ctx);
     } catch (e) {
@@ -93,7 +110,43 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     if (size.w !== frame.w || size.h !== frame.h) break;
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
     ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m));
-    return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden };
+    return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}) };
   }
   return placeholder(s, frame, size, m, style, why);
+}
+
+/** One chart of a slide for `layoutGroup`. */
+export interface GroupItem { spec: ChartSpec; frame: Frame }
+
+/** The same-scale group a chart belongs to (`options.scaleGroup` on a chart type that reads it). */
+export const scaleGroupOf = (spec: ChartSpec): string | undefined => {
+  const g = spec.options?.scaleGroup;
+  return typeof g === 'string' && g && appliesTo('scaleGroup', spec.type) ? g : undefined;
+};
+
+/**
+ * Lay out the charts of one slide. Charts whose `scaleGroup` names the same group draw one value unit
+ * equally long: the smallest of their own scales, so the chart with the largest values (for its
+ * height) keeps its scale and the others leave headroom (`Scene.valueScale`). Charts without a group,
+ * or alone in theirs, are laid out exactly as by `layoutChart`.
+ */
+export function layoutGroup(items: GroupItem[], m: Measurer, style: Style = defaultStyle): Scene[] {
+  const scenes = items.map((it) => layoutChart(it.spec, it.frame, m, style));
+  const groups = new Map<string, number[]>();
+  items.forEach((it, i) => {
+    const g = scaleGroupOf(it.spec);
+    if (g && scenes[i].valueScale) groups.set(g, [...(groups.get(g) ?? []), i]);
+  });
+  for (const members of groups.values()) {
+    if (members.length < 2) continue;
+    // A chart that follows the group reserves a wider axis, which can shorten its plot a little and
+    // with it its own scale: settle in a few rounds (each one only ever lowers the target).
+    for (let round = 0; round < 3; round++) {
+      const target = Math.min(...members.map((i) => scenes[i].valueScale!.own));
+      const off = members.filter((i) => Math.abs(scenes[i].valueScale!.ptPerUnit - target) > target * 1e-6);
+      if (!off.length) break;
+      for (const i of off) scenes[i] = layoutChart(items[i].spec, items[i].frame, m, style, { ptPerUnit: target });
+    }
+  }
+  return scenes;
 }

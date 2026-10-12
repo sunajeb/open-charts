@@ -4,6 +4,7 @@
 // PowerPoint tags: p:custDataLst → ppt/tags/tagN.xml, visible to VBA Shape.Tags and Office.js.
 import type { PathShape, Scene, Shape, TextShape } from '../core/types.ts';
 import { flattenPath, pathBounds, rectGeom } from '../core/path.ts';
+import { colorHex, colorSlot, DEFAULT_THEME, type ThemeColors } from '../core/theme.ts';
 import type { Tags } from './tags.ts';
 import { zip } from './zip.ts';
 
@@ -36,7 +37,12 @@ export const TAGS_CT = 'application/vnd.openxmlformats-officedocument.presentati
 export const TITLE_NAME = 'Title';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const fill = (c?: string) => (c ? `<a:solidFill><a:srgbClr val="${c.replace('#', '')}"/></a:solidFill>` : '<a:noFill/>');
+/** A scene colour as DrawingML: a theme colour (`schemeClr`) when it came from a theme slot, else RGB. */
+export const clrXml = (c: string) => {
+  const slot = colorSlot(c);
+  return slot ? `<a:schemeClr val="${slot}"/>` : `<a:srgbClr val="${colorHex(c)}"/>`;
+};
+const fill = (c?: string) => (c ? `<a:solidFill>${clrXml(c)}</a:solidFill>` : '<a:noFill/>');
 const ln = (c?: string, w = 0.75, extra = '') =>
   c ? `<a:ln w="${e(w)}">${fill(c)}${extra}</a:ln>` : '<a:ln><a:noFill/></a:ln>';
 const nvPr = (tagsRel?: string) =>
@@ -137,13 +143,14 @@ const rels = (items: [string, string][]) =>
 
 const EMPTY_TREE = '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree>';
 
-function theme(font: string): string {
+/** theme1.xml of a CLI deck: the style's theme colours (default: the open-charts theme) and font. */
+function theme(font: string, t: ThemeColors): string {
   const clr = (n: string, v: string) => `<a:${n}><a:srgbClr val="${v}"/></a:${n}>`;
   const solid = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
-  return `${XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="open-charts"><a:themeElements><a:clrScheme name="open-charts">${clr('dk1', '000000')}${clr('lt1', 'FFFFFF')}${clr('dk2', '1F3A5F')}${clr('lt2', 'EEEEEE')}${clr('accent1', '1F3A5F')}${clr('accent2', '3E6A9E')}${clr('accent3', '7FA3CC')}${clr('accent4', 'B9CDE5')}${clr('accent5', 'A6A6A6')}${clr('accent6', 'D9D9D9')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme><a:fontScheme name="open-charts"><a:majorFont><a:latin typeface="${esc(font)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${esc(font)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="open-charts"><a:fillStyleLst>${solid}${solid}${solid}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350">${solid}</a:ln><a:ln w="12700">${solid}</a:ln><a:ln w="19050">${solid}</a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${solid}${solid}${solid}</a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`;
+  return `${XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="open-charts"><a:themeElements><a:clrScheme name="open-charts">${(['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'] as const).map((k) => clr(k, t[k])).join('')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme><a:fontScheme name="open-charts"><a:majorFont><a:latin typeface="${esc(font)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${esc(font)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="open-charts"><a:fillStyleLst>${solid}${solid}${solid}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350">${solid}</a:ln><a:ln w="12700">${solid}</a:ln><a:ln w="19050">${solid}</a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${solid}${solid}${solid}</a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`;
 }
 
-export function writePptx(slides: SlideContent[], font = 'Arial'): Uint8Array {
+export function writePptx(slides: SlideContent[], font = 'Arial', themeColors: ThemeColors = DEFAULT_THEME): Uint8Array {
   const n = slides.length;
   const tagParts: string[] = [];
   const slideFiles: { name: string; data: string }[] = [];
@@ -182,7 +189,7 @@ export function writePptx(slides: SlideContent[], font = 'Arial'): Uint8Array {
     data: `${XML}<p:sldLayout ${NS} type="blank" preserve="1"><p:cSld name="Blank">${EMPTY_TREE}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
   });
   files.push({ name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: rels([['slideMaster', '../slideMasters/slideMaster1.xml']]) });
-  files.push({ name: 'ppt/theme/theme1.xml', data: theme(font) });
+  files.push({ name: 'ppt/theme/theme1.xml', data: theme(font, themeColors) });
   files.push(...slideFiles);
   tagParts.forEach((data, i) => files.push({ name: `ppt/tags/tag${i + 1}.xml`, data }));
   return zip(files);

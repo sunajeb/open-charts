@@ -39,7 +39,7 @@ test('waterfall: bars float from the running sum, totals sit on the baseline', (
   assert.ok(Math.abs(sub.h / start.h - 0.9) < 1e-6);
   assert.ok(Math.abs(end.h - start.h) < tol);
   // Totals use palette[0]; increases / decreases use the semantic colours.
-  assert.equal(start.fill, '1F3A5F');
+  assert.equal(start.fill, '1F3A5F@accent1'); // palette[0] is the theme's accent1
   assert.equal(up.fill, '3E8E5E');
   assert.equal(down.fill, 'C0504D');
   assert.deepEqual(checkScene(scene), []);

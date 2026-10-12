@@ -1,5 +1,7 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis, valueTicks } from '../common.ts';
+import {
+  axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis, valueTicks, axisWidth, sharedScale,
+} from '../common.ts';
 import { niceTicks, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 import { placePending, type PendingLabel } from '../labels.ts';
@@ -60,10 +62,10 @@ export function layoutWaterfall(ctx: Ctx) {
   const bounds = cols.flatMap((col) => col.segs.flatMap((g) => [g.lo, g.hi]).concat(col.entry, col.exit));
   let dmin = Math.min(0, ...bounds), dmax = Math.max(0, ...bounds);
   if (dmax === dmin) dmax = dmin + 1;
-  const ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
+  let ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
-  const axisFmt = axisFormatter(ctx, ticks);
-  const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
+  let axisFmt = axisFormatter(ctx, ticks);
+  const axisW = axisWidth(ctx, dmin, ticks, axisFmt);
 
   // Reserve space: legend on top, a label row above the highest bar, a label row below the lowest
   // bar when something dips below the baseline, categories at the bottom.
@@ -80,6 +82,8 @@ export function layoutWaterfall(ctx: Ctx) {
   const pw = frame.w - axisW;
   const py = frame.y + legendH + labelH;
   const ph = frame.y + frame.h - catH - belowH - py;
+  ({ dmin: dmin, dmax: dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const cx = (c: number) => px + slot * (c + 0.5);

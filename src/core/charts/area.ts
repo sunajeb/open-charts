@@ -1,5 +1,7 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, fitCategories, reportFit, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
+import {
+  axisFormatter, fitCategories, reportFit, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks, axisWidth, sharedScale,
+} from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 import type { PathCmd } from '../types.ts';
@@ -36,10 +38,10 @@ export function layoutArea(ctx: Ctx) {
 
   let dmax = percent ? 100 : Math.max(...totals);
   if (dmax <= 0) { ctx.hidden.push('area chart has no positive values'); dmax = 1; }
-  const ticks = o.valueAxis ? niceTicks(0, dmax, valueTicks(ctx)) : null;
+  let ticks = o.valueAxis ? niceTicks(0, dmax, valueTicks(ctx)) : null;
   if (ticks) dmax = ticks[ticks.length - 1];
-  const axisFmt = axisFormatter(ctx, ticks, percent);
-  const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
+  let axisFmt = axisFormatter(ctx, ticks, percent);
+  const axisW = axisWidth(ctx, 0, ticks, axisFmt, percent);
   const showTotals = !percent && !!o.totals;
 
   // Horizontal layout: points run edge to edge; the first and last category labels may overhang the
@@ -66,6 +68,8 @@ export function layoutArea(ctx: Ctx) {
   const totalsH = showTotals ? lh + pad * 0.3 : 0;
   const py = frame.y + legendH + totalsH + lh * 0.5;
   const ph = frame.y + frame.h - catH - py;
+  ({ dmax, ticks } = sharedScale(ctx, 0, dmax, ph, ticks));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks, percent);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - (v / dmax) * ph;
   const bottom = yOf(0);

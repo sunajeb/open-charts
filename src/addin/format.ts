@@ -17,11 +17,13 @@
 // Geometry: rect-like and text use x y w h; line uses x1 y1 x2 y2 in the same four columns; path
 // uses the bounding box there and the outline in `points`. Text with a box behind it (fill or
 // line set) is drawn as an autoshape of `textGeom` (rect | roundRect) carrying the text. Numbers use "." and at most 2 decimals,
-// so VBA's locale-independent Val() reads them. Colours are RRGGBB, "" = none.
+// so VBA's locale-independent Val() reads them. Colours are RRGGBB, or a theme colour name
+// (accent1…accent6, dk1 lt1 dk2 lt2, tx1 bg1 tx2 bg2) that VBA sets as ObjectThemeColor; "" = none.
 import type { PathCmd, Shape, TextShape } from '../core/types.ts';
 import { flattenPath } from '../core/path.ts';
+import { colorHex, colorSlot } from '../core/theme.ts';
 
-export const FORMAT_VERSION = '1';
+export const FORMAT_VERSION = '2';
 
 export const SHAPE_COLUMNS = [
   'kind', 'x', 'y', 'w', 'h', 'fill', 'lineColor', 'lineWidth', 'dash', 'arrowEnd',
@@ -38,7 +40,7 @@ export const unescapeField = (s: string) =>
   s.replace(/\\(.)/g, (_, c: string) => ({ t: '\t', n: '\n', r: '\r' } as Record<string, string>)[c] ?? c);
 
 export const num = (v: number) => (Number.isFinite(v) ? String(+v.toFixed(2)) : '0');
-const hex = (c?: string) => (c ? c.replace('#', '').toUpperCase() : '');
+const hex = (c?: string) => (c ? colorSlot(c) ?? colorHex(c).toUpperCase() : '');
 const flag = (b?: boolean) => (b ? '1' : '0');
 
 export const record = (...fields: string[]) => fields.map(escapeField).join('\t');

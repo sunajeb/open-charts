@@ -21,10 +21,53 @@
       "minItems": 1,
       "items": { "$ref": "#/$defs/series" }
     },
-    "options": { "$ref": "#/$defs/options" }
+    "options": { "$ref": "#/$defs/options" },
+    "style": { "$ref": "#/$defs/style", "description": "Style overrides for this chart, over the deck's style." }
   },
   "$defs": {
     "hexColor": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+    "color": {
+      "description": "A hex colour, or a theme colour that follows the presentation's theme: accent1-accent6, dk1, lt1, dk2, lt2, or the slide-mapped tx1, bg1, tx2, bg2.",
+      "anyOf": [
+        { "$ref": "#/$defs/hexColor" },
+        { "enum": ["accent1", "accent2", "accent3", "accent4", "accent5", "accent6", "dk1", "lt1", "dk2", "lt2", "tx1", "bg1", "tx2", "bg2"] }
+      ]
+    },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": { "type": "string", "minLength": 1 },
+        "fontSize": { "type": "number", "minimum": 4, "maximum": 72 },
+        "text": { "$ref": "#/$defs/color" },
+        "muted": { "$ref": "#/$defs/color" },
+        "axis": { "$ref": "#/$defs/color" },
+        "background": { "$ref": "#/$defs/color" },
+        "palette": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/color" } },
+        "positive": { "$ref": "#/$defs/color" },
+        "negative": { "$ref": "#/$defs/color" },
+        "theme": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Hex colour of each theme slot, for previews, the theme of decks the CLI writes and label contrast. Default: the open-charts theme.",
+          "properties": {
+            "accent1": { "$ref": "#/$defs/hexColor" }, "accent2": { "$ref": "#/$defs/hexColor" }, "accent3": { "$ref": "#/$defs/hexColor" },
+            "accent4": { "$ref": "#/$defs/hexColor" }, "accent5": { "$ref": "#/$defs/hexColor" }, "accent6": { "$ref": "#/$defs/hexColor" },
+            "dk1": { "$ref": "#/$defs/hexColor" }, "lt1": { "$ref": "#/$defs/hexColor" }, "dk2": { "$ref": "#/$defs/hexColor" }, "lt2": { "$ref": "#/$defs/hexColor" }
+          }
+        },
+        "numbers": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Number defaults for every chart; a chart's own options win.",
+          "properties": {
+            "locale": { "type": "string", "examples": ["en-US", "en-GB", "en-IN", "de-DE", "fr-FR"] },
+            "decimals": { "type": "integer", "minimum": 0, "maximum": 10 },
+            "scale": { "enum": ["none", "auto", "k", "m", "bn"] }
+          }
+        }
+      }
+    },
     "categoryIndex": { "type": "integer", "minimum": 0 },
     "range": {
       "type": "object",
@@ -53,7 +96,7 @@
             ]
           }
         },
-        "color": { "$ref": "#/$defs/hexColor" },
+        "color": { "$ref": "#/$defs/color" },
         "as": { "enum": ["column", "line"], "description": "Combination chart: draw this series as a line over the columns." }
       }
     },
@@ -137,7 +180,8 @@
         },
         "today": { "type": "string", "description": "Chart types: gantt. Date of a \"today\" line through every row." },
         "sizeLegend": { "type": ["boolean", "string"], "description": "Chart types: bubble. Size legend; a string adds a caption." },
-        "labelContent": { "enum": ["percent", "value", "both"], "description": "Chart types: pie, doughnut. Slice labels show shares (default), absolute values, or both." }
+        "labelContent": { "enum": ["percent", "value", "both"], "description": "Chart types: pie, doughnut. Slice labels show shares (default), absolute values, or both." },
+        "scaleGroup": { "type": "string", "minLength": 1, "description": "Chart types: stacked, clustered, waterfall, line, area, combo. Same-scale group: charts on one slide with the same name draw values at one scale." }
       }
     }
   }

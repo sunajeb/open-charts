@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   checkScene, layoutChart, migrate, migrateDeck, validateDeck, validateSpec, InvalidSpecError,
-  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, STYLE_KEYS, CHART_TYPES, OPTIONS, LIMITS, appliesTo, optionDefaults,
+  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES, OPTIONS, LIMITS, appliesTo, optionDefaults,
   type ChartSpec, type RectShape, type Scene, type TextShape, type LineShape,
 } from '../src/core/index.ts';
 import { parseCategoryDate, years360, cagrYears } from '../src/core/dates.ts';
@@ -330,7 +330,7 @@ const SAMPLE_OPTION: Record<string, unknown> = {
   cagr: { from: 0, to: 1 }, difference: { from: 0, to: 1 }, totalsAt: [0], step: true, percentData: true,
   combo: 'clustered', mekko: 'unit', sort: 'reverse', axisTitles: { x: 'x' }, sizeLegend: true,
   labelContent: 'value', shades: [{ from: '2026-01-01', to: '2026-02-01' }],
-  brackets: [{ from: '2026-01-01', to: '2026-02-01' }], today: '2026-01-15',
+  brackets: [{ from: '2026-01-01', to: '2026-02-01' }], today: '2026-01-15', scaleGroup: 'a',
 };
 
 test('options: every option on a type that does not read it is a path-addressed error', () => {
@@ -420,7 +420,11 @@ test('JSON Schema files stay in sync with the validator', () => {
   }
   assert.deepEqual(Object.keys(chart.$defs.series.properties).sort(), [...SERIES_KEYS].sort());
   assert.deepEqual(chart.properties.type.enum, [...CHART_TYPES]);
-  assert.deepEqual(Object.keys(deck.$defs.style.properties).sort(), [...STYLE_KEYS].sort());
+  assert.deepEqual(Object.keys(chart.$defs.style.properties).sort(), [...STYLE_KEYS].sort());
+  assert.deepEqual(Object.keys(chart.$defs.style.properties.numbers.properties).sort(), [...STYLE_NUMBER_KEYS].sort());
+  assert.equal(deck.properties.style.$ref, `${chart.$id}#/$defs/style`);
+  assert.deepEqual(Object.keys(deck.properties.slides.items.properties).sort(), [...SLIDE_KEYS].sort());
+  assert.deepEqual(Object.keys(deck.properties.slides.items.properties.charts.items.properties).sort(), [...SLIDE_CHART_KEYS].sort());
   assert.equal(deck.properties.slides.items.properties.chart.$ref, chart.$id);
 });
 

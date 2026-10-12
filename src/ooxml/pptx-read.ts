@@ -1,6 +1,7 @@
 // Reads open-charts objects back out of any .pptx: finds groups carrying tag contract v1, their
 // frames, roles and specs. Powers `open-charts inspect` and `open-charts import`.
 import type { ChartSpec, Frame, Style } from '../core/types.ts';
+import { THEME_SLOTS, type ThemeColors } from '../core/theme.ts';
 import type { DeckSpec } from '../deck.ts';
 import { TAG_CONTRACT_VERSION, parseFrame, specJson, upper } from '../render/tags.ts';
 import { TITLE_NAME } from '../render/pptx.ts';
@@ -141,20 +142,45 @@ function isTitlePlaceholder(sp: XmlNode): boolean {
   return ph?.attrs.type === 'title' || ph?.attrs.type === 'ctrTitle';
 }
 
-/** Recovers the DeckSpec from OC_SPEC tags. One chart per slide; extra charts become extra slides. */
+/**
+ * Recovers the DeckSpec from OC_SPEC tags. A slide with one chart becomes `{title, chart}`; a slide
+ * with several becomes `{title, charts: [{frame, chart}]}` with each chart's OC_FRAME. The first
+ * stored style becomes the deck's; a chart drawn with another style keeps it as its own.
+ */
 export function importDeck(bytes: Uint8Array): { deck: DeckSpec; warnings: string[] } {
   const warnings: string[] = [];
   const slides: DeckSpec['slides'] = [];
   let style: Partial<Style> | undefined;
   for (const s of readCharts(bytes)) {
-    s.charts.forEach((c, k) => {
+    const charts: { frame?: Frame; chart: ChartSpec }[] = [];
+    for (const c of s.charts) {
       if (Number(c.contract) > Number(TAG_CONTRACT_VERSION)) warnings.push(`slide ${s.index}: "${c.name}" was made with a newer open-charts (tag contract ${c.contract}); importing as-is`);
-      if (c.spec === undefined) { warnings.push(`slide ${s.index}: "${c.name}" has no OC_SPEC`); return; }
+      if (c.spec === undefined) { warnings.push(`slide ${s.index}: "${c.name}" has no OC_SPEC`); continue; }
       const { style: st, ...chart } = JSON.parse(c.spec) as ChartSpec & { style?: Partial<Style> };
       if (st && !style) style = st;
-      if (k > 0) warnings.push(`slide ${s.index}: chart ${k + 1} ("${c.name}") imported as its own slide`);
-      slides.push({ ...(k === 0 && s.title !== undefined ? { title: s.title } : {}), chart });
-    });
+      if (st && JSON.stringify(st) !== JSON.stringify(style)) chart.style = st;
+      charts.push({ ...(c.frame ? { frame: c.frame } : {}), chart });
+    }
+    if (!charts.length) continue;
+    const title = s.title !== undefined ? { title: s.title } : {};
+    slides.push(charts.length === 1 ? { ...title, chart: charts[0].chart } : { ...title, charts });
   }
   return { deck: { ...(style ? { style } : {}), slides }, warnings };
+}
+
+/** The colours of the deck's theme (its first slide master's), by slot; slots it does not define are left out. */
+export function readThemeColors(bytes: Uint8Array): Partial<ThemeColors> {
+  const entries = unzip(bytes);
+  const master = [...readRels(entries, 'ppt/presentation.xml').values()].find((r) => r.type.endsWith('/slideMaster'));
+  const theme = master && [...readRels(entries, master.target).values()].find((r) => r.type.endsWith('/theme'));
+  const xml = theme && entries.get(theme.target)?.text();
+  const out: Partial<ThemeColors> = {};
+  if (!xml) return out;
+  const scheme = find1(parseXml(xml), 'a:clrScheme');
+  for (const k of THEME_SLOTS) {
+    const slot = scheme && child(scheme, `a:${k}`);
+    const c = slot && (child(slot, 'a:srgbClr')?.attrs.val ?? child(slot, 'a:sysClr')?.attrs.lastClr);
+    if (c && /^[0-9A-Fa-f]{6}$/.test(c)) out[k] = c.toUpperCase();
+  }
+  return out;
 }

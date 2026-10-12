@@ -2,6 +2,7 @@
 // these rules (a sync test keeps the key lists identical).
 import type { ChartOptions, ChartSpec } from './types.ts';
 import { LOCALES } from './numbers.ts';
+import { COLOR_NAMES, isColor } from './theme.ts';
 import { parseCategoryDate } from './dates.ts';
 
 export const SPEC_VERSION = 1;
@@ -17,7 +18,7 @@ export const CHART_TYPES = [
   'area', 'area100', 'pie', 'doughnut', 'harvey',
   'combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt',
 ] as const;
-export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options'] as const;
+export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options', 'style'] as const;
 export const SERIES_KEYS = ['name', 'values', 'color', 'as'] as const;
 export type ChartTypeName = typeof CHART_TYPES[number];
 const except = (...types: ChartTypeName[]) => CHART_TYPES.filter((t) => !types.includes(t));
@@ -65,6 +66,7 @@ export const OPTIONS = {
   axisTitles: { types: ['scatter', 'bubble'], value: '`{x?, y?}`', auto: 'none' },
   sizeLegend: { types: ['bubble'], value: 'boolean or caption' },
   labelContent: { types: ['pie', 'doughnut'], value: '`percent` `value` `both`' },
+  scaleGroup: { types: ['stacked', 'clustered', 'waterfall', 'line', 'area', 'combo'], value: 'group name', auto: 'none (own scale)' },
   shades: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   brackets: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   today: { types: ['gantt'], value: 'date', auto: 'none' },
@@ -107,8 +109,12 @@ export const editorSpec = () => ({
   limits: LIMITS,
 });
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
-export const SLIDE_KEYS = ['title', 'chart'] as const;
-export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative'] as const;
+export const SLIDE_KEYS = ['title', 'chart', 'charts'] as const;
+/** Keys of one entry of a slide's `charts` (several charts on one slide). */
+export const SLIDE_CHART_KEYS = ['frame', 'chart'] as const;
+export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers'] as const;
+/** Keys of `style.numbers`: number defaults for every chart. */
+export const STYLE_NUMBER_KEYS = ['locale', 'decimals', 'scale'] as const;
 
 const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
 
@@ -136,10 +142,16 @@ export function migrate<T extends object>(spec: T, warnings?: string[], base = '
 }
 
 /** Upgrade a deck and every chart in it (warnings as in `migrate`, with paths from the deck root). */
-export function migrateDeck<T extends { slides?: { chart?: object }[] }>(deck: T, warnings?: string[]): T & { specVersion: number } {
+export function migrateDeck<T extends { slides?: { chart?: object; charts?: { chart?: object }[] }[] }>(deck: T, warnings?: string[]): T & { specVersion: number } {
   const out = migrate(deck);
   if (Array.isArray(out.slides)) {
-    out.slides = out.slides.map((s, i) => (s && typeof s === 'object' && s.chart ? { ...s, chart: migrate(s.chart, warnings, `/slides/${i}/chart`) } : s));
+    out.slides = out.slides.map((s, i) => {
+      if (!s || typeof s !== 'object') return s;
+      if (Array.isArray(s.charts)) {
+        return { ...s, charts: s.charts.map((c, k) => (c && typeof c === 'object' && c.chart ? { ...c, chart: migrate(c.chart, warnings, `/slides/${i}/charts/${k}/chart`) } : c)) };
+      }
+      return s.chart ? { ...s, chart: migrate(s.chart, warnings, `/slides/${i}/chart`) } : s;
+    });
   }
   return out;
 }
@@ -166,7 +178,7 @@ class Errors {
 }
 
 function checkColor(e: Errors, v: unknown, path: (string | number)[]) {
-  if (typeof v !== 'string' || !HEX.test(v)) e.add(path, `must be a hex colour like "1F3A5F" or "#1F3A5F", got ${describe(v)}`);
+  if (!isColor(v)) e.add(path, `must be a hex colour like "1F3A5F" or a theme colour (${COLOR_NAMES.join(', ')}), got ${describe(v)}`);
 }
 
 /** Every problem in a chart spec, path-addressed. Empty array = valid. Never throws. */
@@ -224,12 +236,47 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
     if (!isObj(spec.options)) e.add(['options'], 'must be an object');
     else validateOptions(e, spec.options, type as string, nCat);
   }
+  if (spec.style !== undefined) validateStyle(e, spec.style);
   return e.list;
 }
 
-function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nCat: number) {
-  const p = (k: string, ...rest: (string | number)[]) => ['options', k, ...rest];
-  e.unknown(o, OPTION_KEYS, ['options']);
+/** A style (on a deck or a chart): fonts, colours (hex or theme slots), theme colours, number defaults. */
+function validateStyle(e: Errors, st: unknown) {
+  if (!isObj(st)) { e.add(['style'], 'must be an object'); return; }
+  e.unknown(st, STYLE_KEYS, ['style']);
+  if (st.font !== undefined && (typeof st.font !== 'string' || !st.font)) e.add(['style', 'font'], 'must be a font name');
+  if (st.fontSize !== undefined && (typeof st.fontSize !== 'number' || !(st.fontSize >= 4 && st.fontSize <= 72))) e.add(['style', 'fontSize'], 'must be a number of points 4–72');
+  for (const k of ['text', 'muted', 'axis', 'background', 'positive', 'negative']) if (st[k] !== undefined) checkColor(e, st[k], ['style', k]);
+  if (st.palette !== undefined) {
+    if (!Array.isArray(st.palette) || !st.palette.length) e.add(['style', 'palette'], 'must be a non-empty array of colours');
+    else st.palette.forEach((c, i) => checkColor(e, c, ['style', 'palette', i]));
+  }
+  if (st.theme !== undefined) {
+    if (!isObj(st.theme)) e.add(['style', 'theme'], 'must be an object of theme colours, e.g. {"accent1": "1F3A5F"}');
+    else {
+      e.unknown(st.theme, THEME_SLOT_KEYS, ['style', 'theme']);
+      for (const k of THEME_SLOT_KEYS) {
+        const v = st.theme[k];
+        if (v !== undefined && (typeof v !== 'string' || !HEX.test(v))) e.add(['style', 'theme', k], `must be a hex colour like "1F3A5F", got ${describe(v)}`);
+      }
+    }
+  }
+  if (st.numbers !== undefined) {
+    if (!isObj(st.numbers)) e.add(['style', 'numbers'], 'must be an object with locale, decimals and/or scale');
+    else {
+      const sub = new Errors(`${e.base}/style`);
+      // The same rules as the chart options of the same names (paths "/style/numbers/<key>").
+      validateOptions(sub, Object.fromEntries(Object.entries(st.numbers).filter(([k]) => (STYLE_NUMBER_KEYS as readonly string[]).includes(k))), '', -1, 'numbers');
+      e.list.push(...sub.list);
+      e.unknown(st.numbers, STYLE_NUMBER_KEYS, ['style', 'numbers']);
+    }
+  }
+}
+const THEME_SLOT_KEYS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'] as const;
+
+function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nCat: number, at = 'options') {
+  const p = (k: string, ...rest: (string | number)[]) => [at, k, ...rest];
+  e.unknown(o, OPTION_KEYS, [at]);
   // One rule for every option: the chart type reads it, or it is an error (null = "none" is accepted).
   if (CHART_TYPES.includes(type as never)) {
     for (const k of OPTION_KEYS) {
@@ -318,6 +365,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   }
   if (o.today !== undefined && !isDate(o.today)) e.add(p('today'), `must be a date like "2026-03-15", got ${describe(o.today)}`);
   if (o.sizeLegend !== undefined && typeof o.sizeLegend !== 'boolean' && typeof o.sizeLegend !== 'string') e.add(p('sizeLegend'), `must be true, false or a caption, got ${describe(o.sizeLegend)}`);
+  if (o.scaleGroup !== undefined && o.scaleGroup !== null && (typeof o.scaleGroup !== 'string' || !o.scaleGroup)) e.add(p('scaleGroup'), `must be a group name, got ${describe(o.scaleGroup)}`);
 }
 
 const isDate = (v: unknown): v is string => typeof v === 'string' && parseCategoryDate(v) !== null;
@@ -354,20 +402,7 @@ export function validateDeck(deck: unknown): SpecError[] {
   if (deck.specVersion !== undefined && deck.specVersion !== SPEC_VERSION) {
     e.add(['specVersion'], `unsupported specVersion ${describe(deck.specVersion)}; this engine reads version ${SPEC_VERSION}`);
   }
-  if (deck.style !== undefined) {
-    if (!isObj(deck.style)) e.add(['style'], 'must be an object');
-    else {
-      const st = deck.style;
-      e.unknown(st, STYLE_KEYS, ['style']);
-      if (st.font !== undefined && (typeof st.font !== 'string' || !st.font)) e.add(['style', 'font'], 'must be a font name');
-      if (st.fontSize !== undefined && (typeof st.fontSize !== 'number' || !(st.fontSize >= 4 && st.fontSize <= 72))) e.add(['style', 'fontSize'], 'must be a number of points 4–72');
-      for (const k of ['text', 'muted', 'axis', 'background', 'positive', 'negative']) if (st[k] !== undefined) checkColor(e, st[k], ['style', k]);
-      if (st.palette !== undefined) {
-        if (!Array.isArray(st.palette) || !st.palette.length) e.add(['style', 'palette'], 'must be a non-empty array of hex colours');
-        else st.palette.forEach((c, i) => checkColor(e, c, ['style', 'palette', i]));
-      }
-    }
-  }
+  if (deck.style !== undefined) validateStyle(e, deck.style);
   if (!Array.isArray(deck.slides)) { e.add(['slides'], 'must be an array of slides'); return e.list; }
   const out = e.list;
   deck.slides.forEach((s, i) => {
@@ -375,7 +410,28 @@ export function validateDeck(deck: unknown): SpecError[] {
     const se = new Errors(`/slides/${i}`);
     se.unknown(s, SLIDE_KEYS, []);
     if (s.title !== undefined && typeof s.title !== 'string') se.add(['title'], 'must be a string');
-    out.push(...se.list, ...validateSpec(migrate(s.chart as object), `/slides/${i}/chart`));
+    if (s.charts === undefined) { out.push(...se.list, ...validateSpec(migrate(s.chart as object), `/slides/${i}/chart`)); return; }
+    // Several charts on one slide: `charts` instead of `chart`, each with an optional frame.
+    if (s.chart !== undefined) se.add(['chart'], 'a slide has either "chart" or "charts", not both');
+    if (!Array.isArray(s.charts) || !s.charts.length) { se.add(['charts'], 'must be a non-empty array of {frame, chart}'); out.push(...se.list); return; }
+    out.push(...se.list);
+    s.charts.forEach((c, k) => {
+      const ce = new Errors(`/slides/${i}/charts/${k}`);
+      if (!isObj(c)) { ce.add([], 'must be an object with a "chart"'); out.push(...ce.list); return; }
+      ce.unknown(c, SLIDE_CHART_KEYS, []);
+      if (c.frame !== undefined) {
+        const f = c.frame;
+        if (!isObj(f)) ce.add(['frame'], 'must be {x, y, w, h} in points');
+        else {
+          ce.unknown(f, ['x', 'y', 'w', 'h'], ['frame']);
+          for (const key of ['x', 'y', 'w', 'h']) {
+            const v = f[key];
+            if (typeof v !== 'number' || !Number.isFinite(v) || ((key === 'w' || key === 'h') && v <= 0)) ce.add(['frame', key], `must be a ${key === 'w' || key === 'h' ? 'positive ' : ''}number of points, got ${describe(v)}`);
+          }
+        }
+      }
+      out.push(...ce.list, ...validateSpec(migrate(c.chart as object), `/slides/${i}/charts/${k}/chart`));
+    });
   });
   return out;
 }

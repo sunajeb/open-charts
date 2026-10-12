@@ -82,6 +82,11 @@ export interface ChartOptions {
   today?: string;
   /** Pie and doughnut: what the slice labels show — shares (default), absolute values, or both ("118 (52%)"). */
   labelContent?: 'percent' | 'value' | 'both';
+  /**
+   * Same-scale group: charts on one slide with the same group name draw values at one scale (the
+   * smallest of their own), so equal values are equally tall across the charts.
+   */
+  scaleGroup?: string;
 }
 
 export interface ChartSpec {
@@ -92,8 +97,16 @@ export interface ChartSpec {
   categories: string[];
   series: Series[];
   options?: ChartOptions;
+  /** Style overrides for this chart (over the deck's style). */
+  style?: Partial<Style>;
 }
 
+/**
+ * Fonts, colours and number defaults (DATA-FORMAT.md "Style"). Every colour is a hex colour
+ * ("1F3A5F") or a theme slot (`accent1`…`accent6`, `dk1` `lt1` `dk2` `lt2`, or the slide-mapped
+ * `tx1` `bg1` `tx2` `bg2`); a slot follows the theme of the presentation the chart is in.
+ * Inside a scene, a colour that came from a slot reads "1F3A5F@accent1" (see core/theme.ts).
+ */
 export interface Style {
   font: string;
   fontSize: number;
@@ -104,6 +117,10 @@ export interface Style {
   palette: string[];
   positive: string;
   negative: string;
+  /** Hex colour of each theme slot, for previews, the CLI deck's theme and contrast (default: the open-charts theme). */
+  theme?: Partial<Record<'accent1' | 'accent2' | 'accent3' | 'accent4' | 'accent5' | 'accent6' | 'dk1' | 'lt1' | 'dk2' | 'lt2', string>>;
+  /** Number defaults for every chart; a chart's own options win. */
+  numbers?: Pick<ChartOptions, 'locale' | 'decimals' | 'scale'>;
 }
 
 export interface Frame { x: number; y: number; w: number; h: number }
@@ -186,4 +203,12 @@ export interface Scene {
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */
   hidden: string[];
+  /** Value scale of charts with a value axis (same-scale groups, `layoutGroup`). */
+  valueScale?: ValueScale;
 }
+
+/**
+ * The value scale a chart drew with: its domain, how long one value unit is (points), and how long
+ * it would be on its own (`own`; smaller `ptPerUnit` = the chart follows a same-scale group).
+ */
+export interface ValueScale { min: number; max: number; ptPerUnit: number; own: number }

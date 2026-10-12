@@ -1,5 +1,7 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
+import {
+  axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelsRight, text, valueAxis, valueTicks, axisWidth, sharedScale,
+} from '../common.ts';
 import { niceTicks } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 import type { LineShape } from '../types.ts';
@@ -21,11 +23,11 @@ export function layoutLine(ctx: Ctx) {
   const narrow = lo > 0 && (hi - lo) / hi < 0.4;
   const zero = o.zeroBased ?? !narrow;
   const [vmin, vmax] = zero ? [Math.min(0, lo), Math.max(0, hi)] : [lo, hi];
-  const ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
+  let ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
   let [dmin, dmax] = ticks ? [ticks[0], ticks[ticks.length - 1]] : [vmin, vmax];
   if (dmax === dmin) dmax = dmin + 1;
-  const axisFmt = axisFormatter(ctx, ticks);
-  const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
+  let axisFmt = axisFormatter(ctx, ticks);
+  const axisW = axisWidth(ctx, dmin, ticks, axisFmt);
 
   // Label every point when the chart is sparse enough to stay readable, otherwise only the last one.
   const labelAll = nCat * sers.length <= 24;
@@ -48,6 +50,8 @@ export function layoutLine(ctx: Ctx) {
   // Headroom for a label above a point at the top of the scale.
   const py = frame.y + legendH + lh + pad * 0.5 + r;
   const ph = frame.y + frame.h - catH - py - lh * 0.5;
+  ({ dmin: dmin, dmax: dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks);
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const xOf = (c: number) => px + slot * (c + 0.5);
 

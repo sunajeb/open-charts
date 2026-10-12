@@ -1,11 +1,22 @@
-import type { ChartOptions, ChartSpec, Frame, Shape, Style, TextShape } from './types.ts';
+import type { ChartOptions, ChartSpec, Frame, Shape, Style, TextShape, ValueScale } from './types.ts';
 import type { Measurer } from './text.ts';
 import { fits, wrap } from './text.ts';
-import { formatValue, inferDecimals, pickScale, type NumberStyle } from './numbers.ts';
+import { formatValue, inferDecimals, niceTicks, pickScale, type NumberStyle } from './numbers.ts';
 import { spread } from './place.ts';
 import { parseCategoryDate } from './dates.ts';
 import { TooSmall } from './minsize.ts';
-import { optionDefaults } from './spec.ts';
+import { appliesTo, optionDefaults } from './spec.ts';
+
+/** Inputs to one layout that come from outside the chart's spec. */
+export interface LayoutHints {
+  /**
+   * Same-scale group: draw one value unit this many points long (the smallest scale in the group),
+   * instead of the chart's own. Ignored when it is larger than the chart's own scale.
+   */
+  ptPerUnit?: number;
+}
+
+export type { ValueScale } from './types.ts';
 
 export interface Ctx {
   spec: ChartSpec;
@@ -33,12 +44,15 @@ export interface Ctx {
   fmt(v: number, opts?: Partial<NumberStyle> & { scaled?: boolean }): string;
   /** Format a percentage (already ×100) with the chart's locale. */
   pct(v: number, decimals: number, signed?: boolean): string;
+  hints: LayoutHints;
+  /** The chart's own value scale, set by `sharedScale` (same-scale groups compare these). */
+  valueScale?: ValueScale;
 }
 
 /** Numeric values of a series cell (null and markers such as "e" are not numbers). */
 export const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer): Ctx {
+export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer, hints: LayoutHints = {}): Ctx {
   const horizontal = spec.options?.orientation === 'horizontal';
   // seriesLabels is only a starting point here: chart types refine it from the data when it is unset.
   const defaults = {
@@ -46,7 +60,9 @@ export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer
     seriesLabels: spec.type === 'clustered' || horizontal ? 'legend' : 'right',
     ...optionDefaults(spec.type),
   } as const;
-  const o = { ...defaults, ...spec.options };
+  // The style's number defaults apply where the chart type reads them; the chart's own options win.
+  const numbers = Object.fromEntries(Object.entries(style.numbers ?? {}).filter(([k, v]) => v !== undefined && appliesTo(k, spec.type)));
+  const o = { ...defaults, ...numbers, ...spec.options };
   const all = spec.series.flatMap((s) => s.values.map(num)).filter((v): v is number => v != null);
   const scale = pickScale(all, o.scale);
   const decimals = o.decimals ?? inferDecimals(all.map((v) => v / scale.div));
@@ -54,7 +70,7 @@ export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer
   const shapes: Shape[] = [];
   const roles: string[] = [];
   return {
-    spec, style, frame, m, o, fs,
+    spec, style, frame, m, o, fs, hints,
     minFs: Math.min(fs, 8),
     lh: m.lineHeight(fs),
     pad: fs * 0.4,
@@ -334,6 +350,41 @@ export function axisFormatter(ctx: Ctx, ticks: number[] | null, percent = false)
   return (v) => (percent ? ctx.pct(v, d) : formatValue(v / div, {
     locale: ctx.o.locale, decimals: d, unit: ctx.o.unit, magnitude: ctx.scale.suffix,
   }));
+}
+
+/**
+ * The value domain to draw with, once the plot length `len` (points) is known. Records the chart's own
+ * scale on `ctx.valueScale`; in a same-scale group (`ctx.hints.ptPerUnit` smaller than the chart's
+ * own), stretches the domain away from the baseline so one unit is that long, and returns the ticks
+ * that fall inside the stretched domain.
+ */
+export function sharedScale(ctx: Ctx, dmin: number, dmax: number, len: number, ticks: number[] | null) {
+  const own = len / (dmax - dmin);
+  ctx.valueScale = { min: dmin, max: dmax, ptPerUnit: own, own };
+  const target = ctx.hints.ptPerUnit;
+  if (!target || !(len > 0) || target >= own * (1 - 1e-9)) return { dmin, dmax, ticks };
+  const span = len / target;
+  if (dmax > 0 || dmin >= 0) dmax = dmin + span; else dmin = dmax - span;
+  ctx.valueScale = { min: dmin, max: dmax, ptPerUnit: target, own };
+  const eps = span * 1e-9;
+  const next = ticks ? niceTicks(dmin, dmax, Math.max(3, ticks.length - 1)).filter((t) => t >= dmin - eps && t <= dmax + eps) : null;
+  return { dmin, dmax, ticks: next };
+}
+
+/**
+ * Width of a left value axis: its widest tick label plus padding. In a same-scale group the domain
+ * may later stretch (sharedScale), so the widest label of the largest domain the frame allows counts too.
+ */
+export function axisWidth(ctx: Ctx, dmin: number, ticks: number[] | null, fmt: (v: number) => string, percent = false): number {
+  if (!ticks) return 0;
+  const widths = ticks.map((t) => ctx.m.width(fmt(t), ctx.fs));
+  const target = ctx.hints.ptPerUnit;
+  if (target) {
+    const wide = niceTicks(dmin, dmin + ctx.frame.h / target, Math.max(3, ticks.length - 1));
+    const wfmt = axisFormatter(ctx, wide, percent);
+    widths.push(...wide.map((t) => ctx.m.width(wfmt(t), ctx.fs)));
+  }
+  return Math.max(...widths) + ctx.pad * 1.5;
 }
 
 /** Left value axis: vertical line, tick marks and right-aligned tick labels. */
