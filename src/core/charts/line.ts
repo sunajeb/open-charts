@@ -3,6 +3,8 @@ import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabel
 import { niceTicks } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 import type { LineShape } from '../types.ts';
+import { diffLabel, drawLevelArrow, drawValueLine, valueLineLabelW, valueLineText } from '../decorations.ts';
+import { arrowBubble } from '../common.ts';
 
 /**
  * Line chart: one point per category, markers, value labels placed above or below without collisions.
@@ -20,7 +22,10 @@ export function layoutLine(ctx: Ctx) {
   const lo = Math.min(...all), hi = Math.max(...all);
   const narrow = lo > 0 && (hi - lo) / hi < 0.4;
   const zero = o.zeroBased ?? !narrow;
-  const [vmin, vmax] = zero ? [Math.min(0, lo), Math.max(0, hi)] : [lo, hi];
+  // Value lines at fixed values (manual: Value lines) widen the axis to show them.
+  const vls = (o.valueLines ?? []).map((vl, k) => ({ k, v: vl.value as number, side: vl.position ?? 'right', label: valueLineText(ctx, vl, vl.value as number) }));
+  const vlv = vls.map((v) => v.v);
+  const [vmin, vmax] = zero ? [Math.min(0, lo, ...vlv), Math.max(0, hi, ...vlv)] : [Math.min(lo, ...vlv), Math.max(hi, ...vlv)];
   const ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
   let [dmin, dmax] = ticks ? [ticks[0], ticks[ticks.length - 1]] : [vmin, vmax];
   if (dmax === dmin) dmax = dmin + 1;
@@ -36,22 +41,39 @@ export function layoutLine(ctx: Ctx) {
   }));
 
   const legendH = legend(ctx, 'line');
+  // Level difference arrows between points (manual: Level difference arrows), with their labels.
+  const level = (e: { category: number; series?: number } | { valueLine: number }) =>
+    ('valueLine' in e ? vls.find((v) => v.k === e.valueLine)?.v : val(e.series ?? 0, e.category)) ?? null;
+  const levels = (o.levelArrows ?? []).flatMap((a, k) => {
+    const [va, vb] = [level(a.from), level(a.to)];
+    if (va == null || vb == null) { ctx.hidden.push(`level arrow ${k + 1}: a point has no value`); return []; }
+    const mode = a.mode ?? 'relative';
+    const label = diffLabel(ctx, va, vb, mode);
+    if (!label) { ctx.hidden.push(`level arrow ${k + 1}: a relative difference needs a positive base`); return []; }
+    const cs = [a.from, a.to].flatMap((e) => ('category' in e ? [e.category] : []));
+    return [{ k, a, va, vb, mode, label, later: Math.max(...cs), earlier: Math.min(...cs) }];
+  });
+  const levelW = Math.max(0, ...levels.filter((l) => l.later === nCat - 1 && (l.a.position !== 'between' || l.earlier === l.later))
+    .map((l) => arrowBubble(ctx, l.label).w + pad * 1.6 + r));
+  const sideW = (side: 'left' | 'right') => Math.max(0, ...vls.filter((v) => v.side === side).map((v) => valueLineLabelW(ctx, v.label) + pad * 0.3));
+  const leftW = sideW('left'), decoRightW = sideW('right');
   let slot = 0, catH = 0, rightW = 0;
   const nameW = o.seriesLabels === 'right' ? Math.max(...spec.series.map((s) => m.width(s.name, fs))) : 0;
   for (let i = 0; i < 3; i++) {
-    slot = (frame.w - axisW - rightW) / nCat;
+    slot = (frame.w - leftW - axisW - rightW) / nCat;
     catH = categoryHeight(ctx, slot);
-    rightW = o.seriesLabels === 'right' ? Math.max(0, nameW + lastLabelHalf + r + pad * 2 - slot / 2) : 0;
+    const names = o.seriesLabels === 'right' ? nameW + lastLabelHalf + r + pad * 2 : 0;
+    rightW = names || levelW || decoRightW ? Math.max(0, names + levelW + decoRightW - slot / 2) : 0;
   }
-  const px = frame.x + axisW;
-  const pw = frame.w - axisW - rightW;
+  const px = frame.x + leftW + axisW;
+  const pw = frame.w - leftW - axisW - rightW;
   // Headroom for a label above a point at the top of the scale.
   const py = frame.y + legendH + lh + pad * 0.5 + r;
   const ph = frame.y + frame.h - catH - py - lh * 0.5;
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const xOf = (c: number) => px + slot * (c + 0.5);
 
-  if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
+  if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt, frame.x + leftW);
   const bottom = yOf(dmin);
   ctx.add('axis', { kind: 'line', x1: px, y1: bottom, x2: px + pw, y2: bottom, color: style.axis, width: 0.75 });
   if (dmin < 0 && dmax > 0) {
@@ -132,6 +154,26 @@ export function layoutLine(ctx: Ctx) {
       .filter((i): i is { s: number; y: number } => i !== null);
     // Start right of whatever was actually placed at the last point (labels, markers).
     const edge = Math.max(xOf(nCat - 1) + Math.max(r, lastLabelHalf), ...lastBoxes.map((b) => b.x + b.w));
-    seriesLabelsRight(ctx, items, edge + pad * 0.5, py - lh, bottom);
+    seriesLabelsRight(ctx, items, edge + pad * 0.5 + levelW, py - lh, bottom);
+  }
+
+  // Decorations last, around the labels: value lines, then level arrows.
+  const area = { x: frame.x, y: frame.y + legendH, w: frame.w, h: frame.h - legendH };
+  for (const vl of vls) {
+    drawValueLine(ctx, {
+      horizontal: false, w: yOf(vl.v), side: vl.side, label: vl.label, role: `valueline:${vl.k}`, bounds: area,
+      u1: vl.side === 'left' ? frame.x + leftW : px, u2: vl.side === 'left' ? px + pw : frame.x + frame.w - decoRightW, reason: `value line ${vl.k + 1}`,
+    });
+  }
+  for (const l of levels) {
+    const between = l.a.position === 'between' && l.earlier !== l.later;
+    const base = between ? (xOf(l.later - 1) + xOf(l.later)) / 2 : xOf(l.later) + r + pad * 0.8;
+    const guides = [l.a.from, l.a.to].flatMap((e) => ('category' in e
+      ? [{ u: xOf(e.category) + (between && e.category === l.later ? -r : r), w: yOf(level(e)!) }]
+      : []));
+    drawLevelArrow(ctx, {
+      horizontal: false, us: between ? [base] : [base, base + pad * 0.5, base + pad], guides, mode: l.mode,
+      wa: yOf(l.va), wb: yOf(l.vb), label: l.label, role: `arrow:level:${l.k}`, bounds: area, reason: `level arrow ${l.k + 1}`,
+    });
   }
 }
