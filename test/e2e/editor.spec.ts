@@ -600,3 +600,314 @@ test('gantt: dates in the datasheet drive bars, milestones and the calendar scal
   await edit(page, () => setType(page, 'stacked'));
   expect((await deck(page)).slides[0].chart.series[0].values[0]).toBe(42);
 });
+
+// ---- UX: gallery, datasheet power features, options, preview, add-in session -----------------------
+
+const MOD = 'ControlOrMeta';
+
+test('type gallery: grouped icons, current type pressed, keyboard pick, Escape returns focus', async ({ page }) => {
+  await page.click('#typeBtn');
+  await expect(page.locator('#gallery')).toBeVisible();
+  await expect(page.locator('#typeBtn')).toHaveAttribute('aria-expanded', 'true');
+  expect(await page.locator('#gallery h3').allTextContents()).toEqual(['Column & bar', 'Line & area', 'Mekko', 'XY', 'Circular', 'Special']);
+  expect(await page.locator('#gallery .gal-item svg.gal-ico').count()).toBe(CHART_TYPES.length);
+  await expect(page.locator('#gallery .gal-item[aria-pressed="true"]')).toHaveAttribute('data-type', 'stacked');
+  await expect(page.locator('#gallery .gal-item[data-type="stacked"]')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#gallery .gal-item[data-type="clustered"]')).toBeFocused();
+  await edit(page, () => page.keyboard.press('Enter'));
+  await expect(page.locator('#gallery')).toBeHidden();
+  await expect(page.locator('#typeBtn')).toBeFocused();
+  await expect(page.locator('#typeBtn')).toHaveAttribute('data-type', 'clustered');
+  await expect(page.locator('#typeBtn')).toContainText('Clustered');
+  await page.click('#typeBtn');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#gallery')).toBeHidden();
+  await expect(page.locator('#typeBtn')).toBeFocused();
+});
+
+test('undo / redo: keyboard and buttons; typing in one cell is one step', async ({ page }) => {
+  await expect(page.locator('#undoBtn')).toBeDisabled();
+  await cell(page, 0, 0).click();
+  await cell(page, 0, 0).selectText();
+  await edit(page, () => page.keyboard.type('500'));
+  expect(await texts(page)).toContain('500m');
+  await edit(page, () => page.keyboard.press(`${MOD}+z`));
+  await expect(cell(page, 0, 0)).toHaveValue('42');
+  expect(await texts(page)).toContain('42m');
+  await edit(page, () => page.keyboard.press(`${MOD}+Shift+z`));
+  await expect(cell(page, 0, 0)).toHaveValue('500');
+  await edit(page, () => setType(page, 'line'));
+  await edit(page, () => page.click('#undoBtn'));
+  await expect(page.locator('#typeBtn')).toHaveAttribute('data-type', 'stacked');
+  await edit(page, () => page.click('#undoBtn'));
+  expect((await deck(page)).slides[0].chart.series[0].values[0]).toBe(42);
+  await expect(page.locator('#undoBtn')).toBeDisabled();
+  await edit(page, () => page.click('#redoBtn'));
+  expect((await deck(page)).slides[0].chart.series[0].values[0]).toBe(500);
+});
+
+test('datasheet: Tab and Shift+Tab move across and wrap rows', async ({ page }) => {
+  await cell(page, 0, 3).click();
+  await page.keyboard.press('Tab');
+  await expect(cell(page, 0, 4)).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(cell(page, 1, -1)).toBeFocused(); // wraps to the next series name
+  await page.keyboard.press('Shift+Tab');
+  await expect(cell(page, 0, 4)).toBeFocused();
+});
+
+test('datasheet: range selection, copy as TSV, Delete clears, a single value fills the range', async ({ page }) => {
+  await cell(page, 0, 0).click();
+  await cell(page, 0, 0).selectText();
+  await page.keyboard.press('Shift+ArrowRight');
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect(page.locator('#sheet .sel')).toHaveCount(4);
+  const copied = await cell(page, 1, 1).evaluate((el) => {
+    const dt = new DataTransfer();
+    el.dispatchEvent(new ClipboardEvent('copy', { clipboardData: dt, bubbles: true, cancelable: true }));
+    return dt.getData('text/plain');
+  });
+  expect(copied).toBe('42\t58\n31\t36');
+  await edit(page, () => paste(page, 1, 1, '7'));
+  expect((await deck(page)).slides[0].chart.series.slice(0, 2).map((s: { values: number[] }) => s.values.slice(0, 2))).toEqual([[7, 7], [7, 7]]);
+  await expect(page.locator('#sheet .sel')).toHaveCount(4); // the range survives the re-render
+  await edit(page, () => page.keyboard.press('Delete'));
+  expect((await deck(page)).slides[0].chart.series[1].values.slice(0, 3)).toEqual([null, null, 44]);
+  // Drag-select with the mouse.
+  const a = await cell(page, 2, 2).boundingBox(), b = await cell(page, 3, 4).boundingBox();
+  await page.mouse.move(a!.x + 5, a!.y + 5); await page.mouse.down();
+  await page.mouse.move(b!.x + 5, b!.y + 5, { steps: 4 }); await page.mouse.up();
+  await expect(page.locator('#sheet .sel')).toHaveCount(6);
+});
+
+test('datasheet: context menu inserts and deletes at the clicked cell; Shift+F10 opens it', async ({ page }) => {
+  await cell(page, 1, 2).click({ button: 'right' });
+  const menu = page.locator('#ctxMenu');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem', { name: 'Delete series “Mid-market”' })).toBeEnabled();
+  await edit(page, () => menu.getByRole('menuitem', { name: 'Insert category left' }).click());
+  let c = (await deck(page)).slides[0].chart;
+  expect(c.categories).toEqual(['2021', '2022', 'Cat 6', '2023', '2024', '2025E']);
+  expect(c.series[0].values).toEqual([42, 58, null, 75, 96, 118]);
+  expect(c.options.cagr).toEqual({ from: 0, to: 5 }); // still 2021 → 2025E
+  await expect(cell(page, -1, 2)).toBeFocused(); // ready to type the new name
+  await edit(page, () => page.keyboard.type('H2'));
+  await cell(page, 2, 0).click();
+  await page.keyboard.press('Shift+F10');
+  await expect(menu).toBeVisible();
+  await expect(menu.getByRole('menuitem').first()).toBeFocused();
+  await edit(page, () => menu.getByRole('menuitem', { name: 'Delete series “SMB”' }).click());
+  c = (await deck(page)).slides[0].chart;
+  expect(c.series.map((s: { name: string }) => s.name)).toEqual(['Enterprise', 'Mid-market', 'Services']);
+  expect(c.categories[2]).toBe('H2');
+  await cell(page, 0, 0).click({ button: 'right' });
+  await page.keyboard.press('Escape');
+  await expect(menu).toBeHidden();
+  await expect(cell(page, 0, 0)).toBeFocused();
+  // Ghost "+" buttons add a category / series in one click.
+  await edit(page, () => page.getByRole('button', { name: 'Add category' }).click());
+  await edit(page, () => page.getByRole('button', { name: 'Add series' }).click());
+  c = (await deck(page)).slides[0].chart;
+  expect([c.categories.length, c.series.length]).toEqual([7, 4]);
+});
+
+test('series colour swatch: pick an accent, a hex, then back to automatic', async ({ page }) => {
+  await page.click('#sheet .swatch[data-i="0"]');
+  await expect(page.locator('#colorPop')).toBeVisible();
+  await edit(page, () => page.click('#accentSwatches button[data-hex="C0504D"]'));
+  expect((await deck(page)).slides[0].chart.series[0].color).toBe('C0504D');
+  expect(await rects(page, 'C0504D')).toBeGreaterThanOrEqual(5);
+  expect(await rects(page, NAVY)).toBe(0);
+  await expect(page.locator('#sheet .swatch[data-i="0"]')).toBeFocused();
+  await page.click('#sheet .swatch[data-i="1"]');
+  await page.fill('#colorHex', '#4f9d69');
+  await edit(page, () => page.press('#colorHex', 'Enter'));
+  expect((await deck(page)).slides[0].chart.series[1].color).toBe('4F9D69');
+  await page.click('#sheet .swatch[data-i="0"]');
+  await edit(page, () => page.click('#colorAuto'));
+  expect((await deck(page)).slides[0].chart.series[0].color).toBeUndefined();
+  expect(await rects(page, NAVY)).toBeGreaterThanOrEqual(5);
+  // Pie slices are coloured per category: no series swatches.
+  await edit(page, () => setType(page, 'pie'));
+  await expect(page.locator('#sheet .swatch')).toHaveCount(0);
+});
+
+test('numbers: prefix unit, magnitude, separators and an Excel format', async ({ page }) => {
+  await edit(page, () => page.fill('#unit', '$'));
+  await edit(page, () => page.check('#unitPrefix'));
+  expect((await deck(page)).slides[0].chart.options.unit).toEqual({ text: '$', position: 'prefix' });
+  expect(await texts(page)).toContain('$42');
+  await edit(page, () => page.uncheck('#unitPrefix'));
+  await edit(page, () => page.fill('#unit', ''));
+  await edit(page, () => cell(page, 0, 0).fill('4200'));
+  await edit(page, () => page.selectOption('#scale', 'k'));
+  expect((await deck(page)).slides[0].chart.options.scale).toBe('k');
+  expect((await texts(page)).some((t) => /^4\.2(00)?k$/.test(t))).toBe(true);
+  await edit(page, () => page.selectOption('#scale', ''));
+  await edit(page, () => page.selectOption('#locale', 'de-DE'));
+  await edit(page, () => page.fill('#decimals', '1'));
+  expect(await texts(page)).toContain('4.200,0');
+  await page.fill('#format', '#,##0.00');
+  await edit(page, () => page.press('#format', 'Enter'));
+  expect((await deck(page)).slides[0].chart.options.format).toBe('#,##0.00');
+  expect(await texts(page)).toContain('4.200,00');
+});
+
+test('horizontal bars: orientation toggle for column types only', async ({ page }) => {
+  await edit(page, () => page.check('#orientation'));
+  expect((await deck(page)).slides[0].chart.options.orientation).toBe('horizontal');
+  const bars = await page.locator(`#preview svg rect[fill="#${NAVY}"]`).evaluateAll((rs) => rs.map((r) => [+r.getAttribute('width')!, +r.getAttribute('height')!]));
+  const widest = bars.sort((a, b) => b[0] - a[0])[0];
+  expect(widest[0], 'the largest bar runs horizontally').toBeGreaterThan(widest[1] * 2);
+  await edit(page, () => setType(page, 'line'));
+  await expect(page.locator('#orientation')).toBeHidden();
+  expect((await deck(page)).slides[0].chart.options.orientation).toBeUndefined();
+});
+
+test('options: sections hide when nothing applies; tooltips explain controls', async ({ page }) => {
+  await expect(page.locator('summary', { hasText: 'Decorations' })).toBeVisible();
+  await edit(page, () => setType(page, 'table'));
+  await expect(page.locator('summary', { hasText: 'Decorations' })).toBeHidden();
+  await expect(page.locator('summary', { hasText: 'Labels & legend' })).toBeHidden();
+  await expect(page.locator('summary', { hasText: 'Numbers' })).toBeVisible();
+  await page.hover('label:has(#decimals)');
+  await expect(page.locator('#tip')).toBeVisible();
+  await expect(page.locator('#tip')).toHaveText(/Digits after the decimal point/);
+  await expect(page.locator('#decimals')).toHaveAttribute('aria-description', /Digits after the decimal point/);
+});
+
+test('preview: zoom in, 100% and fit', async ({ page }) => {
+  const width = () => page.locator('#canvas').evaluate((el) => el.getBoundingClientRect().width);
+  const fit = await width();
+  await expect(page.locator('#zoomLabel')).toContainText('Fit');
+  await page.click('#zoom100');
+  expect(await width()).toBeCloseTo(960, 0);
+  await expect(page.locator('#zoomLabel')).toHaveText('100%');
+  await page.click('#zoomIn');
+  expect(await width()).toBeCloseTo(1200, 0);
+  await page.click('#zoomOut');
+  await page.click('#zoomOut');
+  expect(await width()).toBeCloseTo(720, 0);
+  await page.click('#zoomFit');
+  expect(await width()).toBeCloseTo(fit, 0);
+});
+
+test('issues: markers on the slide, click pulses the shapes; a hidden label selects its cell', async ({ page }) => {
+  await page.locator('#issues li').first().click();
+  await expect(cell(page, 3, 0)).toBeFocused(); // Services / 2021
+  // Overlap issues quote the label texts: they get numbered markers around those texts.
+  await page.evaluate(() => (window as unknown as { showSlide: (s: object) => void }).showSlide({
+    svg: document.querySelector('#preview')!.innerHTML, issues: ['overlap: "97m" × "120m"', 'out-of-frame: "Enterprise"'],
+  }));
+  await expect(page.locator('#issues li[data-n]')).toHaveCount(2);
+  await expect(page.locator('#marks g[data-n]')).toHaveCount(2);
+  expect(await page.locator('#marks g[data-n="1"] rect.box').count()).toBe(2);
+  await page.locator('#issues li[data-n="1"]').click();
+  await expect(page.locator('#marks g[data-n="1"]')).toHaveClass(/pulse/);
+});
+
+test('validation: a bad cell shows its message under the cell while focused', async ({ page }) => {
+  await edit(page, () => cell(page, 1, 2).fill('abc'));
+  await expect(page.locator('#cellTip')).toBeVisible();
+  await expect(page.locator('#cellTip')).toHaveText('"abc" is not a number — the cell counts as empty');
+  await cell(page, 0, 0).click();
+  await expect(page.locator('#cellTip')).toBeHidden();
+  await page.locator('#issues li', { hasText: '"abc"' }).click();
+  await expect(cell(page, 1, 2)).toBeFocused();
+  await expect(page.locator('#cellTip')).toBeVisible();
+});
+
+test('largest example deck: every slide previews within budget after an edit', async ({ page }, info) => {
+  const file = info.outputPath('deck.json');
+  writeFileSync(file, readFileSync(new URL('../../examples/deck.json', import.meta.url)));
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), page.click('#importBtn')]);
+  await edit(page, () => chooser.setFiles(file));
+  const n = await page.locator('#tabs .tab').count();
+  expect(n).toBeGreaterThan(1);
+  for (let i = 0; i < n; i++) {
+    if (i > 0) await edit(page, () => page.locator('#tabs .tab').nth(i).click());
+    await edit(page, () => page.fill('#title', `Slide ${i + 1}`));
+  }
+  await edit(page, () => setType(page, 'gantt'));
+  await edit(page, () => cell(page, 1, 0).fill('2026-03-02'));
+});
+
+test('layout is resize-proof from 900 px to very wide: no overlaps, no horizontal scroll', async ({ page }) => {
+  for (const [w, h] of [[900, 700], [1024, 700], [1280, 800], [2400, 1200]]) {
+    await page.setViewportSize({ width: w, height: h });
+    await page.waitForTimeout(50);
+    const [pv, side, sheet] = await page.evaluate(() => ['previewPanel', 'side', 'sheetWrap'].map((id) => {
+      const b = document.getElementById(id)!.getBoundingClientRect();
+      return { x: b.x, y: b.y, r: b.right, b: b.bottom };
+    }));
+    expect(pv.r, `${w}: preview left of the sidebar`).toBeLessThanOrEqual(side.x);
+    expect(sheet.r, `${w}: datasheet left of the sidebar`).toBeLessThanOrEqual(side.x);
+    expect(pv.b, `${w}: preview above the datasheet`).toBeLessThanOrEqual(sheet.y);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `${w}: no horizontal scroll`).toBe(true);
+    const canvas = await page.locator('#canvas').boundingBox();
+    expect(canvas!.width, `${w}: preview is legible`).toBeGreaterThan(w > 1000 ? 400 : 300);
+  }
+});
+
+test('splitter: keyboard resizes preview vs datasheet', async ({ page }) => {
+  const h = () => page.locator('#previewPanel').evaluate((el) => el.getBoundingClientRect().height);
+  const h0 = await h();
+  await page.focus('#splitter');
+  await page.keyboard.press('ArrowDown');
+  await page.keyboard.press('ArrowDown');
+  expect(await h()).toBeGreaterThan(h0 + 30);
+  await page.keyboard.press('ArrowUp');
+  await page.keyboard.press('ArrowUp');
+  expect(Math.abs((await h()) - h0)).toBeLessThan(2);
+});
+
+test('add-in session: opens on the datasheet, edits, applies with Cmd+Enter, then cancels', async ({ page, request }) => {
+  const id = `e2e${Date.now().toString(16)}`;
+  const chart = { type: 'clustered', categories: ['North', 'South'], series: [{ name: 'Sales', values: [10, 20] }], options: { unit: 'm' } };
+  expect((await request.post(`${BASE()}/api/session/${id}`, { data: { chart, title: 'Regional sales' } })).ok()).toBe(true);
+  await page.goto(`${BASE()}/?session=${id}`);
+  await expect(cell(page, 0, 0)).toBeFocused(); // straight into the datasheet
+  await settled(page);
+  await expect(page.locator('#tabs')).toBeHidden();
+  await expect(page.locator('#downloadBtn')).toBeHidden();
+  await expect(page.locator('#title')).toBeHidden();
+  await expect(page.locator('#sessionTitle')).toContainText('Regional sales');
+  await expect(page.locator('#applyBtn')).toBeVisible();
+  expect(await texts(page)).toContain('10m');
+  await edit(page, () => page.keyboard.type('15'));
+  await expect(page.locator('#statusText')).toHaveText('Unsaved changes');
+  await page.keyboard.press(`${MOD}+Enter`);
+  await expect(page.locator('#toast')).toContainText('Applied to slide');
+  await expect(page.locator('#statusText')).toHaveText('Applied to slide');
+  let s = await (await request.get(`${BASE()}/api/session/${id}`)).json();
+  expect([s.state, s.rev]).toEqual(['applied', 2]);
+  expect(s.chart.series[0].values).toEqual([15, 20]);
+  expect(s.chart.options.unit).toBe('m');
+  // Apply again after another edit: one click.
+  await edit(page, () => cell(page, 0, 1).fill('25'));
+  await page.click('#applyBtn');
+  await expect.poll(async () => (await (await request.get(`${BASE()}/api/session/${id}`)).json()).rev).toBe(3);
+  await page.click('#cancelBtn');
+  await expect(page.locator('#fatal')).toBeVisible();
+  s = await (await request.get(`${BASE()}/api/session/${id}`)).json();
+  expect(s.state).toBe('cancelled');
+  expect(s.chart.series[0].values).toEqual([15, 25]);
+});
+
+test('add-in session: an engine error blocks Apply; an unknown session shows a clear message', async ({ page, request }) => {
+  expected400 = true;
+  const id = `bad${Date.now().toString(16)}`;
+  await request.post(`${BASE()}/api/session/${id}`, { data: { chart: { type: 'stacked', categories: ['a', 'b'], series: [{ name: 'S', values: [1] }] } } });
+  await page.goto(`${BASE()}/?session=${id}`);
+  await expect(page.locator('#issues li.error')).toBeVisible();
+  await expect(page.locator('#applyBtn')).toHaveAttribute('aria-disabled', 'true');
+  await page.keyboard.press(`${MOD}+Enter`);
+  await expect(page.locator('#toast')).toContainText('Fix the highlighted error');
+  expect((await (await request.get(`${BASE()}/api/session/${id}`)).json()).state).toBe('open');
+  await edit(page, () => cell(page, 0, 1).fill('2'));
+  await expect(page.locator('#applyBtn')).not.toHaveAttribute('aria-disabled', 'true');
+  await page.goto(`${BASE()}/?session=missing${id}`);
+  await expect(page.locator('#fatal')).toContainText('no longer available');
+  errors = errors.filter((e) => !e.includes('404'));
+});

@@ -719,7 +719,9 @@ function renderSheet() {
     wrap.append(cellInput(i, -1, s.name, `Series ${i + 1} name`, (inp) => { s.name = inp.value; changed(false, `cell:${i},-1`); }));
     name.append(wrap);
     tr.append(name);
-    s.values.forEach((v, j) => {
+    // One cell per category, even when the series is short (an imported spec with missing values).
+    c.categories.forEach((_, j) => {
+      const v = s.values[j];
       const td = document.createElement('td');
       const key = `${i},${j}`;
       const inp = cellInput(i, j, invalid.get(key) ?? showCell(v), `${s.name || `Series ${i + 1}`}, ${c.categories[j] || `category ${j + 1}`}`, (el) => {
