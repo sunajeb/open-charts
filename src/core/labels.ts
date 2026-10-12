@@ -17,7 +17,8 @@ import { pathBounds } from './path.ts';
  *   line that points to the related segment" (outside, with a leader);
  * - "if two labels are too close together, offset one to the left and the other to the right".
  * The style file's `avoidSegmentLabelBoxing` default picks boxed or outside "depending on the label
- * size": boxed while the label overflows its segment by at most half its own size, else outside.
+ * size": boxed while the label overflows its segment by at most half its own height and stays within
+ * the column's width (a box poking out of the column's sides would cover its neighbours), else outside.
  */
 
 export type Side = 'left' | 'right' | 'above' | 'below';
@@ -51,6 +52,9 @@ function crosses(a: Leader, b: Leader): boolean {
   const d3 = d(b.x1, b.y1, b.x2, b.y2, a.x1, a.y1), d4 = d(b.x1, b.y1, b.x2, b.y2, a.x2, a.y2);
   return d1 * d2 < 0 && d3 * d4 < 0;
 }
+
+/** Air added to a label's text width (points); a boxed label gives it up to stay within its column. */
+export const LABEL_PAD = 2;
 
 /** Labels keep this much air between each other (points). */
 const GAP = 1;
@@ -128,15 +132,17 @@ export interface AroundOptions {
 }
 
 /**
- * Candidates for a label of size w×h belonging to `a`: boxed on the mark (when it overflows by at
- * most half its size), then beside it on each allowed side, level with the mark's centre or
- * staggered one, two, … label sizes along that side, each with a leader from the mark's edge.
+ * Candidates for a label of size w×h belonging to `a`: boxed on the mark (when its text is no wider
+ * than the mark — the box is trimmed to the mark's width — and overflows its height by at most half),
+ * then beside it on each allowed side, level with the mark's centre or staggered one, two, … label
+ * sizes along that side, each with a leader from the mark's edge.
  */
 export function segmentCandidates(a: Box, w: number, h: number, o: AroundOptions): Candidate[] {
   const out: Candidate[] = [];
   const mx = a.x + a.w / 2, my = a.y + a.h / 2;
-  if (o.boxCover && a.w >= w / 2 && a.h >= h / 2) {
-    out.push({ box: { x: mx - w / 2, y: my - h / 2, w, h }, cost: 1, side: 'boxed', cover: new Set([a, ...o.boxCover]) });
+  if (o.boxCover && w - LABEL_PAD <= a.w && a.h >= h / 2) {
+    const bw = Math.min(w, a.w);
+    out.push({ box: { x: mx - bw / 2, y: my - h / 2, w: bw, h }, cost: 1, side: 'boxed', cover: new Set([a, ...o.boxCover]) });
   }
   const n = o.stagger ?? 3;
   o.sides.forEach((side, rank) => {
@@ -194,7 +200,7 @@ export function placePending(ctx: Ctx, items: PendingLabel[], bounds: Box = ctx.
   const anchors = new Set<Box>(items.map((it) => it.seg));
   const reqs: LabelRequest[] = items.map((it) => ({
     anchor: it.seg,
-    candidates: segmentCandidates(it.seg, ctx.m.width(it.text, ctx.fs, it.bold) + 2, ctx.lh, {
+    candidates: segmentCandidates(it.seg, ctx.m.width(it.text, ctx.fs, it.bold) + LABEL_PAD, ctx.lh, {
       sides: it.sides, lead: ctx.pad * 0.8, boxCover: it.boxCover?.filter((b) => !anchors.has(b)),
     }),
   }));

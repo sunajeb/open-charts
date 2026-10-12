@@ -11,6 +11,7 @@ import { placeLabels, segmentCandidates, type LabelRequest } from '../src/core/l
 import { overlaps, segmentHitsBox, type Box } from '../src/core/place.ts';
 import { createMeasurer } from '../src/fonts.ts';
 import { CHART_FRAME } from '../src/deck.ts';
+import { allCases, allFrames } from './resize-matrix.ts';
 
 const m = createMeasurer();
 const F = CHART_FRAME;
@@ -77,6 +78,28 @@ test('placer: a label overflowing its segment a little is boxed on it; a much la
   assert.equal(boxed[placeLabels([{ anchor: seg, candidates: boxed }], [seg, neighbour], bounds)[0]!].side, 'right');
   const own = segmentCandidates(seg, 16, 12, { sides: ['right'], lead: 3, boxCover: [neighbour] });
   assert.equal(own[placeLabels([{ anchor: seg, candidates: own }], [seg, neighbour], bounds)[0]!].side, 'boxed');
+});
+
+test('placer: a boxed label never pokes out of its column: its text must fit the column width', () => {
+  const seg = { x: 50, y: 100, w: 20, h: 40 };
+  // Text 21 wide (+2 air) on a 20-wide column: outside, never boxed.
+  assert.ok(!segmentCandidates(seg, 23, 12, { sides: ['right'], lead: 3, boxCover: [] }).some((c) => c.side === 'boxed'));
+  // Text 19 wide (+2 air): boxed, the box trimmed to the column.
+  const fit = segmentCandidates(seg, 21, 12, { sides: ['right'], lead: 3, boxCover: [] }).find((c) => c.side === 'boxed')!;
+  assert.deepEqual([fit.box.x, fit.box.w], [seg.x, seg.w]);
+  // Every chart at every resize frame: a filled (boxed) value label stays within its column's width.
+  for (const c of allCases()) {
+    for (const f of allFrames()) {
+      const scene = layoutChart(c.spec, f, m);
+      scene.shapes.forEach((t, i) => {
+        const mm = scene.roles![i].match(/^label:value:(s\d+:c\d+)$/);
+        if (t.kind !== 'text' || !t.fill || !mm) return;
+        const bar = one<RectShape | undefined>(scene, `bar:${mm[1]}`);
+        if (!bar) return;
+        assert.ok(t.x >= bar.x - 0.01 && t.x + t.w <= bar.x + bar.w + 0.01, `${c.name} ${f.w}x${f.h}: "${t.text}" box wider than its column`);
+      });
+    }
+  }
 });
 
 test('placer: leaders never cross each other or another label; a blocked label evicts one blocker', () => {
