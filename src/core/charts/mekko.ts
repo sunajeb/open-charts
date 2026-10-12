@@ -1,7 +1,7 @@
 import type { Ctx } from '../common.ts';
 import { axisFormatter, fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
-import { overlaps, spread } from '../place.ts';
+import { overlaps } from '../place.ts';
 
 /**
  * Mekko (Marimekko) chart: a stacked column chart whose column widths are proportional to the
@@ -61,8 +61,8 @@ export function layoutMekko(ctx: Ctx) {
   // Totals: bold, centred on their column, nudged sideways over narrow columns, kept a clear gap
   // apart. Totals that still collide are staggered into a second row above; beyond that, hidden.
   const totalItems = showTotals ? cats.filter((c) => totals[c]).map((c) => ({ c, cx: cx(c), w: m.width(ctx.fmt(totals[c]), fs, true) + 2 })) : [];
-  const row1 = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 2);
-  const row2 = placeRow(totalItems.filter((it) => !row1.has(it.c)), colW, px, frame.x + frame.w, pad * 2);
+  const row1 = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 1.5);
+  const row2 = placeRow(totalItems.filter((it) => !row1.has(it.c)), colW, px, frame.x + frame.w, pad * 1.5);
   const totalsH = showTotals ? (lh + pad * 0.3) * (row2.size ? 2 : 1) : 0;
 
   // Category labels wrap inside their column; narrow columns wrap to a minimum width and borrow room.
@@ -152,14 +152,14 @@ export function layoutMekko(ctx: Ctx) {
 interface RowItem { c: number; cx: number; w: number; alt?: number }
 
 /**
- * Lay a row of labels out along x, each centred on its column. Labels wider than their column
- * are nudged sideways so they do not collide; a label that would no longer cover its column
+ * Lay a row of labels out along x, each centred on its column. Labels that would collide move
+ * apart symmetrically (one left, the other right, as the manual places close segment labels); a label that would no longer cover its column
  * centre, or still collides, is narrowed to its `alt` width or dropped (narrowest column first).
  */
 function placeRow(items: RowItem[], colW: number[], min: number, max: number, gap: number) {
   const live = items.map((i) => ({ ...i, narrowed: false }));
   for (;;) {
-    const xs = spread(live.map((i) => i.cx), live.map((i) => i.w), min, max, gap);
+    const xs = cluster(live.map((i) => i.cx), live.map((i) => i.w), min, max, gap);
     const boxes = live.map((it, k) => ({ x: xs[k] - it.w / 2, y: 0, w: it.w, h: 1 }));
     const bad = live.filter((it, k) =>
       Math.abs(xs[k] - it.cx) > it.w / 2 - 2 || boxes.some((b, j) => j !== k && overlaps(b, boxes[k], -gap / 2)));
@@ -168,4 +168,39 @@ function placeRow(items: RowItem[], colW: number[], min: number, max: number, ga
     if (worst.alt != null && worst.alt < worst.w) { worst.w = worst.alt; worst.narrowed = true; }
     else live.splice(live.indexOf(worst), 1);
   }
+}
+
+/**
+ * Spread labels of the given widths along one axis, keeping order and a gap between neighbours.
+ * Labels that would collide form a cluster placed where it moves its members least (each as far
+ * from its centre as the others), kept within [min, max]. Returns the new centres.
+ */
+export function cluster(centres: number[], widths: number[], min: number, max: number, gap: number): number[] {
+  const order = centres.map((_, i) => i).sort((a, b) => centres[a] - centres[b]);
+  type Group = { ids: number[]; start: number; size: number };
+  const groups: Group[] = [];
+  const place = (g: Group) => {
+    let off = 0, sum = 0;
+    for (const i of g.ids) { sum += centres[i] - (off + widths[i] / 2); off += widths[i] + gap; }
+    g.size = off - gap;
+    g.start = Math.max(min, Math.min(sum / g.ids.length, max - g.size));
+  };
+  for (const i of order) {
+    const g = { ids: [i], start: 0, size: 0 };
+    place(g);
+    groups.push(g);
+    while (groups.length > 1) {
+      const a = groups[groups.length - 2], b = groups[groups.length - 1];
+      if (a.start + a.size + gap <= b.start + 1e-9) break;
+      a.ids.push(...b.ids);
+      groups.pop();
+      place(a);
+    }
+  }
+  const out = centres.slice();
+  for (const g of groups) {
+    let x = g.start;
+    for (const i of g.ids) { out[i] = x + widths[i] / 2; x += widths[i] + gap; }
+  }
+  return out;
 }
