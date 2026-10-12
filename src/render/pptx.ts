@@ -1,70 +1,124 @@
 // Writes native PowerPoint (OOXML) slides. Each chart becomes one grouped object of plain shapes,
 // so the deck opens and edits in any PowerPoint, Keynote or LibreOffice without this tool.
+// Every group carries tag contract v1 (OC_* tags, see tags.ts) and each child its OC_ROLE, as real
+// PowerPoint tags: p:custDataLst → ppt/tags/tagN.xml, visible to VBA Shape.Tags and Office.js.
 import type { Scene, Shape, TextShape } from '../core/types.ts';
+import type { Tags } from './tags.ts';
 import { zip } from './zip.ts';
+
+export interface SceneContent {
+  scene: Scene;
+  name: string;
+  altText: string;
+  /** Group-level tags, normally chartTags(...). */
+  tags?: Tags;
+}
 
 export interface SlideContent {
   title?: string;
-  scenes: { scene: Scene; name: string; altText: string }[];
+  scenes: SceneContent[];
 }
 
+/** Registers a tag part for one shape and returns its slide-relative relationship id. */
+export type AddTags = (tags: Tags) => string;
+
 export const SLIDE = { w: 960, h: 540 }; // points, 16:9
-const EMU = 12700;
+export const EMU = 12700;
 const e = (pt: number) => Math.round(pt * EMU);
 
-const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
-const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+export const NS = 'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+export const XML = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+export const REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+export const TAGS_REL = `${REL}/tags`;
+export const TAGS_CT = 'application/vnd.openxmlformats-officedocument.presentationml.tags+xml';
+/** Name of the slide title text box; `import` reads the title back from it. */
+export const TITLE_NAME = 'Title';
+
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const fill = (c?: string) => (c ? `<a:solidFill><a:srgbClr val="${c.replace('#', '')}"/></a:solidFill>` : '<a:noFill/>');
 const ln = (c?: string, w = 0.75, extra = '') =>
   c ? `<a:ln w="${e(w)}">${fill(c)}${extra}</a:ln>` : '<a:ln><a:noFill/></a:ln>';
+const nvPr = (tagsRel?: string) =>
+  (tagsRel ? `<p:nvPr><p:custDataLst><p:tags r:id="${tagsRel}"/></p:custDataLst></p:nvPr>` : '<p:nvPr/>');
 
-class Ids { n = 1; next() { return ++this.n; } }
+export function tagPartXml(tags: Tags): string {
+  return `${XML}<p:tagLst ${NS}>${tags.map(([k, v]) => `<p:tag name="${esc(k)}" val="${esc(v)}"/>`).join('')}</p:tagLst>`;
+}
 
-function shapeXml(s: Shape, ids: Ids, font: string): string {
+/** Shape id allocator; ids must be unique per slide, so start above the slide's highest id. */
+export class Ids {
+  n: number;
+  constructor(start = 1) { this.n = start; }
+  next() { return ++this.n; }
+}
+
+const ROLE_NAMES: Record<string, string> = {
+  bar: 'Bar', marker: 'Marker', line: 'Line', label: 'Label', axis: 'Axis', gridline: 'Gridline', tick: 'Tick',
+  arrow: 'Arrow', bubble: 'Bubble', connector: 'Connector', legend: 'Legend',
+};
+
+/** Selection-pane name: "Bar s0 c2", "Label value s1 c2"; "<Kind> <id>" when there is no role. */
+function shapeName(s: Shape, id: number, role?: string): string {
+  if (role) {
+    const [head, ...rest] = role.split(':');
+    return [ROLE_NAMES[head] ?? head, ...rest].join(' ');
+  }
+  if (s.kind === 'rect') return `${s.ellipse ? 'Marker' : 'Bar'} ${id}`;
+  return `${s.kind === 'line' ? 'Line' : 'Label'} ${id}`;
+}
+
+function shapeXml(s: Shape, ids: Ids, font: string, role?: string, addTags?: AddTags): string {
   const id = ids.next();
+  const name = esc(shapeName(s, id, role));
+  const nv = nvPr(role && addTags ? addTags([['OC_ROLE', role]]) : undefined);
   if (s.kind === 'rect') {
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Bar ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${s.ellipse ? 'ellipse' : 'rect'}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${s.ellipse ? 'ellipse' : 'rect'}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
   }
   if (s.kind === 'line') {
     const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2);
     const flip = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
     const extra = `${s.dash ? '<a:prstDash val="dash"/>' : ''}${s.arrowEnd ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}`;
-    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr><a:xfrm${flip}><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(Math.abs(s.x2 - s.x1))}" cy="${e(Math.abs(s.y2 - s.y1))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom>${ln(s.color, s.width, extra)}</p:spPr></p:cxnSp>`;
+    return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvCxnSpPr/>${nv}</p:nvCxnSpPr><p:spPr><a:xfrm${flip}><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(Math.abs(s.x2 - s.x1))}" cy="${e(Math.abs(s.y2 - s.y1))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom>${ln(s.color, s.width, extra)}</p:spPr></p:cxnSp>`;
   }
-  return textXml(s, id, font);
+  return textXml(s, id, font, name, nv);
 }
 
-function textXml(t: TextShape, id: number, font: string): string {
+function textXml(t: TextShape, id: number, font: string, name: string, nv = '<p:nvPr/>'): string {
   const anchor = { top: 't', middle: 'ctr', bottom: 'b' }[t.valign];
   const algn = { left: 'l', center: 'ctr', right: 'r' }[t.align];
   const geom = t.rounded ? '<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 50000"/></a:avLst></a:prstGeom>' : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
   const rPr = `<a:rPr lang="en-US" sz="${Math.round(t.size * 100)}"${t.bold ? ' b="1"' : ''} dirty="0">${fill(t.color)}<a:latin typeface="${esc(font)}"/><a:cs typeface="${esc(font)}"/></a:rPr>`;
   const paras = t.text.split('\n').map((line) =>
     `<a:p><a:pPr algn="${algn}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc></a:pPr><a:r>${rPr}<a:t>${esc(line)}</a:t></a:r></a:p>`).join('');
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Label ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(t.x)}" y="${e(t.y)}"/><a:ext cx="${e(t.w)}" cy="${e(t.h)}"/></a:xfrm>${geom}${fill(t.fill)}${ln(t.stroke)}</p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr txBox="1"/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(t.x)}" y="${e(t.y)}"/><a:ext cx="${e(t.w)}" cy="${e(t.h)}"/></a:xfrm>${geom}${fill(t.fill)}${ln(t.stroke)}</p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
 }
 
-function groupXml(scene: Scene, name: string, alt: string, ids: Ids, font: string): string {
-  const f = scene.frame;
+/**
+ * One chart as a p:grpSp. Group tags go on the group, OC_ROLE from scene.roles[i] on each child.
+ * Used by writePptx and by template fill (which supplies its own ids and tag registration).
+ */
+export function groupXml(c: SceneContent, ids: Ids, font: string, addTags?: AddTags): string {
+  const f = c.scene.frame;
+  const roles = (c.scene as Scene & { roles?: string[] }).roles;
   const xfrm = `<a:off x="${e(f.x)}" y="${e(f.y)}"/><a:ext cx="${e(f.w)}" cy="${e(f.h)}"/><a:chOff x="${e(f.x)}" y="${e(f.y)}"/><a:chExt cx="${e(f.w)}" cy="${e(f.h)}"/>`;
   const id = ids.next();
-  const body = scene.shapes.map((s) => shapeXml(s, ids, font)).join('');
-  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${esc(name)}" descr="${esc(alt)}"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm>${xfrm}</a:xfrm></p:grpSpPr>${body}</p:grpSp>`;
+  const nv = nvPr(c.tags?.length && addTags ? addTags(c.tags) : undefined);
+  const body = c.scene.shapes.map((s, i) => shapeXml(s, ids, font, roles?.[i] || undefined, addTags)).join('');
+  return `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="${id}" name="${esc(c.name)}" descr="${esc(c.altText)}"/><p:cNvGrpSpPr/>${nv}</p:nvGrpSpPr><p:grpSpPr><a:xfrm>${xfrm}</a:xfrm></p:grpSpPr>${body}</p:grpSp>`;
 }
 
-function slideXml(slide: SlideContent, font: string): string {
+function slideXml(slide: SlideContent, font: string, addTags: AddTags): string {
   const ids = new Ids();
   let body = '';
   if (slide.title) {
-    body += textXml({ kind: 'text', x: 36, y: 24, w: SLIDE.w - 72, h: 44, text: slide.title, size: 24, color: '1A1A1A', bold: true, align: 'left', valign: 'top' }, ids.next(), font);
+    body += textXml({ kind: 'text', x: 36, y: 24, w: SLIDE.w - 72, h: 44, text: slide.title, size: 24, color: '1A1A1A', bold: true, align: 'left', valign: 'top' }, ids.next(), font, TITLE_NAME);
   }
-  for (const s of slide.scenes) body += groupXml(s.scene, s.name, s.altText, ids, font);
+  for (const s of slide.scenes) body += groupXml(s, ids, font, addTags);
   return `${XML}<p:sld ${NS}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
 }
 
 const rels = (items: [string, string][]) =>
-  `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.map(([type, target], i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${type}" Target="${target}"/>`).join('')}</Relationships>`;
+  `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.map(([type, target], i) => `<Relationship Id="rId${i + 1}" Type="${REL}/${type}" Target="${target}"/>`).join('')}</Relationships>`;
 
 const EMPTY_TREE = '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree>';
 
@@ -76,10 +130,23 @@ function theme(font: string): string {
 
 export function writePptx(slides: SlideContent[], font = 'Arial'): Uint8Array {
   const n = slides.length;
+  const tagParts: string[] = [];
+  const slideFiles: { name: string; data: string }[] = [];
+  slides.forEach((s, i) => {
+    const slideRels: [string, string][] = [['slideLayout', '../slideLayouts/slideLayout1.xml']];
+    const addTags: AddTags = (tags) => {
+      tagParts.push(tagPartXml(tags));
+      slideRels.push(['tags', `../tags/tag${tagParts.length}.xml`]);
+      return `rId${slideRels.length}`;
+    };
+    slideFiles.push({ name: `ppt/slides/slide${i + 1}.xml`, data: slideXml(s, font, addTags) });
+    slideFiles.push({ name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, data: rels(slideRels) });
+  });
+
   const files: { name: string; data: string }[] = [];
   files.push({
     name: '[Content_Types].xml',
-    data: `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')}</Types>`,
+    data: `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${slides.map((_, i) => `<Override PartName="/ppt/slides/slide${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`).join('')}${tagParts.map((_, i) => `<Override PartName="/ppt/tags/tag${i + 1}.xml" ContentType="${TAGS_CT}"/>`).join('')}</Types>`,
   });
   files.push({ name: '_rels/.rels', data: rels([['officeDocument', 'ppt/presentation.xml']]) });
   files.push({
@@ -101,9 +168,7 @@ export function writePptx(slides: SlideContent[], font = 'Arial'): Uint8Array {
   });
   files.push({ name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: rels([['slideMaster', '../slideMasters/slideMaster1.xml']]) });
   files.push({ name: 'ppt/theme/theme1.xml', data: theme(font) });
-  slides.forEach((s, i) => {
-    files.push({ name: `ppt/slides/slide${i + 1}.xml`, data: slideXml(s, font) });
-    files.push({ name: `ppt/slides/_rels/slide${i + 1}.xml.rels`, data: rels([['slideLayout', '../slideLayouts/slideLayout1.xml']]) });
-  });
+  files.push(...slideFiles);
+  tagParts.forEach((data, i) => files.push({ name: `ppt/tags/tag${i + 1}.xml`, data }));
   return zip(files);
 }

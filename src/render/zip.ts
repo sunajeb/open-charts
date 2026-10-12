@@ -1,4 +1,6 @@
-// Minimal ZIP writer (stored, no compression) — enough for OOXML packages, no dependencies.
+// Minimal ZIP writer — enough for OOXML packages, no dependencies. New parts are stored
+// uncompressed; parts copied from another package (see src/ooxml/unzip.ts) keep their original
+// compressed bytes, so anything we did not touch comes out byte-identical.
 
 const CRC_TABLE = new Uint32Array(256).map((_, n) => {
   let c = n;
@@ -6,13 +8,18 @@ const CRC_TABLE = new Uint32Array(256).map((_, n) => {
   return c >>> 0;
 });
 
-function crc32(buf: Uint8Array): number {
+export function crc32(buf: Uint8Array): number {
   let c = 0xffffffff;
   for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
-export function zip(files: { name: string; data: string | Uint8Array }[]): Uint8Array {
+/** A part copied verbatim from an existing zip: compression method, CRC and sizes as found. */
+export interface RawEntry { method: number; crc: number; size: number; compressed: Uint8Array }
+
+export type ZipInput = { name: string; data: string | Uint8Array } | { name: string; raw: RawEntry };
+
+export function zip(files: ZipInput[]): Uint8Array {
   const enc = new TextEncoder();
   const chunks: Uint8Array[] = [];
   const central: Uint8Array[] = [];
@@ -20,16 +27,23 @@ export function zip(files: { name: string; data: string | Uint8Array }[]): Uint8
 
   for (const f of files) {
     const name = enc.encode(f.name);
-    const data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
-    const crc = crc32(data);
+    let data: Uint8Array, crc: number, size: number, method = 0;
+    if ('raw' in f) {
+      ({ method, crc, size } = f.raw);
+      data = f.raw.compressed;
+    } else {
+      data = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+      crc = crc32(data);
+      size = data.length;
+    }
 
     const local = new DataView(new ArrayBuffer(30));
     local.setUint32(0, 0x04034b50, true);
     local.setUint16(4, 20, true);
-    local.setUint16(8, 0, true); // stored
+    local.setUint16(8, method, true);
     local.setUint32(14, crc, true);
     local.setUint32(18, data.length, true);
-    local.setUint32(22, data.length, true);
+    local.setUint32(22, size, true);
     local.setUint16(26, name.length, true);
     chunks.push(new Uint8Array(local.buffer), name, data);
 
@@ -37,9 +51,10 @@ export function zip(files: { name: string; data: string | Uint8Array }[]): Uint8
     cen.setUint32(0, 0x02014b50, true);
     cen.setUint16(4, 20, true);
     cen.setUint16(6, 20, true);
+    cen.setUint16(10, method, true);
     cen.setUint32(16, crc, true);
     cen.setUint32(20, data.length, true);
-    cen.setUint32(24, data.length, true);
+    cen.setUint32(24, size, true);
     cen.setUint16(28, name.length, true);
     cen.setUint32(42, offset, true);
     central.push(new Uint8Array(cen.buffer), name);
