@@ -96,6 +96,11 @@ function layoutVertical(ctx: Ctx, md: Model) {
 
   if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
 
+  // Totals wider than a slot would collide with their neighbours: all go, not every other one.
+  const totalText = (c: number) => (md.pdata ? ctx.pct(total[c], md.pctDecimals) : ctx.fmt(total[c]));
+  const totalsFit = !showTotals || cats.every((c) => m.width(totalText(c), fs, true) + 2 <= slot);
+  if (!totalsFit) ctx.hidden.push('column totals wider than their slots: hidden');
+
   const tops: number[] = [];
   const lastSegs: { s: number; y: number }[] = [];
 
@@ -143,8 +148,8 @@ function layoutVertical(ctx: Ctx, md: Model) {
       if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
     }
     let top = yOf(percent && !md.pdata ? 100 : up);
-    if (showTotals) {
-      const label = md.pdata ? ctx.pct(total[c], md.pctDecimals) : ctx.fmt(total[c]);
+    if (showTotals && totalsFit) {
+      const label = totalText(c);
       const tw = m.width(label, fs, true);
       top -= lh + pad * 0.2;
       text(ctx, `label:total:c${c}`, { x: cx(c) - tw / 2 - 1, y: top, w: tw + 2, h: lh, text: label, bold: true, role: 'total' });
