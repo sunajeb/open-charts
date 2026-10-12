@@ -317,9 +317,26 @@ shrink.
 - **In the editor and the command line**, the chart fills the standard chart area of a 16:9 slide
   (below the title).
 
-When the box gets small, labels that no longer fit are hidden first. If the plot area becomes
-shorter than about two lines of text, the chart reports **chart frame too small**: make the chart
-bigger.
+As the box gets smaller, open-charts adapts in this order: category names wrap and then shrink (never
+below 8 pt); a crowded time axis shows every 2nd, 3rd, … label; series names move from the right of
+the chart into a legend; labels that still do not fit are hidden and reported.
+
+Below a minimum size the chart would be unreadable, so it is drawn as a grey outline with the message
+**Chart too small: make it at least W × H pt** instead. Make the chart bigger and it comes back. The
+minimums, in points (72 pt = 1 inch; a 16:9 slide is 960 × 540 pt):
+
+| Chart type | Minimum width | Minimum height |
+|---|---|---|
+| Stacked, clustered, 100%, waterfall, combination, line, area (n = categories) | 200, or 40 + 14 per category | 120 |
+| Horizontal bars | 200 | 120, or 30 + 12 per category |
+| Mekko, Mekko XY | 240, or 24 per category | 140 |
+| Pie, doughnut | 200 | 120 |
+| Scatter, bubble | 200 | 140 |
+| Harvey balls | 160, or 60 + 24 per column | 80, or 24 + 16 per row |
+| Table | 120, more if the columns need it | 50 |
+| Gantt | 320 | 120, or 40 + 14 per activity |
+
+A chart with long category names may ask for more width than this, so the names fit.
 
 ## Hidden labels and why
 
@@ -336,6 +353,7 @@ The chart is still correct; only that label is missing. You see the list:
 | `label too wide` / `bar too thin for label` | Make the chart wider, use fewer columns, fewer decimals or a magnitude (`1.2m` instead of `1,234,567`). |
 | `category label too wide for its slot` / `category labels shrunk to … pt` | Shorten the category names or widen the chart. |
 | `no room for label` (line, scatter, pie, Gantt) | Points or slices are too close together. Widen the chart or label fewer series. |
+| `chart too small: … needs at least W × H pt` | The chart is shown as a placeholder. Make it at least that size. |
 | `chart frame too small` | Make the chart bigger. |
 | `needs positive totals` | A CAGR or difference arrow needs positive totals at both ends. |
 | `negative values ignored in …` | 100%, Mekko, area and pie charts can't show negatives; use a stacked or waterfall chart. |
@@ -402,6 +420,9 @@ and click **Update chart**.
 
 **macOS asks whether something may control Microsoft PowerPoint.** Click **OK**: that is how Apply
 in the browser updates the slide.
+
+**The chart shows "Chart too small".** It is below its minimum size (see [Resizing](#resizing)). Drag
+it bigger; it is laid out again when you click elsewhere.
 
 **A label is missing.** See [Hidden labels and why](#hidden-labels-and-why).
 
