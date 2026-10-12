@@ -1,28 +1,39 @@
 # open-charts — live checklist
 
-Plan of record: docs/MASTER-PLAN.md (shareable page: https://claude.ai/artifact/QZPFXp9NmZSUwYaFBhujWH)
+Plan of record: docs/MASTER-PLAN.md · Repo: https://github.com/sunajeb/open-charts
 
-## Done (9 Oct 2026)
-- [x] Engine core: scene graph, font-metric measurement (no kerning, Arial 1.149 line height), nice ticks, exact-100% rounding, label spreading, segment/box clipping
-- [x] Chart types: stacked, 100%, clustered, line, waterfall, Mekko
-- [x] Decorations: totals, CAGR (+years), difference arrows, series labels, legend, value axis
-- [x] Zero-dependency OOXML writer (grouped shapes, alt text) + SVG preview
-- [x] CLI and local editor (datasheet, Excel paste, live preview, pptx download)
-- [x] 20 tests passing (`npm test`)
-- [x] Plan: docs/plan/01–04, docs/native-windows-design.md, docs/MASTER-PLAN.md
+## Goal (2026-10-13)
+A working, end-to-end tested open-charts covering everything in the master plan that can be built and proven on this Mac.
+Every editor button and every chart type must be exercised in a real browser and rendered through LibreOffice and PowerPoint for Mac.
 
-## Next: P1 first 30 days (see MASTER-PLAN §6)
-- [x] Public repo + CI on PRs (Node 22, 24): https://github.com/sunajeb/open-charts
-- [ ] Week 1: fix B5, B10, B13; CI on PRs; line height from font hhea/OS2; behaviour-spec.md
-- [ ] Week 2: numbers/locale service (B14); start spec v1 + JSON Schema + migration (B15)
-- [ ] Week 3: finish spec v1; scene ids/roles; writer emits tag contract v1; `inspect`
-- [ ] Week 4: reservation ledger; plugin pipeline; label solver v1; LibreOffice golden CI; 10 bench fixtures
+### Not buildable on this machine (stays planned, not faked)
+- P4 native Windows add-in (needs Windows + Office; gated at M7, skipped by default when solo)
+- Windows PowerPoint golden runner, blind consultant panel, AppSource submission
+- P5 Gantt / agenda / Excel live links (52 ew; after P3)
+
+## Shared contracts (all agents code against these)
+- `Scene.roles?: string[]`, parallel to `Scene.shapes`, assigned by the engine only. Format: `bar:s<i>:c<j>`, `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`, `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`, `marker:s<i>:c<j>`, `line:s<i>`
+- Tag contract v1 (MASTER-PLAN §3): group gets `OC_V`="1", `OC_ENGINE`, `OC_SPEC` (chunked above 30 KB), `OC_FRAME`="x,y,w,h", `OC_FONT`; each child gets `OC_ROLE`
+- `specVersion: 1` at chart and deck root; unversioned input = v0, migrated by `migrate()`
+
+## Wave 1 (three agents in parallel, git worktrees)
+- [ ] **A — engine (P1):** B3 date CAGR (30/360), B5, B7 hhea/OS2 line height, B8 long-word overflow, B9 legend wrap, B10, B11, B12 gate v2, B13, B14 numbers/locale service, B15 path-addressed validation; spec v1 + `migrate` + hand-written JSON Schema; `Scene.roles`; horizontal bar orientation
+- [ ] **B — I/O (P1 tags + P2 data-to-deck):** writer emits tag contract v1; `inspect` and `import`; CSV/XLSX inputs; `fill` template; `--strict` / `--report`; HTTP `POST /api/render`
+- [ ] **C — QA + editor (P1 editor polish):** Playwright E2E for every editor button; LibreOffice golden pipeline (soffice → pdftoppm → pixel diff); editor transpose / reverse / all chart types; fix whatever the E2E finds
+
+## Wave 2
+- [ ] Merge wave 1, resolve conflicts, full test suite once
+- [ ] More chart types (area, pie/doughnut, scatter, combo) — P2
+- [ ] Office.js add-in (P3 path A): task pane, sideload on PowerPoint for Mac
+- [ ] `@open-charts/ai` with injectable client + verifier (no live key needed for tests)
+
+## Wave 3 — verification
+- [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
+- [ ] CI runs unit + E2E + goldens on PRs
+- [ ] Review section below
 
 ## Open decisions (owner)
-- [ ] O1 staffing: hybrid recommended
-- [ ] O2 native Windows: gate at M7 recommended
-- [ ] O3 spec freeze: P1 exit recommended
+- [x] Provenance: "clean-room" claim dropped (2026-10-13)
+- [ ] O1 staffing · O2 native Windows · O3 spec freeze — defaults from MASTER-PLAN §7.2 assumed
 
 ## Review
-- Session result: six chart types at near-consulting quality, rendered and visually checked through LibreOffice; full five-phase plan.
-- Process miss: four agents sat idle for ~2h on the folder-trust prompt because they were spawned from a new, untrusted folder (see tasks/lessons.md).
