@@ -30,6 +30,9 @@ Private gEditId As String
 ' Filled by Draw from the engine's answer.
 Private gNothing As Boolean
 Private gSessionId As String
+' Milliseconds spent in the engine call and in drawing, for the timing log.
+Private gEngineMs As Single
+Private gDrawMs As Single
 
 ' ---- Loading --------------------------------------------------------------------------------
 
@@ -89,8 +92,9 @@ Public Sub OCPREFIX_Run(ByVal controlId As String)
     gSilent = True
     gLastMessage = ""
     t = Timer
+    gEngineMs = 0: gDrawMs = 0
     Dispatch controlId
-    Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage) & " (" & Format$((Timer - t) * 1000, "0") & " ms)"
+    Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage) & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
     gSilent = False
 End Sub
 
@@ -110,19 +114,22 @@ Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
         Exit Sub
     End If
     gBusy = True
+    gEngineMs = 0: gDrawMs = 0
     Set target = Relayout(target, True, sessionId)
     gBusy = False
     If Not target Is Nothing Then
         Set gEditShape = target
         gEditId = sessionId
     End If
-    Report "APPLIED " & sessionId & " " & IIf(target Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)"
+    Report "APPLIED " & sessionId & " " & IIf(target Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
 End Sub
 
-' Selects the n-th open-charts chart on the active slide (1-based), for scripted tests.
+' Selects the n-th open-charts chart on the active slide (1-based), or nothing for "0" (as a
+' click on an empty part of the slide), for scripted tests.
 Public Sub OCPREFIX_SelectChart(ByVal n As String)
     Dim shp As Object, k As Long
     On Error GoTo Failed
+    If n = "0" Then ActiveWindow.Selection.Unselect: Exit Sub
     For Each shp In ActiveWindow.View.Slide.Shapes
         If IsChart(shp) Then
             k = k + 1
@@ -266,14 +273,20 @@ Private Sub CheckResized()
     For Each shp In sld.Shapes
         If IsChart(shp) Then charts.Add shp
     Next shp
-    Dim t As Single, result As Object
+    Dim t As Single, result As Object, sel As Object, selectedId As Long, wasSelected As Boolean
     For Each shp In charts
         f = Split(TagValue(shp, "OC_FRAME"), ",")
         If UBound(f) = 3 Then
             If Abs(shp.Width - Val(f(2))) > 0.5 Or Abs(shp.Height - Val(f(3))) > 0.5 Then
                 t = Timer
+                gEngineMs = 0: gDrawMs = 0
+                selectedId = -1
+                Set sel = FindSelectedChart()
+                If Not sel Is Nothing Then selectedId = sel.Id
+                wasSelected = (selectedId = shp.Id)
                 Set result = Relayout(shp, False, "")
-                Report "RELAYOUT " & IIf(result Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)"
+                If wasSelected And Not result Is Nothing Then result.Select
+                Report "RELAYOUT " & IIf(result Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
             ElseIf Abs(shp.Left - Val(f(0))) > 0.5 Or Abs(shp.Top - Val(f(1))) > 0.5 Then
                 shp.Tags.Add "OC_FRAME", Fmt(shp.Left) & "," & Fmt(shp.Top) & "," & f(2) & "," & f(3)
             End If
@@ -285,9 +298,11 @@ End Sub
 
 ' Returns the engine's response, or "" after telling the user what went wrong.
 Private Function Engine(ByVal request As String) As String
-    Dim result As String
+    Dim result As String, t As Single
     On Error GoTo NoBridge
+    t = Timer
     result = AppleScriptTask(SCRIPT_FILE, SCRIPT_HANDLER, request)
+    gEngineMs = gEngineMs + (Timer - t) * 1000
     On Error GoTo 0
     If Left$(result, 3) <> "OC" & vbTab Then
         Tell "The chart engine gave an unexpected answer:" & vbLf & Left$(result, 300)
@@ -298,6 +313,10 @@ Private Function Engine(ByVal request As String) As String
 NoBridge:
     Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & _
         "Open Terminal and run:  open-charts addin install" & vbLf & "then restart PowerPoint."
+End Function
+
+Private Function Timing() As String
+    If gEngineMs > 0 Or gDrawMs > 0 Then Timing = " engine " & Format$(gEngineMs, "0") & " ms, draw " & Format$(gDrawMs, "0") & " ms"
 End Function
 
 Private Sub Report(ByVal text As String)
@@ -320,6 +339,8 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
     Dim names() As Variant, finalNames() As String, roles() As String
     Dim tagKeys() As String, tagVals() As String, nTags As Long
     Dim groupName As String, alt As String, stamp As String, shp As Object
+    Dim t As Single
+    t = Timer
     gNothing = False
     lines = Split(response, vbLf)
     ReDim names(0 To UBound(lines) + 1): ReDim finalNames(0 To UBound(lines) + 1): ReDim roles(0 To UBound(lines) + 1)
@@ -384,6 +405,7 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
         Next k
     End If
     Set Draw = grp
+    gDrawMs = gDrawMs + (Timer - t) * 1000
     Exit Function
 Cleanup:
     ' An error record after some shapes were drawn: remove them again.
@@ -487,6 +509,7 @@ Private Sub SetText(ByVal s As Object, f() As String)
     tf.TextRange.Text = Replace(Unescape(f(11)), vbLf, vbCr)
     With tf.TextRange
         .Font.Name = f(12)
+        .Font.NameComplexScript = f(12) ' as the .pptx writer does (a:cs), so digits render the same
         .Font.Size = Val(f(13))
         .Font.Bold = IIf(f(14) = "1", -1, 0)
         ' No kerning, as the engine measured. Decks often kern text of 12 pt and up by default;
