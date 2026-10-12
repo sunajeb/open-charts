@@ -5,7 +5,7 @@
 // tests as the quality gate (src/core/quality.ts) with the same tolerance, so a resolved scene passes it.
 import type { Frame, LineShape, Shape, TextShape } from './types.ts';
 import type { Measurer } from './text.ts';
-import { bounds, ownedBy, shrink } from './quality.ts';
+import { bounds, coversMark, ownedBy, roleOwner, shrink } from './quality.ts';
 import { overlaps, segmentHitsBox } from './place.ts';
 
 const TOL = 1;
@@ -52,6 +52,7 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
   const order = [...units.entries()].sort((a, b) => priority(roles[b[1][0]]) - priority(roles[a[1][0]]) || a[1][0] - b[1][0]);
   const marks = shapes.map((s, i) => i).filter((i) => shapes[i].kind === 'rect' && /^(bar|marker):/.test(roles[i]));
   const dataLines = shapes.map((s, i) => i).filter((i) => shapes[i].kind === 'line' && roles[i].startsWith('line:'));
+  const lineOwners = new Set(dataLines.map((i) => roleOwner(roles[i])));
   const kept: number[] = [];
   const drop = new Set<number>();
   const reasons: string[] = [];
@@ -68,7 +69,7 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
       if (s.kind !== 'text') continue;
       const hit = kept.find((k) => overlaps(s, shapes[k] as TextShape, TOL));
       if (hit != null) return `overlaps "${(shapes[hit] as TextShape).text}"`;
-      const mk = marks.find((k) => !ownedBy(roles[i], roles[k]) && overlaps(s, bounds(shapes[k]), TOL));
+      const mk = marks.find((k) => coversMark(roles[i], s, roles[k], bounds(shapes[k]), lineOwners, TOL));
       if (mk != null) return `covers ${roles[mk]}`;
       const inner = shrink(s, TOL);
       const ln = dataLines.find((k) => {

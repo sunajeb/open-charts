@@ -17,6 +17,9 @@ for (const c of allCases()) {
   test(`resize: ${c.name}`, () => {
     const reference = layoutChart(c.spec, DEFAULT, m);
     assert.ok(!isPlaceholder(reference), 'the default frame is never too small');
+    // The last-resort resolver judges like the gate, so at the default frame (where the gate passes)
+    // it never has to step in.
+    assert.deepEqual(reference.hidden.filter((h) => /\) hidden: /.test(h)), []);
     const min = minimumSize(c.spec);
     const failures: string[] = [];
     for (const f of frames) {

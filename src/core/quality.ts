@@ -36,6 +36,18 @@ export function ownedBy(textRole: string, markRole: string): boolean {
 }
 
 /**
+ * Text over a mark (bar or marker) of another owner is a collision — except a line's label sitting
+ * wholly inside a column (combination chart). Shared with resolve.ts so both judge alike.
+ */
+export function coversMark(textRole: string, text: Box, markRole: string, mark: Box, lineOwners: Set<string | null>, tol: number): boolean {
+  const within = text.x >= mark.x - tol && text.y >= mark.y - tol && text.x + text.w <= mark.x + mark.w + tol && text.y + text.h <= mark.y + mark.h + tol;
+  if (within && markRole.startsWith('bar:') && lineOwners.has(owner(textRole)?.split(':')[0] ?? null)) return false;
+  return !ownedBy(textRole, markRole) && overlaps(text, mark, tol);
+}
+
+export { owner as roleOwner };
+
+/**
  * Layout quality gate v2 (B12): text×text and text×frame, plus text over a mark of another owner
  * (bars, markers, data lines), any shape outside the frame, arrows crossing labels and — with a
  * measurer — glyphs overflowing their box. In strict mode every hidden label is an issue too (B13).
@@ -71,13 +83,10 @@ export function checkScene(scene: Scene, options: number | CheckOptions = {}): I
   const arrows = items.filter((it): it is { s: LineShape; role: string } => it.role.startsWith('arrow:') && it.s.kind === 'line');
   // A line's point label may sit wholly inside a column segment (combination charts, contrasting colour).
   const lineOwners = new Set(dataLines.map((ln) => owner(ln.role)));
-  const within = (a: Box, b: Box) => a.x >= b.x - tol && a.y >= b.y - tol && a.x + a.w <= b.x + b.w + tol && a.y + a.h <= b.y + b.h + tol;
   for (const t of texts) {
     const inner = shrink(t.s, tol);
-    const lineLabel = lineOwners.has(owner(t.role)?.split(':')[0] ?? null);
     for (const mk of marks) {
-      if (lineLabel && mk.role.startsWith('bar:') && within(t.s, bounds(mk.s))) continue;
-      if (!ownedBy(t.role, mk.role) && overlaps(t.s, bounds(mk.s), tol)) {
+      if (coversMark(t.role, t.s, mk.role, bounds(mk.s), lineOwners, tol)) {
         issues.push({ kind: 'text-mark', detail: `"${t.s.text}" × ${mk.role}` });
       }
     }
