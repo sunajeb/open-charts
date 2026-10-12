@@ -22,8 +22,13 @@ export interface Series {
   as?: 'column' | 'line';
 }
 
+/**
+ * Chart options. Which chart types read each option is `OPTIONS[key].types` in spec.ts (an option
+ * on any other type is a validation error); the per-type defaults are `optionDefaults(type)`. The
+ * comments below summarise both.
+ */
 export interface ChartOptions {
-  /** Total label above each stacked column. Default: on for stacked, off otherwise. */
+  /** Total above each column (stacked, 100%, Mekko, Mekko XY, combo, area) or in the hole (doughnut). Default: on for stacked, mekko and mekkoxy; off for percent, area, doughnut and combo. */
   totals?: boolean;
   /**
    * Compound annual growth arrow between two category indices (uses column totals). The number of
@@ -33,9 +38,9 @@ export interface ChartOptions {
   cagr?: { from: number; to: number; years?: number } | null;
   /** Difference arrow between the totals of two categories. */
   difference?: { from: number; to: number } | null;
-  /** Show a value axis with ticks. Default: off (values are labelled on the chart). */
+  /** Show a value axis with ticks. Default: on for line; off for the other types that read it (their values are labelled on the chart). */
   valueAxis?: boolean;
-  /** Force the value axis to include zero. Default: on, except narrow-range line charts. */
+  /** Line, scatter and bubble: force the value axis to include zero (true) or fit the data (false). Default: zero, unless the data sits in a narrow band far from it. */
   zeroBased?: boolean;
   /** Fixed number of decimals. Default: inferred from the data. */
   decimals?: number;
@@ -51,11 +56,11 @@ export interface ChartOptions {
   orientation?: 'vertical' | 'horizontal';
   /** Mekko: stack every column to 100% (default) or keep absolute segment heights. Widths always encode totals. */
   mekko?: 'percent' | 'unit';
-  /** Gap between columns as a fraction of the column width. Default 0.5. */
+  /** Stacked, clustered, 100%, waterfall and combo: gap between columns as a fraction of the column width, 0–10. Default 0.5. */
   gap?: number;
   /** Series identification: labels to the right of the last column, a legend, or none. */
   seriesLabels?: 'right' | 'legend' | 'none';
-  /** Waterfall: category indices drawn as totals anchored at the baseline. Default: first and last category. */
+  /** Waterfall: category indices drawn as totals anchored at the baseline. Default: the first category and any "e" cells, else the first and last. */
   totalsAt?: number[];
   /** Line: draw a step (ortho) line, horizontal to the next category and then vertical. Default off. */
   step?: boolean;

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-charts.dev/schema/chart/1.json",
   "title": "open-charts chart spec, version 1",
-  "description": "One chart. Unversioned specs (v0) have the same shape and are upgraded by migrate(). Semantic rules the schema cannot express (values per series = number of categories, unique series names, cagr.from < cagr.to, horizontal only for column types, tuple length per scatter / bubble, gantt end after start) are enforced by validateSpec().",
+  "description": "One chart. Unversioned specs (v0) have the same shape and are upgraded by migrate(). Semantic rules the schema cannot express (values per series = number of categories, unique series names, cagr.from < cagr.to, each option only on the chart types its description lists, tuple length per scatter / bubble, gantt end after start) are enforced by validateSpec().",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "categories", "series"],
@@ -76,8 +76,8 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "totals": { "type": "boolean" },
-        "cagr": {
+        "totals": { "description": "Chart types: stacked, percent, mekko, area, doughnut, combo, mekkoxy.", "type": "boolean" },
+        "cagr": { "description": "Chart types: stacked, percent.",
           "anyOf": [
             { "type": "null" },
             {
@@ -92,32 +92,32 @@
             }
           ]
         },
-        "difference": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/range" }] },
-        "valueAxis": { "type": "boolean" },
-        "zeroBased": { "type": "boolean" },
-        "decimals": { "type": "integer", "minimum": 0, "maximum": 10 },
-        "unit": { "$ref": "#/$defs/unit" },
-        "format": { "type": "string", "pattern": "[0#?]", "description": "Excel number format, e.g. \"#,##0.0\", \"$#,##0\", \"0%\", \"#,##0;(#,##0)\"." },
-        "locale": { "type": "string", "examples": ["en-US", "en-GB", "en-IN", "de-DE", "fr-FR"] },
-        "scale": { "enum": ["none", "auto", "k", "m", "bn"] },
-        "orientation": { "enum": ["vertical", "horizontal"] },
-        "mekko": { "enum": ["percent", "unit"] },
-        "gap": { "type": "number", "minimum": 0, "maximum": 10 },
-        "seriesLabels": { "enum": ["right", "legend", "none"] },
-        "totalsAt": { "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } },
-        "step": { "type": "boolean", "description": "Line only: step (ortho) line, horizontal then vertical." },
-        "percentData": { "type": "boolean", "description": "100% chart: values are already percentages; columns keep their own totals on the % axis." },
-        "combo": { "enum": ["stacked", "clustered"], "description": "Combination chart: how the column series are drawn." },
-        "sort": { "enum": ["sheet", "reverse", "ascending", "descending"], "description": "Mekko XY: category order (by height for ascending / descending)." },
+        "difference": { "description": "Chart types: stacked, percent.", "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/range" }] },
+        "valueAxis": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, combo, mekkoxy.", "type": "boolean" },
+        "zeroBased": { "description": "Chart types: line, scatter, bubble.", "type": "boolean" },
+        "decimals": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table.", "type": "integer", "minimum": 0, "maximum": 10 },
+        "unit": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table.", "$ref": "#/$defs/unit" },
+        "format": { "type": "string", "pattern": "[0#?]", "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table. Excel number format, e.g. \"#,##0.0\", \"$#,##0\", \"0%\", \"#,##0;(#,##0)\"." },
+        "locale": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table, gantt.", "type": "string", "examples": ["en-US", "en-GB", "en-IN", "de-DE", "fr-FR"] },
+        "scale": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table.", "enum": ["none", "auto", "k", "m", "bn"] },
+        "orientation": { "description": "Chart types: stacked, clustered, percent.", "enum": ["vertical", "horizontal"] },
+        "mekko": { "description": "Chart types: mekko.", "enum": ["percent", "unit"] },
+        "gap": { "description": "Chart types: stacked, clustered, percent, waterfall, combo.", "type": "number", "minimum": 0, "maximum": 10 },
+        "seriesLabels": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, gantt.", "enum": ["right", "legend", "none"] },
+        "totalsAt": { "description": "Chart types: waterfall.", "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } },
+        "step": { "type": "boolean", "description": "Chart types: line. Step (ortho) line, horizontal then vertical." },
+        "percentData": { "type": "boolean", "description": "Chart types: percent. Values are already percentages; columns keep their own totals on the % axis." },
+        "combo": { "enum": ["stacked", "clustered"], "description": "Chart types: combo. How the column series are drawn." },
+        "sort": { "enum": ["sheet", "reverse", "ascending", "descending"], "description": "Chart types: mekkoxy. Category order (by height for ascending / descending)." },
         "axisTitles": {
           "type": "object",
           "additionalProperties": false,
-          "description": "Scatter and bubble: axis titles.",
+          "description": "Chart types: scatter, bubble. Axis titles.",
           "properties": { "x": { "type": "string" }, "y": { "type": "string" } }
         },
         "shades": {
           "type": "array",
-          "description": "Gantt: shaded periods across every row.",
+          "description": "Chart types: gantt. Shaded periods across every row.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -127,7 +127,7 @@
         },
         "brackets": {
           "type": "array",
-          "description": "Gantt: brackets labelling periods of time (phases), under the rows.",
+          "description": "Chart types: gantt. Brackets labelling periods of time (phases), under the rows.",
           "items": {
             "type": "object",
             "additionalProperties": false,
@@ -135,9 +135,9 @@
             "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string" } }
           }
         },
-        "today": { "type": "string", "description": "Gantt: date of a \"today\" line through every row." },
-        "sizeLegend": { "type": ["boolean", "string"], "description": "Bubble: size legend; a string adds a caption." },
-        "labelContent": { "enum": ["percent", "value", "both"], "description": "Pie and doughnut: slice labels show shares (default), absolute values, or both." }
+        "today": { "type": "string", "description": "Chart types: gantt. Date of a \"today\" line through every row." },
+        "sizeLegend": { "type": ["boolean", "string"], "description": "Chart types: bubble. Size legend; a string adds a caption." },
+        "labelContent": { "enum": ["percent", "value", "both"], "description": "Chart types: pie, doughnut. Slice labels show shares (default), absolute values, or both." }
       }
     }
   }

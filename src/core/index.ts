@@ -25,10 +25,10 @@ export { minimumSize, TooSmall } from './minsize.ts';
 export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
 export {
-  SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError,
+  SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError, OPTIONS, LIMITS, appliesTo, optionDefaults, editorSpec,
   CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, CHART_TYPES,
 } from './spec.ts';
-export type { SpecError } from './spec.ts';
+export type { SpecError, OptionInfo, OptionKey } from './spec.ts';
 export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
 export type { NumberStyle, Locale } from './numbers.ts';
 export { parseCategoryDate, years360, cagrYears } from './dates.ts';

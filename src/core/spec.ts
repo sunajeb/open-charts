@@ -1,6 +1,6 @@
 // Spec versioning and validation. Pure functions; the JSON Schema in schema/*.schema.json mirrors
 // these rules (a sync test keeps the key lists identical).
-import type { ChartSpec } from './types.ts';
+import type { ChartOptions, ChartSpec } from './types.ts';
 import { LOCALES } from './numbers.ts';
 import { parseCategoryDate } from './dates.ts';
 
@@ -19,14 +19,93 @@ export const CHART_TYPES = [
 ] as const;
 export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options'] as const;
 export const SERIES_KEYS = ['name', 'values', 'color', 'as'] as const;
-export const OPTION_KEYS = [
-  'totals', 'cagr', 'difference', 'valueAxis', 'zeroBased', 'decimals', 'unit', 'format', 'locale',
-  'scale', 'orientation', 'mekko', 'gap', 'seriesLabels', 'totalsAt',
-  'step',
-  'percentData', 'combo', 'sort', 'shades', 'axisTitles',
-  'sizeLegend', 'brackets', 'today',
-  'labelContent',
-] as const;
+export type ChartTypeName = typeof CHART_TYPES[number];
+const except = (...types: ChartTypeName[]) => CHART_TYPES.filter((t) => !types.includes(t));
+
+/** Inclusive numeric limits, shared by the validator, the JSON Schema and the editor's inputs. */
+export const LIMITS = {
+  decimals: { min: 0, max: 10, step: 1 },
+  gap: { min: 0, max: 10, step: 0.1 },
+} as const;
+
+export interface OptionInfo {
+  /** Chart types that read the option; on any other type it is a validation error. */
+  types: readonly ChartTypeName[];
+  /** The value's shape, as documented (DATA-FORMAT.md options table). */
+  value: string;
+  /** What the engine does when the option is left out and `optionDefaults` has no fixed value for it. */
+  auto?: string;
+}
+
+/**
+ * Every chart option and the chart types that read it: the one applicability table behind
+ * validation, the schema descriptions, the editor's controls and the DATA-FORMAT.md options table
+ * (tests keep the schema and the doc in sync with it).
+ */
+export const OPTIONS = {
+  unit: { types: except('harvey', 'gantt'), value: 'string or `{text, position, space}`', auto: 'none' },
+  decimals: { types: except('harvey', 'gantt'), value: `whole number ${LIMITS.decimals.min}–${LIMITS.decimals.max}`, auto: 'inferred from the data' },
+  format: { types: except('harvey', 'gantt'), value: 'Excel number format', auto: 'none' },
+  locale: { types: except('harvey'), value: '`en-US` `en-GB` `en-IN` `de-DE` `fr-FR`', auto: '`en-US`' },
+  scale: { types: except('harvey', 'gantt'), value: '`none` `auto` `k` `m` `bn`' },
+  orientation: { types: ['stacked', 'clustered', 'percent'], value: '`vertical` `horizontal`' },
+  valueAxis: { types: ['stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line', 'area', 'area100', 'combo', 'mekkoxy'], value: 'boolean' },
+  zeroBased: { types: ['line', 'scatter', 'bubble'], value: 'boolean', auto: 'on, unless the data sits in a narrow band far from zero' },
+  gap: { types: ['stacked', 'clustered', 'percent', 'waterfall', 'combo'], value: `number ${LIMITS.gap.min}–${LIMITS.gap.max}` },
+  seriesLabels: { types: except('harvey', 'table'), value: '`right` `legend` `none`', auto: 'chosen per type and data' },
+  totals: { types: ['stacked', 'percent', 'mekko', 'area', 'doughnut', 'combo', 'mekkoxy'], value: 'boolean' },
+  cagr: { types: ['stacked', 'percent'], value: '`{from, to, years?}` or `null`', auto: 'none' },
+  difference: { types: ['stacked', 'percent'], value: '`{from, to}` or `null`', auto: 'none' },
+  totalsAt: { types: ['waterfall'], value: 'array of category indices', auto: 'the first category and the `"e"` cells, else first and last' },
+  step: { types: ['line'], value: 'boolean' },
+  percentData: { types: ['percent'], value: 'boolean' },
+  combo: { types: ['combo'], value: '`stacked` `clustered`' },
+  mekko: { types: ['mekko'], value: '`percent` `unit`' },
+  sort: { types: ['mekkoxy'], value: '`sheet` `reverse` `ascending` `descending`' },
+  axisTitles: { types: ['scatter', 'bubble'], value: '`{x?, y?}`', auto: 'none' },
+  sizeLegend: { types: ['bubble'], value: 'boolean or caption' },
+  labelContent: { types: ['pie', 'doughnut'], value: '`percent` `value` `both`' },
+  shades: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
+  brackets: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
+  today: { types: ['gantt'], value: 'date', auto: 'none' },
+} as const satisfies Record<keyof ChartOptions, OptionInfo>;
+export type OptionKey = keyof typeof OPTIONS;
+export const OPTION_KEYS = Object.keys(OPTIONS) as OptionKey[];
+
+/** Whether a chart type reads an option. */
+export const appliesTo = (key: string, type: string): boolean =>
+  !!(OPTIONS as Record<string, OptionInfo>)[key]?.types.includes(type as ChartTypeName);
+
+/**
+ * The value the engine uses for each option a chart type reads when the spec leaves it out. Options
+ * whose default depends on the data (`decimals`, `zeroBased`, `seriesLabels`, `totalsAt`) are absent;
+ * `OPTIONS[k].auto` describes them. The engine lays out with these values and the editor shows them,
+ * so a control always shows what is drawn.
+ */
+export function optionDefaults(type: string): ChartOptions {
+  const all: ChartOptions = {
+    scale: 'none',
+    orientation: 'vertical',
+    valueAxis: type === 'line',
+    gap: 0.5,
+    totals: type === 'stacked' || type === 'mekko' || type === 'mekkoxy',
+    step: false,
+    percentData: false,
+    combo: 'stacked',
+    mekko: 'percent',
+    sort: 'sheet',
+    sizeLegend: false,
+    labelContent: 'percent',
+  };
+  return Object.fromEntries(Object.entries(all).filter(([k]) => appliesTo(k, type))) as ChartOptions;
+}
+
+/** What the editor needs from this module; the server sends it with the page (`OC_SPEC`). */
+export const editorSpec = () => ({
+  options: Object.fromEntries(OPTION_KEYS.map((k) => [k, OPTIONS[k].types])),
+  defaults: Object.fromEntries(CHART_TYPES.map((t) => [t, optionDefaults(t)])),
+  limits: LIMITS,
+});
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart'] as const;
 export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative'] as const;
@@ -35,21 +114,32 @@ const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v
 
 /**
  * Upgrade any supported spec version to the current one. v0 (no `specVersion`) has the same shape
- * as v1, so the upgrade only stamps the version: nothing is dropped or renamed. Specs newer than this
- * engine are returned unchanged so `validateSpec` can report them.
+ * as v1; the upgrade stamps the version and removes options the chart type does not use (v0 accepted
+ * them silently, v1 rejects them), adding one "/options/<key>: …" line per removal to `warnings`.
+ * Specs newer than this engine are returned unchanged so `validateSpec` can report them.
  */
-export function migrate<T extends object>(spec: T): T & { specVersion: number } {
+export function migrate<T extends object>(spec: T, warnings?: string[], base = ''): T & { specVersion: number } {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return spec as T & { specVersion: number };
   const v = (spec as { specVersion?: unknown }).specVersion;
-  if (v === undefined) return { specVersion: SPEC_VERSION, ...clone(spec) } as T & { specVersion: number };
-  return spec as T & { specVersion: number };
+  if (v !== undefined) return spec as T & { specVersion: number };
+  const out = { specVersion: SPEC_VERSION, ...clone(spec) } as T & { specVersion: number; type?: unknown; options?: Record<string, unknown> };
+  const { type, options } = out;
+  if (isObj(options) && CHART_TYPES.includes(type as never)) {
+    for (const k of Object.keys(options)) {
+      if (k in OPTIONS && !appliesTo(k, type as string)) {
+        delete options[k];
+        warnings?.push(`${base}/options/${esc(k)}: not used by ${type} charts; removed`);
+      }
+    }
+  }
+  return out;
 }
 
-/** Upgrade a deck and every chart in it. */
-export function migrateDeck<T extends { slides?: { chart?: object }[] }>(deck: T): T & { specVersion: number } {
+/** Upgrade a deck and every chart in it (warnings as in `migrate`, with paths from the deck root). */
+export function migrateDeck<T extends { slides?: { chart?: object }[] }>(deck: T, warnings?: string[]): T & { specVersion: number } {
   const out = migrate(deck);
   if (Array.isArray(out.slides)) {
-    out.slides = out.slides.map((s) => (s && typeof s === 'object' && s.chart ? { ...s, chart: migrate(s.chart) } : s));
+    out.slides = out.slides.map((s, i) => (s && typeof s === 'object' && s.chart ? { ...s, chart: migrate(s.chart, warnings, `/slides/${i}/chart`) } : s));
   }
   return out;
 }
@@ -140,6 +230,20 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
 function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nCat: number) {
   const p = (k: string, ...rest: (string | number)[]) => ['options', k, ...rest];
   e.unknown(o, OPTION_KEYS, ['options']);
+  // One rule for every option: the chart type reads it, or it is an error (null = "none" is accepted).
+  if (CHART_TYPES.includes(type as never)) {
+    for (const k of OPTION_KEYS) {
+      if (o[k] !== undefined && o[k] !== null && !appliesTo(k, type)) e.add(p(k), `not used by ${type} charts (only ${OPTIONS[k].types.join(', ')})`);
+    }
+  }
+  const range = (k: keyof typeof LIMITS, whole: boolean) => {
+    const v = o[k], { min, max } = LIMITS[k];
+    if (v !== undefined && (typeof v !== 'number' || !Number.isFinite(v) || (whole && !isInt(v)) || v < min || v > max)) {
+      e.add(p(k), `must be a ${whole ? 'whole ' : ''}number ${min}–${max}, got ${describe(v)}`);
+    }
+  };
+  range('decimals', true);
+  range('gap', false);
   for (const k of ['totals', 'valueAxis', 'zeroBased', 'step'] as const) {
     if (o[k] !== undefined && typeof o[k] !== 'boolean') e.add(p(k), `must be true or false, got ${describe(o[k])}`);
   }
@@ -159,9 +263,6 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
     if (k === 'cagr' && r.years !== undefined && (typeof r.years !== 'number' || !Number.isFinite(r.years) || r.years <= 0)) {
       e.add(p(k, 'years'), `must be a positive number, got ${describe(r.years)}`);
     }
-  }
-  if (o.decimals !== undefined && (!isInt(o.decimals) || o.decimals < 0 || o.decimals > 10)) {
-    e.add(p('decimals'), `must be a whole number 0–10, got ${describe(o.decimals)}`);
   }
   if (o.unit !== undefined && typeof o.unit !== 'string') {
     if (!isObj(o.unit)) e.add(p('unit'), `must be a string or {text, position, space}, got ${describe(o.unit)}`);
@@ -189,13 +290,6 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   enumOf('mekko', ['percent', 'unit']);
   enumOf('seriesLabels', ['right', 'legend', 'none']);
   enumOf('labelContent', ['percent', 'value', 'both']);
-  if (o.orientation === 'horizontal' && !['stacked', 'clustered', 'percent'].includes(type)) {
-    e.add(p('orientation'), `horizontal orientation is available for stacked, clustered and percent charts, not ${type}`);
-  }
-  if (o.step && type !== 'line') e.add(p('step'), `step lines are available for line charts, not ${type}`);
-  if (o.gap !== undefined && (typeof o.gap !== 'number' || !Number.isFinite(o.gap) || o.gap < 0 || o.gap > 10)) {
-    e.add(p('gap'), `must be a number 0–10, got ${describe(o.gap)}`);
-  }
   if (o.totalsAt !== undefined) {
     if (!Array.isArray(o.totalsAt)) e.add(p('totalsAt'), 'must be an array of category indices');
     else o.totalsAt.forEach((v, i) => index(v, p('totalsAt', i)));
@@ -203,9 +297,6 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   if (o.percentData !== undefined && typeof o.percentData !== 'boolean') e.add(p('percentData'), `must be true or false, got ${describe(o.percentData)}`);
   enumOf('combo', ['stacked', 'clustered']);
   enumOf('sort', ['sheet', 'reverse', 'ascending', 'descending']);
-  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['shades', ['gantt']], ['axisTitles', ['scatter', 'bubble']], ['sizeLegend', ['bubble']], ['brackets', ['gantt']], ['today', ['gantt']]] as const) {
-    if (o[k] !== undefined && !(types as readonly string[]).includes(type)) e.add(p(k), `applies to ${types.join(', ')} charts, not ${type}`);
-  }
   if (o.axisTitles !== undefined) {
     if (!isObj(o.axisTitles)) e.add(p('axisTitles'), 'must be {x, y}');
     else {
@@ -300,8 +391,8 @@ export class InvalidSpecError extends Error {
 }
 
 /** Migrate, validate and return the current-version spec, or throw InvalidSpecError. */
-export function prepareSpec(spec: ChartSpec): ChartSpec {
-  const s = migrate(spec);
+export function prepareSpec(spec: ChartSpec, warnings?: string[]): ChartSpec {
+  const s = migrate(spec, warnings);
   const errors = validateSpec(s);
   if (errors.length) throw new InvalidSpecError(errors);
   return s;

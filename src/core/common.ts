@@ -5,6 +5,7 @@ import { formatValue, inferDecimals, pickScale, type NumberStyle } from './numbe
 import { spread } from './place.ts';
 import { parseCategoryDate } from './dates.ts';
 import { TooSmall } from './minsize.ts';
+import { optionDefaults } from './spec.ts';
 
 export interface Ctx {
   spec: ChartSpec;
@@ -39,10 +40,11 @@ export const num = (v: unknown): number | null => (typeof v === 'number' && Numb
 
 export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer): Ctx {
   const horizontal = spec.options?.orientation === 'horizontal';
+  // seriesLabels is only a starting point here: chart types refine it from the data when it is unset.
   const defaults = {
     gap: 0.5,
     seriesLabels: spec.type === 'clustered' || horizontal ? 'legend' : 'right',
-    totals: spec.type === 'stacked',
+    ...optionDefaults(spec.type),
   } as const;
   const o = { ...defaults, ...spec.options };
   const all = spec.series.flatMap((s) => s.values.map(num)).filter((v): v is number => v != null);

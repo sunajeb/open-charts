@@ -1,5 +1,5 @@
 import type { ChartSpec, Scene, Style } from './core/index.ts';
-import { checkScene, defaultStyle, layoutChart } from './core/index.ts';
+import { checkScene, defaultStyle, layoutChart, migrate } from './core/index.ts';
 import type { Measurer } from './core/text.ts';
 import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
 import { chartTags } from './render/tags.ts';
@@ -34,8 +34,13 @@ export function altText(chart: ChartSpec): string {
 export function buildDeck(deck: DeckSpec, m: Measurer): { pptx: Uint8Array; slides: BuiltSlide[] } {
   const style = { ...defaultStyle, ...deck.style };
   const slides = deck.slides.map((s) => {
-    const scene = layoutChart(s.chart, CHART_FRAME, m, style);
-    const issues = [...checkScene(scene, { measurer: m }).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`)];
+    // Older (v0) specs lose options their chart type does not use; say so instead of failing.
+    const migrated: string[] = [];
+    const scene = layoutChart(migrate(s.chart, migrated), CHART_FRAME, m, style);
+    const issues = [
+      ...migrated.map((w) => `warning: ${w}`),
+      ...checkScene(scene, { measurer: m }).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`),
+    ];
     return { title: s.title, scene, svg: sceneToSvg([scene], SLIDE, s.title, style.font), issues };
   });
   const pptx = writePptx(

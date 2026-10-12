@@ -49,7 +49,7 @@ export function layoutMekko(ctx: Ctx) {
 
   // Reserve space: legend and totals on top, axis left, series labels right, categories + shares below.
   const legendH = legend(ctx);
-  const showTotals = spec.options?.totals ?? true;
+  const showTotals = !!o.totals;
   // Without labels on the right, a narrow last column still needs room to centre its labels over it.
   const lastLabelW = Math.max(m.width(ctx.fmt(totals[nCat - 1]), fs, true), Math.min(fs * 6, m.width(spec.categories[nCat - 1], fs))) + 2;
   const rightW = ctx.o.seriesLabels === 'right' ? seriesLabelWidth(ctx, 0) : narrowLast ? lastLabelW / 2 : 0;

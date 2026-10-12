@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   checkScene, layoutChart, migrate, migrateDeck, validateDeck, validateSpec, InvalidSpecError,
-  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, STYLE_KEYS, CHART_TYPES,
+  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, STYLE_KEYS, CHART_TYPES, OPTIONS, LIMITS, appliesTo, optionDefaults,
   type ChartSpec, type RectShape, type Scene, type TextShape, type LineShape,
 } from '../src/core/index.ts';
 import { parseCategoryDate, years360, cagrYears } from '../src/core/dates.ts';
+import { samples } from '../src/core/samples.ts';
 import { createMeasurer } from '../src/fonts.ts';
 import { buildDeck, CHART_FRAME, type DeckSpec } from '../src/deck.ts';
 
@@ -273,7 +274,7 @@ test('B15: validation is path-addressed and catches bad numbers, names, colours 
   assert.match(paths['/options/unit/position'], /prefix/);
   assert.deepEqual(validateSpec(base('stacked')), []);
   assert.deepEqual(validateSpec({ ...base('waterfall'), series: [{ name: 'a', values: [1, 2, -1, 'e'] }] }), []);
-  assert.match(validateSpec({ ...base('line', { orientation: 'horizontal' }) })[0].message, /horizontal orientation/);
+  assert.deepEqual(validateSpec({ ...base('line', { orientation: 'horizontal' }) }), [{ path: '/options/orientation', message: 'not used by line charts (only stacked, clustered, percent)' }]);
 });
 
 test('B15: layoutChart throws one error listing every "/path: message"', () => {
@@ -320,6 +321,85 @@ test('spec v1: migrate stamps v0 losslessly; decks too; newer versions are rejec
   assert.equal(layoutChart({ ...v0, specVersion: 1 }, F, m).shapes.length, layoutChart(v0, F, m).shapes.length);
 });
 
+// ---- Options: one applicability table, one set of defaults, one set of limits --------------------
+
+/** A valid value for each option on a chart whose categories are dates, for applicability tests. */
+const SAMPLE_OPTION: Record<string, unknown> = {
+  unit: 'm', decimals: 1, format: '#,##0', locale: 'de-DE', scale: 'k', orientation: 'horizontal',
+  valueAxis: true, zeroBased: true, gap: 0.3, seriesLabels: 'legend', totals: true,
+  cagr: { from: 0, to: 1 }, difference: { from: 0, to: 1 }, totalsAt: [0], step: true, percentData: true,
+  combo: 'clustered', mekko: 'unit', sort: 'reverse', axisTitles: { x: 'x' }, sizeLegend: true,
+  labelContent: 'value', shades: [{ from: '2026-01-01', to: '2026-02-01' }],
+  brackets: [{ from: '2026-01-01', to: '2026-02-01' }], today: '2026-01-15',
+};
+
+test('options: every option on a type that does not read it is a path-addressed error', () => {
+  assert.deepEqual(Object.keys(SAMPLE_OPTION).sort(), [...OPTION_KEYS].sort());
+  for (const type of CHART_TYPES) {
+    const spec = { ...samples[type]!, options: {} };
+    for (const k of OPTION_KEYS) {
+      const errs = validateSpec({ ...spec, options: { [k]: SAMPLE_OPTION[k] } }).filter((e) => /not used by/.test(e.message));
+      if (appliesTo(k, type)) assert.deepEqual(errs, [], `${k} on ${type}`);
+      else assert.deepEqual(errs, [{ path: `/options/${k}`, message: `not used by ${type} charts (only ${OPTIONS[k].types.join(', ')})` }], `${k} on ${type}`);
+    }
+  }
+  assert.equal(validateSpec(base('line', { cagr: null })).length, 0, 'null means "none" anywhere');
+  assert.equal(validateSpec({ ...samples.pie!, options: { cagr: { from: 0, to: 1 } } })[0].message, 'not used by pie charts (only stacked, percent)');
+});
+
+test('options: migrate() strips options a v0 chart type does not use, with a warning; v1 is rejected', () => {
+  const v0 = { ...samples.pie!, specVersion: undefined, options: { cagr: { from: 0, to: 1 }, totals: true, labelContent: 'value' as const } };
+  delete v0.specVersion;
+  const warnings: string[] = [];
+  const up = migrate(v0, warnings);
+  assert.deepEqual(up.options, { labelContent: 'value' });
+  assert.deepEqual(warnings, ['/options/cagr: not used by pie charts; removed', '/options/totals: not used by pie charts; removed']);
+  assert.deepEqual(validateSpec(up), []);
+  assert.deepEqual(v0.options.totals, true, 'input not mutated');
+  assert.ok(layoutChart(v0, F, m).shapes.length > 0, 'old specs still lay out');
+  assert.throws(() => layoutChart({ ...v0, specVersion: 1 }, F, m), /\/options\/cagr: not used by pie charts/);
+  const deckWarnings: string[] = [];
+  migrateDeck({ slides: [{ chart: base('stacked') }, { chart: v0 }] }, deckWarnings);
+  assert.deepEqual(deckWarnings, ['/slides/1/chart/options/cagr: not used by pie charts; removed', '/slides/1/chart/options/totals: not used by pie charts; removed']);
+  const built = buildDeck({ slides: [{ chart: v0 }] }, m);
+  assert.ok(built.slides[0].issues.includes('warning: /options/cagr: not used by pie charts; removed'));
+});
+
+test('options: optionDefaults() is what the engine draws when an option is left out', () => {
+  for (const type of CHART_TYPES) {
+    const spec = samples[type]!;
+    const defaults = optionDefaults(type);
+    for (const k of Object.keys(defaults)) assert.ok(appliesTo(k, type), `${k} default on ${type}`);
+    const without = layoutChart({ ...spec, options: {} }, F, m);
+    const explicit = layoutChart({ ...spec, options: defaults }, F, m);
+    assert.deepEqual(explicit, without, `${type}: explicit defaults draw the same chart`);
+  }
+  // The defaults that differ by type, as documented.
+  assert.equal(optionDefaults('mekko').totals, true);
+  assert.equal(optionDefaults('mekkoxy').totals, true);
+  assert.equal(optionDefaults('stacked').totals, true);
+  assert.equal(optionDefaults('percent').totals, false);
+  assert.equal(optionDefaults('line').valueAxis, true);
+  assert.equal(optionDefaults('stacked').valueAxis, false);
+  assert.equal(optionDefaults('pie').totals, undefined, 'not read by pie');
+  const mekko = layoutChart({ ...samples.mekko!, options: {} }, F, m);
+  assert.ok(textsOf(mekko, /^label:total:c\d+$/).length > 0, 'Mekko draws totals by default');
+  const mekkoOff = layoutChart({ ...samples.mekko!, options: { totals: false } }, F, m);
+  assert.equal(textsOf(mekkoOff, /^label:total:c\d+$/).length, 0);
+});
+
+test('options: limits are defined once and used by the validator and the schema', () => {
+  const chart = JSON.parse(readFileSync('schema/chart.schema.json', 'utf8'));
+  for (const [k, { min, max }] of Object.entries(LIMITS)) {
+    const prop = chart.$defs.options.properties[k];
+    assert.equal(prop.minimum, min, `${k} minimum`);
+    assert.equal(prop.maximum, max, `${k} maximum`);
+    assert.deepEqual(validateSpec(base('stacked', { [k]: max })), [], `${k} = max`);
+    assert.match(validateSpec(base('stacked', { [k]: max + 1 }))[0].message, new RegExp(`${min}–${max}`));
+    assert.match(validateSpec(base('stacked', { [k]: min - 1 }))[0].message, new RegExp(`${min}–${max}`));
+  }
+});
+
 test('validateDeck addresses errors from the deck root', () => {
   const errs = validateDeck({ style: { palette: ['zzz'] }, slides: [{ title: 'a', chart: base('stacked') }, { chart: { ...base('stacked'), series: [] } }], extra: 1 });
   assert.deepEqual(errs.map((e) => e.path).sort(), ['/extra', '/slides/1/chart/series', '/style/palette/0']);
@@ -334,6 +414,10 @@ test('JSON Schema files stay in sync with the validator', () => {
   assert.equal(chart.$schema, 'https://json-schema.org/draft/2020-12/schema');
   assert.deepEqual(Object.keys(chart.properties).sort(), [...CHART_KEYS].sort());
   assert.deepEqual(Object.keys(chart.$defs.options.properties).sort(), [...OPTION_KEYS].sort());
+  for (const k of OPTION_KEYS) {
+    const d: string = chart.$defs.options.properties[k].description ?? '';
+    assert.ok(d.startsWith(`Chart types: ${OPTIONS[k].types.join(', ')}.`), `schema description of ${k} starts with its chart types`);
+  }
   assert.deepEqual(Object.keys(chart.$defs.series.properties).sort(), [...SERIES_KEYS].sort());
   assert.deepEqual(chart.properties.type.enum, [...CHART_TYPES]);
   assert.deepEqual(Object.keys(deck.$defs.style.properties).sort(), [...STYLE_KEYS].sort());

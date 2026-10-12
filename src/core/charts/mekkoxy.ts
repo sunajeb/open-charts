@@ -125,7 +125,7 @@ export function layoutMekkoXY(ctx: Ctx) {
   }
 
   // Heights (one series) or totals (several) above each column, nudged sideways over narrow columns.
-  const showTop = hs.length === 1 || (spec.options?.totals ?? true);
+  const showTop = hs.length === 1 || !!o.totals;
   if (showTop) {
     for (const group of [tops.filter((t) => total[t.c] >= 0), tops.filter((t) => total[t.c] < 0)]) {
       const at = placeRow(group, colW, px, px + pw, pad * 0.5);
