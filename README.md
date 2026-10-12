@@ -64,6 +64,8 @@ chart spec (JSON) → layout engine (src/core) → scene (exact shapes) → Powe
 
 The layout engine is pure TypeScript with no Office code. It measures text with real font metrics (Arial, or the metric-compatible Liberation Sans), so what it plans matches what PowerPoint draws. Both renderers read the same scene, so the preview always matches the slide.
 
+Charts are laid out again whenever they are resized, so every chart must hold up at any size. Text never shrinks below 8 pt: labels that do not fit are hidden and listed in `scene.hidden` (and fail `--strict`); time axes thin to every 2nd, 3rd, … label; series names move to a legend when the frame is narrow. Below a chart type's minimum size (`minimumSize()` in `src/core/minsize.ts`, e.g. 200 × 120 pt for columns, more for many categories, long names or wide tables) the chart is drawn as a "too small" placeholder that says how large to make it. `test/resize.test.ts` checks every sample and example at 40 sizes from 160 × 90 to 1400 × 800 pt; `npm run bench` reports layout and start-up times.
+
 ## Tests
 
 ```sh
