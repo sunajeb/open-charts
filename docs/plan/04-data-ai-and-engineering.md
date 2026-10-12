@@ -199,7 +199,7 @@ Fonts in CI: Liberation Sans installed on Linux runners; the Node measurer is ch
 
 ### C.7 Contribution model and governance
 
-- Lightweight: `CONTRIBUTING.md`, issue templates (bug with a spec attached; chart-quality report with the chart screenshot), PR template with the clean-room attestation (§C.9), Contributor Covenant code of conduct.
+- Lightweight: `CONTRIBUTING.md`, issue templates (bug with a spec attached; chart-quality report with the chart screenshot), PR template, Contributor Covenant code of conduct.
 - **DCO sign-off** (`Signed-off-by`) rather than a CLA: less friction, sufficient for Apache-2.0 inbound=outbound.
 - Governance: a single maintainer (BDFL) through 1.0; then a maintainers group (≥3, from ≥2 organisations once that exists) with lazy consensus on PRs and a documented RFC process for spec changes (`docs/rfcs/`, one week comment period). Chart-design decisions are recorded as short ADRs with the public source they follow (a book, a paper, a manual), which doubles as the provenance trail.
 - Roadmap public in `tasks/todo.md` → GitHub Projects once there are external contributors.
@@ -208,11 +208,9 @@ Fonts in CI: Liberation Sans installed on Linux runners; the Node measurer is ch
 
 Apache-2.0 for all code, schema and docs (explicit patent grant from contributors; compatible with commercial adoption, which is how the project becomes the default). Vendored opentype.js stays MIT with its notice. Example data is synthetic and CC0. Fonts: Liberation Sans ships under the SIL OFL in the browser bundle only; Arial is never redistributed (metrics are read from the user's installed font at runtime).
 
-### C.9 Clean-room and IP policy
+### C.9 Approach and IP notes
 
-Written down in `docs/CLEAN-ROOM.md` and linked from the PR template:
-- **Allowed inputs**: the OOXML/ECMA-376 standard, academic papers (ticks, label placement, rounding), books on chart design, publicly available user manuals and marketing pages of any product (to learn *what* a feature does), our own experiments with PowerPoint itself.
-- **Attestation**: every PR ticks "This contribution was written without reference to the source code, binaries, file output or non-public materials of any commercial charting product." Maintainers who have worked for a vendor in this space disclose it and do not review areas overlapping their prior work for 12 months.
+- **How we build**: the most efficient and effective path to parity. Inputs include the OOXML/ECMA-376 standard, academic papers (ticks, label placement, rounding), books on chart design, publicly available user manuals and marketing pages, our own experiments with PowerPoint, and inspiration from the reference product (its behaviour and internals) and other information available on the internet. Every layout rule gets a source entry in `docs/behaviour-spec.md` so decisions stay traceable and reproducible.
 - **Patents**: before any commercial offering (hosted service, paid add-in tier), a freedom-to-operate search by patent counsel on automatic label placement, chart–spreadsheet linking, agenda/Gantt automation and consulting-style automatic layout features; results and design-arounds recorded privately, affected designs adjusted before launch. Budget in §D.3. Apache-2.0's defensive termination clause applies to contributors' patents.
 - **Trademark**: clearance search on "open-charts" (and the eventual product name) in software classes in the US/EU; register once the add-in ships; a short trademark policy allowing unmodified redistribution under the name.
 
@@ -282,7 +280,6 @@ Cash cost of the solo variant beyond the developer's time: ~$300–600/month (AI
 | OOXML template editing corrupts a corporate deck | Trust loss, hard to debug | Byte-identical untouched parts test; schema validation; "repair prompt" in PowerPoint treated as a P0 bug; `--dry-run` with a report |
 | LLM invents or shifts numbers | Reputational; the one thing the product must never do | Reference mode + verifier (§B.2/§B.6); eval cases; rejected specs are never auto-repaired by the model |
 | Patent exposure on layout/linking features | Injunction or rewrite before commercial launch | FTO search before any paid offering; ADRs cite public prior art; Apache-2.0 patent grant |
-| Clean-room claim challenged | Project credibility | Written policy, attestations, disclosed conflicts, public provenance trail in ADRs |
 | Office.js API gaps / AppSource delays | Add-in slips | Per 03 §9: spikes first, Path A always ships, sideload and centralized deployment do not depend on AppSource |
 | Native Windows add-in cost explodes | Phase 4 eats the budget | Gate Phase 4 on add-in adoption metrics; solo variant skips it |
 | Maintainer burnout / bus factor 1 | Project stalls | Governance plan from 1.0; docs that let a newcomer add a chart type in a day; keep the codebase small (zero deps is also a maintenance strategy) |

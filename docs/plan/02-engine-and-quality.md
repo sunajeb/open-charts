@@ -281,5 +281,5 @@ Total without Gantt: **≈ 77 days**; with Gantt ≈ 85. Items 1–11 (~29 days)
 - **Kerning / line-height decisions (B6, B7) change every existing golden.** Do them before goldens are frozen (item 2 precedes item 10 for that reason).
 - **Solver determinism vs. quality.** Greedy + local improvement can plateau on dense scatter plots. Keep a seeded annealing fallback behind a flag; never let timing decide output.
 - **Theme colours via `schemeClr`** break the SVG preview's 1:1 promise unless the preview resolves the same theme. Resolve at scene level (store both `themeRef` and resolved hex).
-- **Clean-room boundary.** The reference tool's manual may be read for *behaviour* (as in §2); its output may be used as a benchmark pair in §4.5; nothing else. Record the source of every rule in `docs/behaviour-spec.md` (still to be written — see `tasks/todo.md`).
+- **Sourcing.** We take inspiration from the reference tool's manual, behaviour and internals, its output as a benchmark pair in §4.5, and other information available on the internet — whatever is the most efficient and effective route to parity. Record the source of every rule in `docs/behaviour-spec.md` (still to be written — see `tasks/todo.md`).
 - **Scope creep from the editor.** The editor should consume `scene.json` and the solver's explain data; it must never grow its own layout logic.

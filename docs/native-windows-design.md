@@ -2,7 +2,7 @@
 
 Status: design draft. Companion to `docs/plan/03-officejs-and-mac.md` (the cross-platform Office.js add-in). This document covers the **Windows-only native COM add-in** whose reason to exist is *on-slide direct manipulation*: drag handles that change gaps, bar widths and label positions, right-click menus on chart parts, and live re-layout while dragging. Everything an Office.js add-in can do (insert, datasheet, update) is reused, not redesigned.
 
-Clean-room notice: this design is based on public Microsoft documentation (PowerPoint object model, Office Fluent UI/customUI, Win32, DirectWrite, .NET COM interop) and general Windows engineering practice. No commercial add-in was inspected. Claims marked ⚠️ are *believed* true and must be verified by the named spike (§10) before the design relies on them.
+Sources: this design draws on Microsoft documentation (PowerPoint object model, Office Fluent UI/customUI, Win32, DirectWrite, .NET COM interop), general Windows engineering practice, and inspiration from the reference product and other information available on the internet. Claims marked ⚠️ are *believed* true and must be verified by the named spike (§10) before the design relies on them.
 
 ## 0. One-paragraph summary
 
