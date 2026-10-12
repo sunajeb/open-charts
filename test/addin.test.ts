@@ -233,7 +233,7 @@ test('VBA source is ASCII and every Sub/Function is closed', async () => {
   assert.equal(opens, closes);
 });
 
-test('VBA: Apply is silent, an ungrouped chart is named as such', () => {
+test('VBA: Apply is silent, an ungrouped chart is named as such, the engine starts as the add-in loads', () => {
   const src = readFileSync(new URL('../addin/vba/OpenCharts.bas', import.meta.url), 'utf8');
   const body = (name: string) => { const a = src.indexOf(`Sub ${name}(`); return src.slice(a, src.indexOf('End Sub', a)); };
   // ApplyEdit runs under the server's AppleScript call: a dialog would block it until it times out.
@@ -243,6 +243,12 @@ test('VBA: Apply is silent, an ungrouped chart is named as such', () => {
   // O3: pieces of an ungrouped chart keep OC_ROLE; say so instead of "select a chart".
   assert.match(src, /This chart was ungrouped, so it can't be edited as a chart\. Undo \(" & ChrW\(&H2318\) & "Z\) the ungroup or insert it again\./);
   assert.match(body('OCPREFIX_getEnabled'), /UngroupedSelected\(\)/, 'the buttons stay enabled so the click can explain');
+  // O5: the warm server is started from Auto_Open / onLoad through the bridge's startServer handler.
+  for (const s of ['Auto_Open', 'OCPREFIX_onLoad']) assert.match(body(s), /StartEngine/);
+  assert.match(src, /AppleScriptTask\(SCRIPT_FILE, "startServer", ""\)/);
+  const bridge = readFileSync(new URL('../addin/applescript/open-charts.applescript', import.meta.url), 'utf8');
+  assert.match(bridge, /^on startServer\(ignored\)$/m);
+  assert.match(bridge, /\{ \/usr\/bin\/curl -sf [^}]*addin\/ping \|\| " & serverCommand & "; \} > \/dev\/null 2>&1 &/, 'backgrounded, output detached');
 });
 
 test('request parsing tolerates CRLF and missing fields', async () => {

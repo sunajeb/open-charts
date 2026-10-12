@@ -26,6 +26,18 @@ on engine(request)
 	end try
 end engine
 
+-- Starts the warm engine in the background unless it is already up. The add-in calls this as it
+-- loads, so the first chart inserted gets the fast path above. Returns at once.
+on startServer(ignored)
+	try
+		set serverCommand to "nohup " & quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin serve"
+		do shell script "{ /usr/bin/curl -sf --connect-timeout 0.3 --max-time 1 http://127.0.0.1:4174/api/addin/ping || " & serverCommand & "; } > /dev/null 2>&1 &"
+		return "OK"
+	on error message
+		return "failed: " & my oneLine(message)
+	end try
+end startServer
+
 -- Appends one line to addin.log (used by the automation entry points and for diagnostics).
 on logLine(lineText)
 	try

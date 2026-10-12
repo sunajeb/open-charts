@@ -19,6 +19,7 @@ Private Const REINSTALL As String = """$HOME/Library/Application Support/open-ch
 
 Private gRibbon As Object
 Private gEvents As AppEvents
+Private gEngineStarted As Boolean
 ' True once PowerPoint has delivered a selection event: only then can the ribbon grey buttons out.
 Private gEventsOk As Boolean
 ' Re-entrancy guard: drawing changes the selection, which raises the event again.
@@ -40,6 +41,17 @@ Private gDrawMs As Single
 
 Public Sub Auto_Open()
     StartEvents
+    StartEngine
+End Sub
+
+' Starts the warm engine (the add-in's local server) in the background as the add-in loads, so
+' the first chart inserted does not wait for node to start. Never blocks: the bridge only spawns it.
+Private Sub StartEngine()
+    Dim ignored As String
+    If gEngineStarted Then Exit Sub
+    gEngineStarted = True
+    On Error Resume Next
+    ignored = AppleScriptTask(SCRIPT_FILE, "startServer", "")
 End Sub
 
 Private Sub StartEvents()
@@ -55,6 +67,7 @@ End Sub
 Public Sub OCPREFIX_onLoad(ByVal ribbon As Object)
     Set gRibbon = ribbon
     StartEvents
+    StartEngine
 End Sub
 
 Public Sub OCPREFIX_onAction(ByVal control As Object)
