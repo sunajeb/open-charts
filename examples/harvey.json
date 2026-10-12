@@ -1,0 +1,25 @@
+{
+  "slides": [
+    {
+      "title": "Vendor assessment: we lead on features, lag on integrations",
+      "chart": {
+        "type": "harvey",
+        "categories": ["Price", "Feature depth", "Customer support", "Integrations", "Security and compliance"],
+        "series": [
+          { "name": "Us", "values": [3, 4, 3, 1, 4] },
+          { "name": "Competitor A", "values": [4, 2, 3, 3, 2] },
+          { "name": "Competitor B", "values": [2, 3, 1, 4, 3] },
+          { "name": "Open-source alternative", "values": [4, 1, 0, 2, null] }
+        ]
+      }
+    },
+    {
+      "title": "Programme status: completion by workstream",
+      "chart": {
+        "type": "harvey",
+        "categories": ["Discovery", "Design", "Build", "Test", "Roll-out"],
+        "series": [{ "name": "Completion", "values": [1, 1, 0.6, 0.15, 0] }]
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { unzip } from './unzip.ts';
+import { CHART_TYPES } from '../../src/core/spec.ts';
 
 const BASE = () => process.env.E2E_BASE_URL!;
 const PREVIEW_BUDGET_MS = 200;
@@ -50,6 +51,10 @@ const rects = (page: Page, fill: string) => page.locator(`#preview svg rect[fill
 const cell = (page: Page, r: number, c: number) => page.locator(`#sheet input[data-r="${r}"][data-c="${c}"]`);
 const deck = (page: Page) => page.evaluate(() => JSON.parse(localStorage.getItem('open-charts-deck-v1')!));
 const NAVY = '1F3A5F';
+const navyPaths = (page: Page) => page.locator(`#preview svg path[fill="#${NAVY}"]`).count();
+/** Chart paths (areas, slices, wedges), not the arrowhead marker in <defs>. */
+const paths = (page: Page) => page.locator('#preview svg path').evaluateAll((ps) => ps.filter((p) => !p.closest('marker')).length);
+const visible = (page: Page, ids: string[]) => Promise.all(ids.map((id) => page.locator(`#${id}`).isVisible()));
 
 async function paste(page: Page, r: number, c: number, text: string) {
   await cell(page, r, c).evaluate((el, t) => {
@@ -85,11 +90,13 @@ test('fast typing: the preview ends on the last keystroke', async ({ page }) => 
 
 test('every chart type in the select renders a chart', async ({ page }) => {
   const types = await page.locator('#type option').evaluateAll((os) => os.map((o) => (o as HTMLOptionElement).value));
-  expect(types.sort()).toEqual(['clustered', 'line', 'mekko', 'percent', 'stacked', 'waterfall']);
+  expect(types.sort()).toEqual([...CHART_TYPES].sort());
   for (const type of types) {
     const svg = await edit(page, () => page.selectOption('#type', type));
     expect((await deck(page)).slides[0].chart.type).toBe(type);
     if (type === 'line') expect(await page.locator('#preview svg line').count()).toBeGreaterThan(4);
+    else if (['area', 'area100', 'pie', 'doughnut'].includes(type)) expect(await navyPaths(page), `${type} draws navy areas or slices`).toBeGreaterThan(0);
+    else if (type === 'harvey') expect(await page.locator('#preview svg ellipse').count(), 'harvey draws balls').toBeGreaterThan(0);
     else expect(await rects(page, NAVY), `${type} draws navy bars`).toBeGreaterThan(0);
     if (type === 'percent') expect(svg).toContain('%');
   }
@@ -439,4 +446,58 @@ test('waterfall: first and last are totals by default, and total columns can be 
   await expect(page.locator('#issues li.info')).toHaveCount(0);
   await edit(page, () => page.click('#addSer'));
   await expect(page.locator('#issues li.info')).toContainText('Waterfall shows the first series (EBITDA) only');
+});
+
+test('line: step toggle draws an ortho line and is dropped for other types', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'line'));
+  await expect(page.locator('#step')).toBeVisible();
+  await expect(page.locator('#step')).not.toBeChecked();
+  const diagonal = async () => (await page.locator('#preview svg line[stroke-width="2"]').evaluateAll((ls) =>
+    ls.filter((l) => l.getAttribute('x1') !== l.getAttribute('x2') && l.getAttribute('y1') !== l.getAttribute('y2')).length));
+  expect(await diagonal()).toBeGreaterThan(0);
+  await edit(page, () => page.check('#step'));
+  expect((await deck(page)).slides[0].chart.options.step).toBe(true);
+  expect(await diagonal(), 'every data segment is horizontal or vertical').toBe(0);
+  await edit(page, () => page.selectOption('#type', 'stacked'));
+  await expect(page.locator('#step')).toBeHidden();
+  expect((await deck(page)).slides[0].chart.options.step).toBeUndefined();
+});
+
+test('area and 100% area: filled bands, area controls only, 100% labels add up', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'area'));
+  expect(await visible(page, ['totals', 'valueAxis', 'seriesLabels', 'gap', 'cagrFrom', 'step'])).toEqual([true, true, true, false, false, false]);
+  expect(await paths(page)).toBe(4); // one band per series
+  await edit(page, () => page.check('#totals'));
+  expect(await texts(page)).toContain('216m');
+  await edit(page, () => page.selectOption('#type', 'area100'));
+  const pcts = (await texts(page)).filter((t) => /^\d+%$/.test(t)).map((t) => parseInt(t));
+  // 4 series x 5 years, rounded so each year adds up to exactly 100.
+  expect(pcts.length % 5).toBe(0);
+  expect(pcts.reduce((a, b) => a + b, 0)).toBe(100 * (pcts.length / 4));
+});
+
+test('pie and doughnut: one slice per category, shares add up to 100, first series only', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'pie'));
+  expect(await visible(page, ['seriesLabels', 'valueAxis', 'gap', 'unit', 'totals'])).toEqual([true, false, false, false, false]);
+  expect(await paths(page)).toBe(5);
+  const shares = (await texts(page)).map((t) => t.match(/(\d+)%$/)?.[1]).filter(Boolean).map(Number);
+  expect(shares.reduce((a, b) => a + b, 0)).toBe(100);
+  await expect(page.locator('#issues li.info')).toContainText('Pie shows the first series (Enterprise) only');
+  await edit(page, () => page.selectOption('#type', 'doughnut'));
+  await expect(page.locator('#totals')).toBeVisible();
+  await edit(page, () => page.check('#totals'));
+  expect(await texts(page)).toContain('389m'); // Enterprise across the five years, in the hole
+});
+
+test('harvey: switching seeds a 0–4 assessment grid of balls', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'harvey'));
+  const c = (await deck(page)).slides[0].chart;
+  expect(c.categories).toEqual(['Price', 'Features', 'Support', 'Integrations']);
+  expect(await page.locator('#preview svg ellipse').count()).toBe(12);
+  expect(await visible(page, ['unit', 'valueAxis', 'seriesLabels', 'decimals'])).toEqual([false, false, false, false]);
+  // Edit a score: 4 → 1 turns a full ball into a quarter wedge.
+  const before = await paths(page);
+  await edit(page, () => cell(page, 0, 1).fill('1'));
+  expect(await paths(page)).toBe(before + 1);
+  await expect(page.locator('#issues li.ok')).toHaveCount(1);
 });

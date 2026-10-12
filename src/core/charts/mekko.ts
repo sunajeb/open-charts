@@ -41,16 +41,29 @@ export function layoutMekko(ctx: Ctx) {
   const axisFmt = axisFormatter(ctx, ticks, percent);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
 
+  // A very narrow last column cannot anchor series labels on the right (they would seem to describe
+  // a sliver): name the series in a legend instead, unless the spec asked for labels on the right.
+  const px = frame.x + axisW;
+  const narrowLast = (frame.w - axisW - seriesLabelWidth(ctx, 0)) * (totals[nCat - 1] / grand) < fs * 2;
+  if (narrowLast && o.seriesLabels === 'right' && spec.options?.seriesLabels === undefined) ctx.o.seriesLabels = 'legend';
+
   // Reserve space: legend and totals on top, axis left, series labels right, categories + shares below.
   const legendH = legend(ctx);
   const showTotals = spec.options?.totals ?? true;
-  const totalsH = showTotals ? lh + pad * 0.3 : 0;
-  const rightW = seriesLabelWidth(ctx, 0);
-  const px = frame.x + axisW;
+  // Without labels on the right, a narrow last column still needs room to centre its labels over it.
+  const lastLabelW = Math.max(m.width(ctx.fmt(totals[nCat - 1]), fs, true), Math.min(fs * 6, m.width(spec.categories[nCat - 1], fs))) + 2;
+  const rightW = ctx.o.seriesLabels === 'right' ? seriesLabelWidth(ctx, 0) : narrowLast ? lastLabelW / 2 : 0;
   const pw = frame.w - axisW - rightW;
   const colW = totals.map((t) => (pw * t) / grand);
   const x0 = cats.map((c) => px + colW.slice(0, c).reduce((a, w) => a + w, 0));
   const cx = (c: number) => x0[c] + colW[c] / 2;
+
+  // Totals: bold, centred on their column, nudged sideways over narrow columns, kept a clear gap
+  // apart. Totals that still collide are staggered into a second row above; beyond that, hidden.
+  const totalItems = showTotals ? cats.filter((c) => totals[c]).map((c) => ({ c, cx: cx(c), w: m.width(ctx.fmt(totals[c]), fs, true) + 2 })) : [];
+  const row1 = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 2);
+  const row2 = placeRow(totalItems.filter((it) => !row1.has(it.c)), colW, px, frame.x + frame.w, pad * 2);
+  const totalsH = showTotals ? (lh + pad * 0.3) * (row2.size ? 2 : 1) : 0;
 
   // Category labels wrap inside their column; narrow columns wrap to a minimum width and borrow room.
   const minLabelW = Math.min(fs * 6, pw / nCat);
@@ -68,7 +81,7 @@ export function layoutMekko(ctx: Ctx) {
   if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
 
   const lastSegs: { s: number; y: number }[] = [];
-  const totalItems: (RowItem & { y: number; label: string })[] = [];
+  const tops: number[] = [];
 
   for (const c of cats) {
     if (!totals[c]) { ctx.hidden.push(`${spec.categories[c]}: zero total, no column`); continue; }
@@ -88,18 +101,24 @@ export function layoutMekko(ctx: Ctx) {
       } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
       if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
     }
-    if (showTotals) {
-      const label = ctx.fmt(totals[c]);
-      totalItems.push({ c, cx: cx(c), w: m.width(label, fs, true) + 2, y: yOf(up) - lh - pad * 0.2, label });
-    }
+    tops[c] = yOf(up);
   }
 
-  // Totals: bold, centred on the column, nudged sideways over narrow columns (the row sits above the series labels).
-  const totalPos = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 0.5);
+  const rowY = new Map<number, number>();
   for (const it of totalItems) {
-    const p = totalPos.get(it.c);
-    if (p) text(ctx, `label:total:c${it.c}`, { x: p.x, y: it.y, w: it.w, h: lh, text: it.label, bold: true, role: 'total' });
-    else ctx.hidden.push(`${spec.categories[it.c]}: total label too wide for column`);
+    const p = row1.get(it.c);
+    if (!p) continue;
+    const y = tops[it.c] - lh - pad * 0.2;
+    rowY.set(it.c, y);
+    text(ctx, `label:total:c${it.c}`, { x: p.x, y, w: it.w, h: lh, text: ctx.fmt(totals[it.c]), bold: true, role: 'total' });
+  }
+  for (const it of totalItems) {
+    const p = row2.get(it.c);
+    if (!p) { if (!row1.has(it.c)) ctx.hidden.push(`${spec.categories[it.c]}: total label too wide for column`); continue; }
+    // Above its own column and above any first-row total it reaches over.
+    const below = [...row1].filter(([, q]) => q.x < p.x + it.w && p.x < q.x + q.w).map(([c]) => rowY.get(c)!);
+    const y = Math.min(tops[it.c] - lh - pad * 0.2, ...below) - lh - pad * 0.3;
+    text(ctx, `label:total:c${it.c}`, { x: p.x, y, w: it.w, h: lh, text: ctx.fmt(totals[it.c]), bold: true, role: 'total' });
   }
 
   // Baseline.
