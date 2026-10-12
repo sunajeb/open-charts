@@ -49,3 +49,7 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [ ] O1 staffing · O2 native Windows · O3 spec freeze — defaults from MASTER-PLAN §7.2 assumed
 
 ## Review
+
+## Questions for the owner (collected overnight, 2026-10-13)
+- Optional: grant Accessibility permission to the terminal app (System Settings → Privacy & Security → Accessibility) so live PowerPoint tests can click their own "Enable Macros"/"OK" dialogs.
+- Old test entries vA–vD may still be listed in PowerPoint → Tools → PowerPoint Add-ins (files deleted); remove them with "−".
