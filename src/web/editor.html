@@ -85,6 +85,11 @@
             <option value="line">Line</option>
             <option value="waterfall">Waterfall</option>
             <option value="mekko">Mekko</option>
+            <option value="area">Stacked area</option>
+            <option value="area100">100% area</option>
+            <option value="pie">Pie</option>
+            <option value="doughnut">Doughnut</option>
+            <option value="harvey">Harvey balls</option>
             <option value="combo">Combination</option>
             <option value="mekkoxy">Mekko XY</option>
             <option value="scatter">Scatter</option>
@@ -93,9 +98,9 @@
             <option value="gantt">Gantt</option>
           </select>
         </label>
-        <label data-not="gantt">Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
-        <label data-not="gantt">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
-        <label data-for="stacked percent clustered line waterfall mekko combo mekkoxy scatter bubble gantt">Series labels
+        <label data-hide="pie harvey gantt">Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
+        <label data-hide="harvey gantt">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
+        <label data-for="stacked percent clustered line waterfall mekko area area100 pie doughnut combo mekkoxy scatter bubble gantt">Series labels
           <select id="seriesLabels">
             <option value="">Auto</option>
             <option value="right">Right of chart</option>
@@ -134,8 +139,9 @@
         <label data-for="scatter bubble">X axis title<input id="xTitle" type="text"></label>
         <label data-for="scatter bubble">Y axis title<input id="yTitle" type="text"></label>
         <div class="checks">
-          <label class="check" data-for="stacked percent mekko combo mekkoxy"><input id="totals" type="checkbox"> Totals</label>
-          <label class="check" data-not="scatter bubble table gantt"><input id="valueAxis" type="checkbox"> Value axis</label>
+          <label class="check" data-for="stacked percent mekko area doughnut combo mekkoxy"><input id="totals" type="checkbox"> Totals</label>
+          <label class="check" data-hide="pie doughnut harvey scatter bubble table gantt"><input id="valueAxis" type="checkbox"> Value axis</label>
+          <label class="check" data-for="line"><input id="step" type="checkbox"> Step line</label>
           <label class="check" data-for="percent" title="The datasheet holds percentages: columns keep their own totals"><input id="percentData" type="checkbox"> Values are %</label>
         </div>
       </div>
@@ -191,6 +197,15 @@ const SAMPLE = {
       options: { unit: 'm', totals: true, cagr: { from: 0, to: 4 } },
     },
   }],
+};
+// Seeded when switching to Harvey balls and the datasheet holds values outside 0–4 quarters.
+const HARVEY_SAMPLE = {
+  categories: ['Price', 'Features', 'Support', 'Integrations'],
+  series: [
+    { name: 'Us', values: [3, 4, 2, 3] },
+    { name: 'Competitor A', values: [4, 2, 3, 1] },
+    { name: 'Competitor B', values: [2, 3, 1, 0] },
+  ],
 };
 // Engine defaults per chart type, mirrored so the form shows what the chart actually does.
 const DEFAULTS = {
@@ -366,13 +381,14 @@ function renderForm() {
   $('totals').checked = o.totals ?? DEFAULTS.totals(c.type);
   $('valueAxis').checked = o.valueAxis ?? DEFAULTS.valueAxis(c.type);
   $('zeroBased').value = o.zeroBased === undefined ? '' : String(o.zeroBased);
+  $('step').checked = !!o.step;
   $('percentData').checked = !!o.percentData;
   $('combo').value = o.combo ?? 'stacked';
   $('sort').value = o.sort ?? 'sheet';
   $('xTitle').value = o.axisTitles?.x ?? '';
   $('yTitle').value = o.axisTitles?.y ?? '';
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(c.type);
-  for (const el of document.querySelectorAll('[data-not]')) el.hidden = el.dataset.not.split(' ').includes(c.type);
+  for (const el of document.querySelectorAll('[data-hide]')) el.hidden = el.dataset.hide.split(' ').includes(c.type);
   $('sheetHint').textContent = SHEET_HINTS[c.type] ?? '';
   $('sheetHint').hidden = !SHEET_HINTS[c.type];
   renderArrowSelects();
@@ -506,6 +522,13 @@ $('type').onchange = (e) => {
     if (!types.includes(to)) delete o[k];
   }
   c.type = to;
+  if (to !== 'line') delete o.step;
+  // Harvey balls read 0–4 quarters (or 0–1): start from a small assessment grid if the data does not fit.
+  if (to === 'harvey' && c.series.some((s) => s.values.some((v) => typeof v === 'number' && (v < 0 || v > 4)))) {
+    Object.assign(c, structuredClone(HARVEY_SAMPLE));
+    remapCategories(() => -1);
+    invalid.clear(); focusCell = null;
+  }
   changed(true);
 };
 $('unit').oninput = (e) => {
@@ -518,6 +541,7 @@ $('seriesLabels').onchange = (e) => { setOpt('seriesLabels', e.target.value || u
 $('mekko').onchange = (e) => { setOpt('mekko', e.target.value === 'percent' ? undefined : e.target.value); };
 $('totals').onchange = (e) => { setOpt('totals', e.target.checked); };
 $('valueAxis').onchange = (e) => { setOpt('valueAxis', e.target.checked); };
+$('step').onchange = (e) => { setOpt('step', e.target.checked || undefined); };
 $('zeroBased').onchange = (e) => { setOpt('zeroBased', e.target.value === '' ? undefined : e.target.value === 'true'); };
 $('percentData').onchange = (e) => { setOpt('percentData', e.target.checked || undefined); };
 $('combo').onchange = (e) => { setOpt('combo', e.target.value === 'stacked' ? undefined : e.target.value); };
@@ -635,6 +659,7 @@ function showSlide(s) {
   }
   const c = chart();
   if (c.type === 'waterfall' && c.series.length > 1) notes.push({ text: `Waterfall shows the first series (${c.series[0].name}) only`, cls: 'info' });
+  if ((c.type === 'pie' || c.type === 'doughnut') && c.series.length > 1) notes.push({ text: `${c.type === 'pie' ? 'Pie' : 'Doughnut'} shows the first series (${c.series[0].name}) only`, cls: 'info' });
   for (const t of s.issues) notes.push({ text: t.replace(/^hidden: /, 'Label hidden (no room): '), cls: t.startsWith('hidden') ? 'info' : '' });
   if (!s.issues.length) notes.push({ text: 'Layout check passed: no overlaps', cls: 'ok' });
   $('issues').replaceChildren(...notes.map(({ text, cls }) => {

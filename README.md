@@ -13,9 +13,12 @@ Consulting-quality charts for PowerPoint, open source. You give it data, it work
 | `stacked` | Composition over time, with totals and CAGR / difference arrows |
 | `percent` | 100% mix; labels are rounded so every column reads exactly 100% |
 | `clustered` | Side-by-side comparison, with legend and optional value axis |
-| `line` | Trends; labels placed clear of lines, markers and each other |
+| `line` | Trends; labels placed clear of lines, markers and each other; `step: true` for a step (ortho) line |
 | `waterfall` | Bridges (e.g. EBITDA walk) with subtotals and connectors |
 | `mekko` | Market maps: column width = segment size |
+| `area` / `area100` | Stacked and 100% area: filled bands, in-band labels, gaps interpolated |
+| `pie` / `doughnut` | Shares of one series; labels inside when they fit, else outside with leaders; shares sum to 100% |
+| `harvey` | Harvey-ball grid (0–4 quarters or 0–1), rows = series, columns = categories |
 
 ## Use it
 

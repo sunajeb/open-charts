@@ -119,4 +119,48 @@ export const samples: Partial<Record<ChartType, ChartSpec>> = {
       { name: 'Milestone', values: ['2026-02-02', null, '2026-05-04', '2026-11-30', '2026-03-16'] },
     ],
   },
+  area: {
+    specVersion: 1,
+    type: 'area',
+    categories: years,
+    series: [
+      { name: 'Enterprise', values: [42, 58, 75, 96, 118] },
+      { name: 'Mid-market', values: [31, 36, 44, 51, 60] },
+      { name: 'SMB', values: [18, 21, 22, 26, 29] },
+    ],
+    options: { unit: 'm', totals: true },
+  },
+  area100: {
+    specVersion: 1,
+    type: 'area100',
+    categories: years,
+    series: [
+      { name: 'Enterprise', values: [42, 58, 75, 96, 118] },
+      { name: 'Mid-market', values: [31, 36, 44, 51, 60] },
+      { name: 'SMB', values: [18, 21, 22, 26, 29] },
+    ],
+  },
+  pie: {
+    specVersion: 1,
+    type: 'pie',
+    categories: ['Enterprise', 'Mid-market', 'SMB', 'Public sector', 'Other'],
+    series: [{ name: 'Revenue 2025', values: [118, 60, 29, 14, 6] }],
+  },
+  doughnut: {
+    specVersion: 1,
+    type: 'doughnut',
+    categories: ['Enterprise', 'Mid-market', 'SMB', 'Public sector', 'Other'],
+    series: [{ name: 'Revenue 2025', values: [118, 60, 29, 14, 6] }],
+    options: { unit: 'm', totals: true },
+  },
+  harvey: {
+    specVersion: 1,
+    type: 'harvey',
+    categories: ['Price', 'Features', 'Support', 'Integrations'],
+    series: [
+      { name: 'Us', values: [3, 4, 2, 3] },
+      { name: 'Competitor A', values: [4, 2, 3, 1] },
+      { name: 'Competitor B', values: [2, 3, 1, 0] },
+    ],
+  },
 };

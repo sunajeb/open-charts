@@ -53,7 +53,7 @@ export function layoutMekkoXY(ctx: Ctx) {
   const xMax = grandW;
   const xFmt = (v: number) => fmtW(v, xTicks ? inferDecimals(xTicks) : 0);
 
-  const legendH = legend(ctx, 'box', color, (s) => s > 0);
+  const legendH = legend(ctx, 'box', color, undefined, (s) => s > 0);
   // Axis titles from the series names: the height series (when there is one) above the plot, the width series under it.
   const yTitleH = hs.length === 1 ? lh + pad * 0.3 : 0;
   const topH = lh + pad * 0.3;

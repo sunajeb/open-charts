@@ -3,6 +3,7 @@ import type { Scale, Unit } from './numbers.ts';
 export type { Scale, Unit } from './numbers.ts';
 
 export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line'
+  | 'area' | 'area100' | 'pie' | 'doughnut' | 'harvey'
   | 'combo' | 'mekkoxy' | 'scatter' | 'bubble' | 'table' | 'gantt';
 
 /**
@@ -56,6 +57,8 @@ export interface ChartOptions {
   seriesLabels?: 'right' | 'legend' | 'none';
   /** Waterfall: category indices drawn as totals anchored at the baseline. Default: first and last category. */
   totalsAt?: number[];
+  /** Line: draw a step (ortho) line, horizontal to the next category and then vertical. Default off. */
+  step?: boolean;
   /** 100% chart: values are already percentages (the datasheet's % toggle); columns keep their own totals. */
   percentData?: boolean;
   /** Combination chart: how the column series are drawn. Default "stacked". */
@@ -161,7 +164,9 @@ export interface Scene {
    * Role of each shape, parallel to `shapes`, assigned by the engine only: `bar:s<i>:c<j>`,
    * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
-   * `marker:s<i>:c<j>`, `line:s<i>`, `shade:<k>` (Gantt shaded periods). Always set by `layoutChart`.
+   * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
+   * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
+   * `shade:<k>` (Gantt shaded period). Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

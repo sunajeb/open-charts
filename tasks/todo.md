@@ -12,24 +12,25 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - P5 Gantt / agenda / Excel live links (52 ew; after P3)
 
 ## Shared contracts (all agents code against these)
-- `Scene.roles?: string[]`, parallel to `Scene.shapes`, assigned by the engine only. Format: `bar:s<i>:c<j>`, `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`, `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`, `marker:s<i>:c<j>`, `line:s<i>`
+- `Scene.roles?: string[]`, parallel to `Scene.shapes`, assigned by the engine only. Format: `bar:s<i>:c<j>`, `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`, `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`, `marker:s<i>:c<j>`, `line:s<i>`; wave 2: `area:s<i>`, `wedge:s0:c<j>`, `leader:c<j>`, `legend:c<j>`, `ball:s<i>:c<j>`, `label:total` (doughnut grand total)
 - Tag contract v1 (MASTER-PLAN §3): group gets `OC_V`="1", `OC_ENGINE`, `OC_SPEC` (chunked above 30 KB), `OC_FRAME`="x,y,w,h", `OC_FONT`; each child gets `OC_ROLE`
 - `specVersion: 1` at chart and deck root; unversioned input = v0, migrated by `migrate()`
 
 ## Wave 1 (three agents in parallel, git worktrees)
-- [ ] **A — engine (P1):** B3 date CAGR (30/360), B5, B7 hhea/OS2 line height, B8 long-word overflow, B9 legend wrap, B10, B11, B12 gate v2, B13, B14 numbers/locale service, B15 path-addressed validation; spec v1 + `migrate` + hand-written JSON Schema; `Scene.roles`; horizontal bar orientation
-- [ ] **B — I/O (P1 tags):** writer emits tag contract v1; `inspect` and `import`; `--strict` / `--report`
-- [ ] **C — QA + editor (P1 editor polish):** Playwright E2E for every editor button; LibreOffice golden pipeline (soffice → pdftoppm → pixel diff); editor transpose / reverse / all chart types; fix whatever the E2E finds
+- [x] **A — engine (P1):** B3 date CAGR (30/360), B5, B7 hhea/OS2 line height, B8 long-word overflow, B9 legend wrap, B10, B11, B12 gate v2, B13, B14 numbers/locale service, B15 path-addressed validation; spec v1 + `migrate` + hand-written JSON Schema; `Scene.roles`; horizontal bar orientation
+- [x] **B — I/O (P1 tags):** writer emits tag contract v1; `inspect` and `import`; `--strict` / `--report`
+- [x] **C — QA + editor (P1 editor polish):** Playwright E2E for every editor button; LibreOffice golden pipeline (soffice → pdftoppm → pixel diff); editor transpose / reverse / all chart types; fix whatever the E2E finds
 
 ## Wave 2
-- [ ] Merge wave 1, resolve conflicts, full test suite once
+- [x] Merge wave 1 (68 unit, 30 editor E2E, 13 goldens green; goldens rebaselined after review)
+- [x] Scene `path` shape + preset outlines (diamond, roundRect, triangle)
 - [ ] Chart catalogue (owner's list, 2026-10-13). ✅ = exists today
   - Column/bar: ✅ stacked, ✅ clustered, ✅ 100%, [ ] percent-axis variant, ✅ waterfall (subtotals, connectors, below-zero), [ ] combination (stacked/clustered + line); [ ] bar orientation for all (agent A)
-  - Line/area: ✅ line, [ ] ortho/step line, [ ] stacked area, [ ] area 100%
+  - Line/area: ✅ line, ✅ ortho/step line, ✅ stacked area, ✅ area 100%
   - Marimekko: ✅ Mekko (% and units), [ ] Mekko XY (variable width and height)
   - XY: [ ] scatter, [ ] bubble
-  - Circular: [ ] pie, [ ] doughnut
-  - Special: [ ] Gantt (timeline: tasks, milestones, scales), [ ] Harvey ball, [ ] table
+  - Circular: ✅ pie, ✅ doughnut
+  - Special: [ ] Gantt (timeline: tasks, milestones, scales), ✅ Harvey ball, [ ] table
   - Needs new scene shapes first: `path` (polygon/step/area fills, wedges via arcs) for writer, SVG and add-in
   - `.ppam` = ribbon (`customUI14.xml`: own "open-charts" tab, Charts gallery with every type, Edit data, Update) + one thin VBA module that only forwards the control id
   - VBA → engine through `AppleScriptTask` (the sandbox-approved Mac bridge; the reference uses a `Declare` into its native dylib) → `node` engine lays out the chart → VBA draws native shapes via the object model (AddShape, AddLine + arrowheads, AddTextbox, BuildFreeform), groups and names them, writes the `OC_*` tags
@@ -48,3 +49,7 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [ ] O1 staffing · O2 native Windows · O3 spec freeze — defaults from MASTER-PLAN §7.2 assumed
 
 ## Review
+
+## Questions for the owner (collected overnight, 2026-10-13)
+- Optional: grant Accessibility permission to the terminal app (System Settings → Privacy & Security → Accessibility) so live PowerPoint tests can click their own "Enable Macros"/"OK" dialogs.
+- Old test entries vA–vD may still be listed in PowerPoint → Tools → PowerPoint Add-ins (files deleted); remove them with "−".

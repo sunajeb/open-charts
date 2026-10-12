@@ -84,7 +84,9 @@ test('negative and zero data are tolerated', () => {
     type: 'mekko', categories: ['A', 'B'],
     series: [{ name: 'x', values: [10, 0] }, { name: 'y', values: [-5, 0] }],
   }, CHART_FRAME, m);
-  assert.equal(rects(scene).length, 1);
+  assert.equal(scene.roles!.filter((r) => r.startsWith('bar:')).length, 1);
+  // The empty last column cannot anchor series labels: they move to a legend.
+  assert.equal(scene.roles!.filter((r) => r.startsWith('legend:s')).length, 4);
   assert.ok(scene.hidden.some((h) => h.includes('negative')));
   assert.ok(scene.hidden.some((h) => h.includes('zero total')));
   assert.deepEqual(checkScene(scene), []);
@@ -96,4 +98,34 @@ test('mekko example deck lays out with no overlaps or out-of-frame labels', () =
   assert.equal(String.fromCharCode(pptx[0], pptx[1]), 'PK');
   assert.equal(slides.length, 3);
   for (const s of slides) assert.deepEqual(s.issues.filter((i) => !i.startsWith('hidden')), [], s.title);
+});
+
+test('a narrow last column moves the series names to a legend (unless right labels were asked for)', () => {
+  const narrow: ChartSpec = {
+    type: 'mekko', categories: ['Big', 'Medium', 'Tiny'],
+    series: [{ name: 'Us', values: [300, 150, 2] }, { name: 'Them', values: [200, 100, 1] }],
+    options: { unit: 'm' },
+  };
+  const scene = layoutChart(narrow, CHART_FRAME, m);
+  assert.equal(scene.roles!.filter((r) => r.startsWith('legend:s')).length, 4);
+  assert.equal(scene.roles!.filter((r) => r.startsWith('label:series')).length, 0);
+  // The sliver's total still gets room to sit over it.
+  assert.ok(scene.roles!.includes('label:total:c2'));
+  assert.deepEqual(checkScene(scene, { measurer: m }), []);
+  const right = layoutChart({ ...narrow, options: { unit: 'm', seriesLabels: 'right' } }, CHART_FRAME, m);
+  assert.ok(right.roles!.some((r) => r.startsWith('label:series')));
+});
+
+test('totals that collide over narrow columns are staggered into a second row, never overlapping', () => {
+  const scene = layoutChart({
+    type: 'mekko', categories: ['A', 'B', 'C', 'D', 'E'],
+    series: [{ name: 'x', values: [400, 6, 5, 7, 400] }, { name: 'y', values: [300, 3, 4, 2, 300] }],
+    options: { unit: 'm' },
+  }, CHART_FRAME, m);
+  const totals = texts(scene, 'total');
+  const ys = [...new Set(totals.map((t) => Math.round(t.y)))];
+  assert.equal(ys.length, 2, 'two rows of totals');
+  assert.deepEqual(checkScene(scene, { measurer: m }), []);
+  const accounted = totals.length + scene.hidden.filter((h) => h.includes('total label')).length;
+  assert.equal(accounted, 5);
 });

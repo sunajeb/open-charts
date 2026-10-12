@@ -14,6 +14,7 @@ export interface SpecError {
 
 export const CHART_TYPES = [
   'stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line',
+  'area', 'area100', 'pie', 'doughnut', 'harvey',
   'combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt',
 ] as const;
 export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options'] as const;
@@ -21,6 +22,7 @@ export const SERIES_KEYS = ['name', 'values', 'color', 'as'] as const;
 export const OPTION_KEYS = [
   'totals', 'cagr', 'difference', 'valueAxis', 'zeroBased', 'decimals', 'unit', 'format', 'locale',
   'scale', 'orientation', 'mekko', 'gap', 'seriesLabels', 'totalsAt',
+  'step',
   'percentData', 'combo', 'sort', 'shades', 'axisTitles',
 ] as const;
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
@@ -136,7 +138,7 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
 function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nCat: number) {
   const p = (k: string, ...rest: (string | number)[]) => ['options', k, ...rest];
   e.unknown(o, OPTION_KEYS, ['options']);
-  for (const k of ['totals', 'valueAxis', 'zeroBased'] as const) {
+  for (const k of ['totals', 'valueAxis', 'zeroBased', 'step'] as const) {
     if (o[k] !== undefined && typeof o[k] !== 'boolean') e.add(p(k), `must be true or false, got ${describe(o[k])}`);
   }
   const index = (v: unknown, path: (string | number)[]) => {
@@ -187,6 +189,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   if (o.orientation === 'horizontal' && !['stacked', 'clustered', 'percent'].includes(type)) {
     e.add(p('orientation'), `horizontal orientation is available for stacked, clustered and percent charts, not ${type}`);
   }
+  if (o.step && type !== 'line') e.add(p('step'), `step lines are available for line charts, not ${type}`);
   if (o.gap !== undefined && (typeof o.gap !== 'number' || !Number.isFinite(o.gap) || o.gap < 0 || o.gap > 10)) {
     e.add(p('gap'), `must be a number 0–10, got ${describe(o.gap)}`);
   }
