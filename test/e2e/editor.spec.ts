@@ -97,6 +97,9 @@ test('every chart type in the select renders a chart', async ({ page }) => {
     if (type === 'line') expect(await page.locator('#preview svg line').count()).toBeGreaterThan(4);
     else if (['area', 'area100', 'pie', 'doughnut'].includes(type)) expect(await navyPaths(page), `${type} draws navy areas or slices`).toBeGreaterThan(0);
     else if (type === 'harvey') expect(await page.locator('#preview svg ellipse').count(), 'harvey draws balls').toBeGreaterThan(0);
+    else if (type === 'scatter' || type === 'bubble') expect(await page.locator(`#preview svg ellipse[fill="#${NAVY}"]`).count(), `${type} draws points`).toBeGreaterThan(2);
+    else if (type === 'gantt') expect(await page.locator('#preview svg polygon').count(), 'gantt draws milestone diamonds').toBeGreaterThan(0);
+    else if (type === 'table') expect((await texts(page)).length, 'table draws header, row names and cells').toBeGreaterThan(8);
     else expect(await rects(page, NAVY), `${type} draws navy bars`).toBeGreaterThan(0);
     if (type === 'percent') expect(svg).toContain('%');
   }
@@ -500,4 +503,93 @@ test('harvey: switching seeds a 0–4 assessment grid of balls', async ({ page }
   await edit(page, () => cell(page, 0, 1).fill('1'));
   expect(await paths(page)).toBe(before + 1);
   await expect(page.locator('#issues li.ok')).toHaveCount(1);
+});
+
+// ---- Combination, percent axis, Mekko XY, scatter, bubble, table, Gantt ---------------------------
+
+test('combo: the last series becomes a line; series can be switched between columns and line', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'combo'));
+  const c = (await deck(page)).slides[0].chart;
+  expect(c.series.at(-1).as).toBe('line');
+  await expect(page.locator('#asLine')).toBeVisible();
+  const markers = () => page.locator('#preview svg ellipse').count();
+  expect(await markers()).toBe(5);
+  await edit(page, () => page.locator('#asLine input').nth(0).check());
+  expect(await markers()).toBe(10);
+  await edit(page, () => page.locator('#asLine input').nth(0).uncheck());
+  await edit(page, () => page.selectOption('#combo', 'clustered'));
+  expect((await deck(page)).slides[0].chart.options.combo).toBe('clustered');
+  expect(await rects(page, NAVY)).toBe(6); // five bars and the legend swatch
+  await expect(page.locator('#issues li.error')).toHaveCount(0);
+});
+
+test('percent: "Values are %" keeps each column at its own total', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'percent'));
+  await expect(page.locator('#percentData')).toBeVisible();
+  await edit(page, () => page.check('#valueAxis'));
+  const tops = async () => page.locator(`#preview svg rect[fill="#${NAVY}"]`).evaluateAll((els) => els.map((e) => +e.getAttribute('height')!));
+  const before = await tops();
+  await edit(page, () => page.check('#percentData'));
+  expect((await deck(page)).slides[0].chart.options.percentData).toBe(true);
+  expect(await texts(page)).toContain('42%'); // the entered value, not its share of the column
+  expect(await texts(page)).toContain('100%'); // axis
+  expect(await tops()).not.toEqual(before);
+  await edit(page, () => page.selectOption('#type', 'stacked'));
+  expect((await deck(page)).slides[0].chart.options.percentData).toBeUndefined();
+});
+
+test('mekkoxy: first row is the width, order by height', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'mekkoxy'));
+  await expect(page.locator('#sheetHint')).toContainText('first row is the column width');
+  const xs = async () => page.locator('#preview svg rect[width]').evaluateAll((els) => els.filter((e) => e.getAttribute('fill') !== 'none').map((e) => +e.getAttribute('x')!));
+  const before = await xs();
+  await edit(page, () => page.selectOption('#sort', 'descending'));
+  expect((await deck(page)).slides[0].chart.options.sort).toBe('descending');
+  expect(await xs()).not.toEqual(before);
+});
+
+test('scatter and bubble: datasheet cells are points, axis titles', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'scatter'));
+  await expect(cell(page, 0, 0)).toHaveValue('42; 31');
+  await expect(page.locator('#valueAxis')).toBeHidden();
+  await edit(page, () => cell(page, 0, 0).fill('10; 20'));
+  expect((await deck(page)).slides[0].chart.series[0].values[0]).toEqual([10, 20]);
+  await edit(page, () => cell(page, 0, 1).fill('oops'));
+  await expect(page.locator('#issues')).toContainText('is not "x; y"');
+  await edit(page, () => cell(page, 0, 1).fill('12; 25'));
+  await edit(page, () => page.fill('#xTitle', 'Seats'));
+  await edit(page, () => page.fill('#yTitle', 'Price'));
+  expect(await texts(page)).toEqual(expect.arrayContaining(['Seats', 'Price', '2021']));
+  await edit(page, () => page.selectOption('#type', 'bubble'));
+  await expect(cell(page, 0, 0)).toHaveValue('10; 20; 1');
+  await edit(page, () => cell(page, 0, 0).fill('10; 20; 9'));
+  const radii = await page.locator(`#preview svg ellipse[fill="#${NAVY}"]`).evaluateAll((els) => els.map((e) => +e.getAttribute('rx')!));
+  expect(Math.max(...radii) / Math.min(...radii)).toBeCloseTo(3, 1); // area ∝ size: √9 = 3
+  await edit(page, () => page.selectOption('#type', 'stacked'));
+  expect((await deck(page)).slides[0].chart.series.map((s: { name: string }) => s.name)).toEqual(['X', 'Y', 'Size']);
+});
+
+test('table: header, row names and formatted numbers; text cells are kept', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'table'));
+  await expect(page.locator('#valueAxis')).toBeHidden();
+  expect(await texts(page)).toEqual(expect.arrayContaining(['2021', '2025E', 'Enterprise', '42m', '118m']));
+  await edit(page, () => cell(page, 0, 0).fill('n/a'));
+  expect(await texts(page)).toContain('n/a');
+  expect((await deck(page)).slides[0].chart.series[0].values[0]).toBe('n/a');
+  await edit(page, () => page.selectOption('#type', 'stacked'));
+  expect((await deck(page)).slides[0].chart.series[0].values[0]).toBeNull();
+});
+
+test('gantt: dates in the datasheet drive bars, milestones and the calendar scale', async ({ page }) => {
+  await edit(page, () => page.selectOption('#type', 'gantt'));
+  await expect(page.locator('#unit')).toBeHidden();
+  await expect(cell(page, 0, 0)).toHaveValue('2026-01-05');
+  expect(await page.locator('#preview svg polygon').count()).toBe(4);
+  expect(await texts(page)).toEqual(expect.arrayContaining(['2026', 'Jan', 'Feb 2', 'Diagnostic']));
+  const width = async () => Number(await page.locator(`#preview svg rect[fill="#${NAVY}"]`).first().getAttribute('width'));
+  const w0 = await width();
+  await edit(page, () => cell(page, 1, 0).fill('2026-03-02'));
+  expect(await width()).toBeGreaterThan(w0 * 1.5);
+  await edit(page, () => page.selectOption('#type', 'stacked'));
+  expect((await deck(page)).slides[0].chart.series[0].values[0]).toBe(42);
 });
