@@ -102,7 +102,8 @@
         "gap": { "type": "number", "minimum": 0, "maximum": 10 },
         "seriesLabels": { "enum": ["right", "legend", "none"] },
         "totalsAt": { "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } },
-        "step": { "type": "boolean", "description": "Line only: step (ortho) line, horizontal then vertical." }
+        "step": { "type": "boolean", "description": "Line only: step (ortho) line, horizontal then vertical." },
+        "labelContent": { "enum": ["percent", "value", "both"], "description": "Pie and doughnut: slice labels show shares (default), absolute values, or both." }
       }
     }
   }

@@ -21,6 +21,7 @@ export const OPTION_KEYS = [
   'totals', 'cagr', 'difference', 'valueAxis', 'zeroBased', 'decimals', 'unit', 'format', 'locale',
   'scale', 'orientation', 'mekko', 'gap', 'seriesLabels', 'totalsAt',
   'step',
+  'labelContent',
 ] as const;
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart'] as const;
@@ -176,6 +177,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   enumOf('orientation', ['vertical', 'horizontal']);
   enumOf('mekko', ['percent', 'unit']);
   enumOf('seriesLabels', ['right', 'legend', 'none']);
+  enumOf('labelContent', ['percent', 'value', 'both']);
   if (o.orientation === 'horizontal' && !['stacked', 'clustered', 'percent'].includes(type)) {
     e.add(p('orientation'), `horizontal orientation is available for stacked, clustered and percent charts, not ${type}`);
   }

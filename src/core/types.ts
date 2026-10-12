@@ -52,6 +52,8 @@ export interface ChartOptions {
   totalsAt?: number[];
   /** Line: draw a step (ortho) line, horizontal to the next category and then vertical. Default off. */
   step?: boolean;
+  /** Pie and doughnut: what the slice labels show — shares (default), absolute values, or both ("118 (52%)"). */
+  labelContent?: 'percent' | 'value' | 'both';
 }
 
 export interface ChartSpec {
