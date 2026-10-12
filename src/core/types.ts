@@ -81,8 +81,30 @@ export interface RectShape {
   fill: string;
   stroke?: string;
   strokeWidth?: number;
-  /** Draw as an ellipse inscribed in the box (line chart markers). */
+  /** Draw as an ellipse inscribed in the box (line chart markers). Same as `geom: 'ellipse'`. */
   ellipse?: boolean;
+  /** Preset outline drawn in the box. Default 'rect'. */
+  geom?: 'rect' | 'ellipse' | 'diamond' | 'roundRect' | 'triangle';
+}
+
+/**
+ * One path command. Coordinates are slide points. `A` draws a circular arc centred on (cx, cy):
+ * angles in degrees, 0 = 3 o'clock, positive = clockwise on screen; it starts with a straight
+ * segment from the current point to the arc's start (or moves there if the path is empty).
+ */
+export type PathCmd =
+  | { op: 'M' | 'L'; x: number; y: number }
+  | { op: 'A'; cx: number; cy: number; r: number; start: number; sweep: number }
+  | { op: 'Z' };
+
+/** Freeform: area fills, pie and doughnut wedges, Harvey balls. Renderers draw the flattened outline. */
+export interface PathShape {
+  kind: 'path';
+  commands: PathCmd[];
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  dash?: boolean;
 }
 
 export interface LineShape {
@@ -113,7 +135,7 @@ export interface TextShape {
   role?: 'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration' | 'title';
 }
 
-export type Shape = RectShape | LineShape | TextShape;
+export type Shape = RectShape | LineShape | TextShape | PathShape;
 
 export interface Scene {
   frame: Frame;

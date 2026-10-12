@@ -1,5 +1,6 @@
 // SVG preview of a slide. Uses the same scene as the PowerPoint writer, so the two always match.
 import type { Scene, Shape } from '../core/types.ts';
+import { flattenPath, rectGeom } from '../core/path.ts';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const c = (v?: string) => (v ? `#${v.replace('#', '')}` : 'none');
@@ -8,8 +9,22 @@ const n = (v: number) => +v.toFixed(2);
 function shape(s: Shape, font: string): string {
   if (s.kind === 'rect') {
     const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"` : '';
-    if (s.ellipse) return `<ellipse cx="${n(s.x + s.w / 2)}" cy="${n(s.y + s.h / 2)}" rx="${n(s.w / 2)}" ry="${n(s.h / 2)}" fill="${c(s.fill)}"${stroke}/>`;
+    const g = rectGeom(s);
+    if (g === 'diamond' || g === 'triangle') {
+      const pts = g === 'diamond'
+        ? [[s.x + s.w / 2, s.y], [s.x + s.w, s.y + s.h / 2], [s.x + s.w / 2, s.y + s.h], [s.x, s.y + s.h / 2]]
+        : [[s.x + s.w / 2, s.y], [s.x + s.w, s.y + s.h], [s.x, s.y + s.h]];
+      return `<polygon points="${pts.map(([x, y]) => `${n(x)},${n(y)}`).join(' ')}" fill="${c(s.fill)}"${stroke}/>`;
+    }
+    if (g === 'roundRect') return `<rect x="${n(s.x)}" y="${n(s.y)}" width="${n(s.w)}" height="${n(s.h)}" rx="${n(Math.min(s.w, s.h) / 6)}" fill="${c(s.fill)}"${stroke}/>`;
+    if (g === 'ellipse') return `<ellipse cx="${n(s.x + s.w / 2)}" cy="${n(s.y + s.h / 2)}" rx="${n(s.w / 2)}" ry="${n(s.h / 2)}" fill="${c(s.fill)}"${stroke}/>`;
     return `<rect x="${n(s.x)}" y="${n(s.y)}" width="${n(s.w)}" height="${n(s.h)}" fill="${c(s.fill)}"${stroke}/>`;
+  }
+  if (s.kind === 'path') {
+    const d = flattenPath(s.commands).map(({ points, closed }) =>
+      `M${points.map((p) => `${n(p.x)},${n(p.y)}`).join(' L')}${closed ? ' Z' : ''}`).join(' ');
+    const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"${s.dash ? ' stroke-dasharray="4 3"' : ''} stroke-linejoin="round"` : '';
+    return `<path d="${d}" fill="${c(s.fill)}"${stroke}/>`;
   }
   if (s.kind === 'line') {
     return `<line x1="${n(s.x1)}" y1="${n(s.y1)}" x2="${n(s.x2)}" y2="${n(s.y2)}" stroke="${c(s.color)}" stroke-width="${s.width}"${s.dash ? ' stroke-dasharray="4 3"' : ''}${s.arrowEnd ? ' marker-end="url(#arrow)"' : ''}/>`;

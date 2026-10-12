@@ -2,7 +2,8 @@
 // so the deck opens and edits in any PowerPoint, Keynote or LibreOffice without this tool.
 // Every group carries tag contract v1 (OC_* tags, see tags.ts) and each child its OC_ROLE, as real
 // PowerPoint tags: p:custDataLst → ppt/tags/tagN.xml, visible to VBA Shape.Tags and Office.js.
-import type { Scene, Shape, TextShape } from '../core/types.ts';
+import type { PathShape, Scene, Shape, TextShape } from '../core/types.ts';
+import { flattenPath, pathBounds, rectGeom } from '../core/path.ts';
 import type { Tags } from './tags.ts';
 import { zip } from './zip.ts';
 
@@ -63,7 +64,8 @@ function shapeName(s: Shape, id: number, role?: string): string {
     const [head, ...rest] = role.split(':');
     return [ROLE_NAMES[head] ?? head, ...rest].join(' ');
   }
-  if (s.kind === 'rect') return `${s.ellipse ? 'Marker' : 'Bar'} ${id}`;
+  if (s.kind === 'rect') return `${rectGeom(s) === 'ellipse' ? 'Marker' : 'Bar'} ${id}`;
+  if (s.kind === 'path') return `Shape ${id}`;
   return `${s.kind === 'line' ? 'Line' : 'Label'} ${id}`;
 }
 
@@ -72,8 +74,9 @@ function shapeXml(s: Shape, ids: Ids, font: string, role?: string, addTags?: Add
   const name = esc(shapeName(s, id, role));
   const nv = nvPr(role && addTags ? addTags([['OC_ROLE', role]]) : undefined);
   if (s.kind === 'rect') {
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${s.ellipse ? 'ellipse' : 'rect'}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${rectGeom(s)}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
   }
+  if (s.kind === 'path') return pathXml(s, id, name, nv);
   if (s.kind === 'line') {
     const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2);
     const flip = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
@@ -81,6 +84,18 @@ function shapeXml(s: Shape, ids: Ids, font: string, role?: string, addTags?: Add
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvCxnSpPr/>${nv}</p:nvCxnSpPr><p:spPr><a:xfrm${flip}><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(Math.abs(s.x2 - s.x1))}" cy="${e(Math.abs(s.y2 - s.y1))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom>${ln(s.color, s.width, extra)}</p:spPr></p:cxnSp>`;
   }
   return textXml(s, id, font, name, nv);
+}
+
+/** Freeform as custom geometry, from the same flattened outline every renderer uses. */
+function pathXml(s: PathShape, id: number, name: string, nv: string): string {
+  const b = pathBounds(s);
+  const w = Math.max(1, e(b.w)), h = Math.max(1, e(b.h));
+  const pt = (p: { x: number; y: number }) => `<a:pt x="${e(p.x - b.x)}" y="${e(p.y - b.y)}"/>`;
+  const paths = flattenPath(s.commands).map(({ points, closed }) =>
+    `<a:path w="${w}" h="${h}"${s.fill && closed ? '' : ' fill="none"'}><a:moveTo>${pt(points[0])}</a:moveTo>${points.slice(1).map((p) => `<a:lnTo>${pt(p)}</a:lnTo>`).join('')}${closed ? '<a:close/>' : ''}</a:path>`,
+  ).join('');
+  const dash = s.dash ? '<a:prstDash val="dash"/>' : '';
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(b.x)}" y="${e(b.y)}"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst>${paths}</a:pathLst></a:custGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth, dash)}</p:spPr></p:sp>`;
 }
 
 function textXml(t: TextShape, id: number, font: string, name: string, nv = '<p:nvPr/>'): string {
