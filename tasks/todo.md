@@ -31,7 +31,12 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
   - Circular: [ ] pie, [ ] doughnut
   - Special: [ ] Gantt (timeline: tasks, milestones, scales), [ ] Harvey ball, [ ] table
   - Needs new scene shapes first: `path` (polygon/step/area fills, wedges via arcs) for writer, SVG and add-in
-- [ ] PowerPoint add-in (Office.js, path A): task pane = editor, inserts the chart into the current presentation; re-edit a selected chart from its tags; sideload and test on PowerPoint for Mac
+  - `.ppam` = ribbon (`customUI14.xml`: own "open-charts" tab, Charts gallery with every type, Edit data, Update) + one thin VBA module that only forwards the control id
+  - VBA → engine through `AppleScriptTask` (the sandbox-approved Mac bridge; the reference uses a `Declare` into its native dylib) → `node` engine lays out the chart → VBA draws native shapes via the object model (AddShape, AddLine + arrowheads, AddTextbox, BuildFreeform), groups and names them, writes the `OC_*` tags
+  - Chart identity = tags + shape names (reference: GUID + shape name + persisted state); `OC_SPEC` is the stored datasheet
+  - Edit data opens the datasheet editor; Update re-lays-out the selected chart in place
+  - `install` copies the add-in into Office's add-in folder and the bridge script into `~/Library/Application Scripts/com.microsoft.Powerpoint`
+  - Tests: unit (scene serialiser, vbaProject writer, package), and an end-to-end run in real PowerPoint via AppleScript `run VB macro` for every chart type → `inspect` the saved deck → export PNGs and check by eye
 
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
