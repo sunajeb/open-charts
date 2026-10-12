@@ -59,15 +59,24 @@ Public Sub OCPREFIX_SelectChart(ByVal n As String)
 Failed:
 End Sub
 
-' Saves a copy of the active presentation (format 0 = .pptx, 18 = one PNG per slide) to `dest`
-' outside PowerPoint's sandbox: written to the sandbox's temp folder, copied out by the bridge.
-Public Sub OCPREFIX_ExportCopy(ByVal dest As String, ByVal fileFormat As String)
-    Dim tmp As String
+' Exports the active presentation to `dest` outside PowerPoint's sandbox: kind "pptx" saves a
+' copy, "png" one image per slide (slide1.png ...). PowerPoint writes into its sandbox temp
+' folder and the bridge copies the result out.
+Public Sub OCPREFIX_ExportCopy(ByVal dest As String, ByVal kind As String)
+    Dim tmp As String, i As Long
     On Error GoTo Failed
     tmp = Environ("TMPDIR")
     If Right$(tmp, 1) <> "/" Then tmp = tmp & "/"
-    tmp = tmp & "open-charts-export" & IIf(fileFormat = "18", "", ".pptx")
-    ActivePresentation.SaveCopyAs tmp, CLng(Val(fileFormat))
+    If kind = "png" Then
+        tmp = tmp & "open-charts-png"
+        If Dir(tmp, vbDirectory) = "" Then MkDir tmp
+        For i = 1 To ActivePresentation.Slides.Count
+            ActivePresentation.Slides(i).Export tmp & "/slide" & i & ".png", "PNG", 1920, 1080
+        Next i
+    Else
+        tmp = tmp & "open-charts-export.pptx"
+        ActivePresentation.SaveCopyAs tmp ' format follows the .pptx extension
+    End If
     Report "EXPORT " & AppleScriptTask(SCRIPT_FILE, "copyOut", tmp & vbTab & dest)
     Exit Sub
 Failed:

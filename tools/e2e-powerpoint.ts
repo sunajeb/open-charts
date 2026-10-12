@@ -44,25 +44,23 @@ if (loaded !== 'true') {
   throw new Error('PowerPoint did not load open-charts.ppam. If PowerPoint shows a macro prompt, click "Enable Macros" and run again.');
 }
 
-// 2. Macro calls. Find the macro name form PowerPoint accepts for an add-in's procedure.
-let macroForm: ((proc: string) => string) | undefined;
-function macro(proc: string, arg: string) {
-  const forms = macroForm ? [macroForm] : [
-    (p: string) => p,
-    (p: string) => `OpenCharts.${p}`,
-    (p: string) => `'open-charts.ppam'!OpenCharts.${p}`,
-  ];
-  for (const form of forms) {
-    const before = logLines().length;
+// 2. Macro calls (procedures in a loaded add-in are found by plain name). Right after loading,
+// PowerPoint is still compiling the add-in's VBA and answers error -18, so the first call waits.
+const sleep = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+let ready = false;
+function macro(proc: string, ...args: string[]) {
+  const before = logLines().length;
+  for (let attempt = 1; ; attempt++) {
     try {
-      ppt(`run VB macro macro name ${q(form(`${prefix}_${proc}`))} list of parameters {${q(arg)}}`, 180);
+      ppt(`run VB macro macro name ${q(`${prefix}_${proc}`)} list of parameters {${args.map(q).join(', ')}}`, 300);
+      break;
     } catch (err) {
-      if (macroForm) throw err;
-      continue;
+      if (ready || attempt >= 8) throw err;
+      sleep(5000);
     }
-    if (proc !== 'Run' || logLines().length > before) { macroForm ??= form; return logLines().slice(before).join('\n'); }
   }
-  throw new Error(`PowerPoint would not run ${prefix}_${proc}; is the add-in loaded and are macros enabled?`);
+  ready = true;
+  return logLines().slice(before).join('\n');
 }
 
 const results: string[] = [];
@@ -130,13 +128,9 @@ abortIfFailed('Updating charts');
 
 // 7. Save, export PNGs, quit.
 // PowerPoint is sandboxed: the add-in saves into its own temp folder and the bridge copies out.
-const exportCopy = (dest: string, format: string) => {
-  const before = logLines().length;
-  ppt(`run VB macro macro name ${q(macroForm!(`${prefix}_ExportCopy`))} list of parameters {${q(dest)}, ${q(format)}}`, 300);
-  return logLines().slice(before).join('\n');
-};
-results.push(exportCopy(DECK, '0'));
-results.push(exportCopy(PNG_DIR, '18'));
+const exportCopy = (dest: string, kind: string) => macro('ExportCopy', dest, kind);
+results.push(exportCopy(DECK, 'pptx'));
+results.push(exportCopy(PNG_DIR, 'png'));
 ppt('close active presentation saving no\nquit saving no');
 if (!existsSync(DECK)) throw new Error(`The deck was not exported:\n${results.slice(-2).join('\n')}`);
 
