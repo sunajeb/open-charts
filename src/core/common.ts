@@ -3,6 +3,7 @@ import type { Measurer } from './text.ts';
 import { fits, wrap } from './text.ts';
 import { formatValue, inferDecimals, pickScale, type NumberStyle } from './numbers.ts';
 import { spread } from './place.ts';
+import { parseCategoryDate } from './dates.ts';
 
 export interface Ctx {
   spec: ChartSpec;
@@ -80,40 +81,89 @@ export function text(ctx: Ctx, role: string, t: TextInput) {
 
 // ---- Category labels: wrap, shrink the whole row one step at a time, then hide (B8) ------------
 
-export interface CategoryFit { lines: string[][]; size: number; lh: number; height: number; hidden: Set<number> }
+export interface CategoryFit {
+  lines: string[][]; size: number; lh: number; height: number; hidden: Set<number>;
+  /** Thinned time axis: every `span`-th label is shown, in `span` slots' width (1 = every label). */
+  span: number;
+}
 
-/** Wrap every category into its slot; shrink all of them together if any does not fit; hide what still does not. */
-export function fitCategories(ctx: Ctx, slot: number | number[], maxLines = 3): CategoryFit {
+/**
+ * Wrap every category into its slot; shrink all of them together if any does not fit; hide what still
+ * does not. With `thin`, a time axis (every category reads as a date) that still does not fit shows
+ * every 2nd, 3rd, ... label instead, the way a consultant thins a crowded year axis.
+ */
+export function fitCategories(
+  ctx: Ctx, slot: number | number[], maxLines = 3,
+  /** Allow thinning a time axis, from `minSpan` slots per label, at most at `maxSize` pt. */
+  thin: false | { minSpan?: number; maxSize?: number } = false,
+): CategoryFit {
   const width = (i: number) => (Array.isArray(slot) ? slot[i] : slot) - 2;
   const cats = ctx.spec.categories;
-  let size = ctx.fs;
-  let lines: string[][] = [];
-  for (;;) {
-    lines = cats.map((c, i) => wrap(c, width(i), size, ctx.m, maxLines));
-    const ok = lines.every((l, i) => fits(l, width(i), size, ctx.m));
-    if (ok || size - 1 < ctx.minFs) break;
-    size -= 1;
-  }
+  const shrinkFit = (w: (i: number) => number, only: (i: number) => boolean, lineCap = maxLines, from = ctx.fs) => {
+    let size = from;
+    let lines: string[][] = [];
+    for (;;) {
+      lines = cats.map((c, i) => (only(i) ? wrap(c, w(i), size, ctx.m, lineCap) : ['']));
+      const ok = lines.every((l, i) => !only(i) || fits(l, w(i), size, ctx.m));
+      if (ok || size - 1 < ctx.minFs) return { lines, size, ok };
+      size -= 1;
+    }
+  };
+  let { lines, size } = shrinkFit(width, () => true);
   const hidden = new Set<number>();
   lines.forEach((l, i) => { if (!fits(l, width(i), size, ctx.m)) hidden.add(i); });
+  let span = 1;
+  if (thin && hidden.size && !Array.isArray(slot) && cats.length > 2 && cats.every((c) => parseCategoryDate(c))) {
+    // Thinned labels sit on one line, so a sparser axis is never taller.
+    for (let k = thin.minSpan ?? 2; k <= Math.ceil(cats.length / 2); k++) {
+      const t = shrinkFit(() => slot * k - 2, (i) => i % k === 0, 1, Math.min(ctx.fs, thin.maxSize ?? ctx.fs));
+      if (!t.ok) continue;
+      ({ lines, size } = t);
+      span = k;
+      hidden.clear();
+      cats.forEach((_, i) => { if (i % k) hidden.add(i); });
+      break;
+    }
+  }
   const lh = ctx.m.lineHeight(size);
   const n = Math.max(1, ...lines.filter((_, i) => !hidden.has(i)).map((l) => l.length));
-  return { lines, size, lh, height: n * lh + ctx.pad * 0.6, hidden };
+  return { lines, size, lh, height: n * lh + ctx.pad * 0.6, hidden, span };
 }
 
 /** Height needed for category labels wrapped into slots of the given width. */
 export function categoryHeight(ctx: Ctx, slot: number): number {
-  return fitCategories(ctx, slot).height;
+  return fitCategories(ctx, slot, 3, {}).height;
 }
 
 export function categoryLabels(ctx: Ctx, centres: number[], slot: number, top: number) {
-  const fit = fitCategories(ctx, slot);
+  const { frame } = ctx;
+  // A thinned label is as wide as its text (up to `span` slots), kept inside the frame; if keeping the
+  // end labels inside pushes them into their neighbours, thin further.
+  const boxes = (fit: CategoryFit) => ctx.spec.categories.map((_, i) => {
+    if (fit.hidden.has(i)) return null;
+    const w = fit.span > 1 ? Math.max(slot, ...fit.lines[i].map((l) => ctx.m.width(l, fit.size) + 2)) : slot;
+    const x = centres[i] - w / 2;
+    return { x: x < frame.x - 0.01 ? frame.x : x + w > frame.x + frame.w + 0.01 ? frame.x + frame.w - w : x, w };
+  });
+  const clash = (bs: ({ x: number; w: number } | null)[]) => {
+    const shown = bs.filter((b): b is { x: number; w: number } => !!b);
+    return shown.some((b, k) => k > 0 && shown[k - 1].x + shown[k - 1].w > b.x + 0.5);
+  };
+  let fit = fitCategories(ctx, slot, 3, {});
+  let bs = boxes(fit);
+  while (fit.span > 1 && clash(bs)) {
+    const next = fitCategories(ctx, slot, 3, { minSpan: fit.span + 1, maxSize: fit.size });
+    if (next.span <= fit.span) break;
+    fit = next;
+    bs = boxes(fit);
+  }
   reportFit(ctx, fit);
   ctx.spec.categories.forEach((_, i) => {
-    if (fit.hidden.has(i)) return;
+    const b = bs[i];
+    if (!b) return;
     const lines = fit.lines[i];
     text(ctx, `label:category:c${i}`, {
-      x: centres[i] - slot / 2, y: top + ctx.pad * 0.4, w: slot, h: lines.length * fit.lh,
+      x: b.x, y: top + ctx.pad * 0.4, w: b.w, h: lines.length * fit.lh,
       text: lines.join('\n'), valign: 'top', role: 'category', size: fit.size,
     });
   });
@@ -121,6 +171,10 @@ export function categoryLabels(ctx: Ctx, centres: number[], slot: number, top: n
 
 export function reportFit(ctx: Ctx, fit: CategoryFit) {
   if (fit.size < ctx.fs) ctx.hidden.push(`category labels shrunk to ${fit.size} pt to fit`);
+  if (fit.span > 1) {
+    ctx.hidden.push(`category labels thinned to every ${fit.span}${fit.span === 2 ? 'nd' : fit.span === 3 ? 'rd' : 'th'} (${fit.hidden.size} hidden): slots too narrow`);
+    return;
+  }
   for (const i of fit.hidden) ctx.hidden.push(`${ctx.spec.categories[i]}: category label too wide for its slot`);
 }
 
@@ -162,6 +216,9 @@ export function legend(
   /** Leave entries out (Mekko XY: the width series has no swatch). */
   include: (i: number) => boolean = () => true,
 ): number {
+  // Names beside the plot would take more than a third of a narrow frame (a chart resized small):
+  // a legend on top keeps every name and leaves the width to the data.
+  if (ctx.o.seriesLabels === 'right' && seriesLabelWidth(ctx, 0) > ctx.frame.w / 3) ctx.o.seriesLabels = 'legend';
   if (ctx.o.seriesLabels !== 'legend') return 0;
   const { frame, fs, lh, pad } = ctx;
   const sw = fs * 0.75;
