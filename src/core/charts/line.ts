@@ -20,7 +20,9 @@ export function layoutLine(ctx: Ctx) {
   const lo = Math.min(...all), hi = Math.max(...all);
   const narrow = lo > 0 && (hi - lo) / hi < 0.4;
   const zero = o.zeroBased ?? !narrow;
-  const [vmin, vmax] = zero ? [Math.min(0, lo), Math.max(0, hi)] : [lo, hi];
+  // A floating axis keeps air below the lowest point: on the bottom line its marker and label would sit
+  // on the axis and in the category row.
+  const [vmin, vmax] = zero ? [Math.min(0, lo), Math.max(0, hi)] : [lo - (hi - lo) * 0.1, hi];
   const ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
   let [dmin, dmax] = ticks ? [ticks[0], ticks[ticks.length - 1]] : [vmin, vmax];
   if (dmax === dmin) dmax = dmin + 1;
