@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createMeasurer } from './fonts.ts';
 import { buildDeck, type DeckSpec } from './deck.ts';
@@ -13,7 +13,7 @@ async function body(req: IncomingMessage): Promise<DeckSpec> {
 
 // Edit sessions: the PowerPoint add-in stores a chart here, opens the editor with ?session=<id>, and
 // reads the chart back when the editor applies it (contract: docs/ux-editor.md). In memory only.
-interface Session { id: string; rev: number; state: 'open' | 'applied' | 'cancelled'; chart: unknown; title?: string; updatedAt: string }
+export interface Session { id: string; rev: number; state: 'open' | 'applied' | 'cancelled'; chart: unknown; title?: string; updatedAt: string }
 const SESSION_ID = /^[A-Za-z0-9_-]{1,64}$/;
 const SESSION_STATES = ['open', 'applied', 'cancelled'];
 const MAX_SESSIONS = 200;
@@ -37,10 +37,18 @@ function postSession(id: string, b: { chart?: unknown; title?: unknown; state?: 
 }
 
 /** Local editor: datasheet + live preview, renders with the same engine as the CLI. */
-export function serve(port: number, fonts: { font?: string; bold?: string } = {}) {
+export interface ServeOptions {
+  /** Extra routes checked before the built-in ones (the add-in's local endpoints); return true when handled. */
+  routes?: (req: IncomingMessage, res: ServerResponse) => boolean | Promise<boolean>;
+  /** Called after every successful POST /api/session/<id> (e.g. the add-in re-lays out on "applied"). */
+  onSession?: (s: Session) => void;
+}
+
+export function serve(port: number, fonts: { font?: string; bold?: string } = {}, opts: ServeOptions = {}) {
   const m = createMeasurer(fonts.font, fonts.bold);
   const server = createServer(async (req, res) => {
     try {
+      if (opts.routes && (await opts.routes(req, res))) return;
       if (req.method === 'GET' && /^\/(index\.html)?(\?|$)/.test(req.url ?? '')) {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         res.end(readFileSync(EDITOR));
@@ -58,7 +66,12 @@ export function serve(port: number, fonts: { font?: string; bold?: string } = {}
           if (s) json(200, s); else json(404, { error: `no edit session "${id}"` });
           return;
         }
-        if (req.method === 'POST') { json(200, postSession(id, (await body(req)) as never)); return; }
+        if (req.method === 'POST') {
+          const saved = postSession(id, (await body(req)) as never);
+          json(200, saved);
+          opts.onSession?.(saved);
+          return;
+        }
       }
       if (req.method === 'POST' && req.url === '/api/render') {
         const { slides } = buildDeck(await body(req), m);
