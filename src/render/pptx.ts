@@ -58,7 +58,7 @@ const ROLE_NAMES: Record<string, string> = {
 };
 
 /** Selection-pane name: "Bar s0 c2", "Label value s1 c2"; "<Kind> <id>" when there is no role. */
-function shapeName(s: Shape, id: number, role?: string): string {
+export function shapeName(s: Shape, id: number, role?: string): string {
   if (role) {
     const [head, ...rest] = role.split(':');
     return [ROLE_NAMES[head] ?? head, ...rest].join(' ');

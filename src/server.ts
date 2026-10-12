@@ -1,4 +1,4 @@
-import { createServer, type IncomingMessage } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createMeasurer } from './fonts.ts';
 import { buildDeck, type DeckSpec } from './deck.ts';
@@ -11,11 +11,15 @@ async function body(req: IncomingMessage): Promise<DeckSpec> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8'));
 }
 
+/** Extra routes (the PowerPoint add-in's edit session); returns true when it handled the request. */
+export type Route = (req: IncomingMessage, res: ServerResponse) => boolean | Promise<boolean>;
+
 /** Local editor: datasheet + live preview, renders with the same engine as the CLI. */
-export function serve(port: number, fonts: { font?: string; bold?: string } = {}) {
+export function serve(port: number, fonts: { font?: string; bold?: string } = {}, extra?: Route) {
   const m = createMeasurer(fonts.font, fonts.bold);
   const server = createServer(async (req, res) => {
     try {
+      if (extra && await extra(req, res)) return;
       if (req.method === 'GET' && (req.url === '/' || req.url === '/index.html')) {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
         res.end(readFileSync(EDITOR));
