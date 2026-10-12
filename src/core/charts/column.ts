@@ -1,7 +1,7 @@
 import type { Ctx } from '../common.ts';
 import {
   arrowBubble, arrowRowHeight, axisFormatter, bracketArrow, bracketArrowH, cagrLabel, categoryHeight, categoryLabels,
-  fitCategories, legend, num, reportFit, seriesLabelWidth, seriesLabelsRight, text, valueAxis, type ArrowKind,
+  fitCategories, legend, num, reportFit, seriesLabelWidth, seriesLabelsRight, text, valueAxis, type ArrowKind, valueTicks,
 } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { cagrYears } from '../dates.ts';
@@ -38,7 +38,7 @@ function model(ctx: Ctx) {
     : clustered ? [Math.min(0, ...cats.flatMap((c) => sers.map((s) => val(s, c)))), Math.max(0, ...cats.flatMap((c) => sers.map((s) => val(s, c))))]
     : [Math.min(0, ...neg), Math.max(0, ...pos)];
   if (dmax === dmin) dmax = dmin + 1;
-  const ticks = o.valueAxis ? niceTicks(dmin, dmax) : null;
+  const ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
   const axisFmt = axisFormatter(ctx, ticks, percent);
   const showTotals = !clustered && !!o.totals;

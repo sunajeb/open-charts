@@ -66,7 +66,7 @@ export function placeholder(spec: ChartSpec, frame: Frame, need: Size, m: Measur
   const shapes: Scene['shapes'] = [{ kind: 'rect', x: frame.x, y: frame.y, w: frame.w, h: frame.h, fill: style.background, stroke: style.axis, strokeWidth: 0.75 }];
   const roles = ['placeholder'];
   const dims = `${Math.ceil(need.w)} × ${Math.ceil(need.h)} pt`;
-  const messages = [`Chart too small: make it at least ${dims}`, 'Chart too small', 'Too small'];
+  const messages = [`Chart too small: make it at least ${dims.replace(/ /g, '\u00a0')}`, 'Chart too small', 'Too small'];
   const inner = { w: frame.w - 8, h: frame.h - 6 };
   outer: for (const msg of messages) {
     for (let size = Math.min(style.fontSize, 10); size >= minFs; size--) {

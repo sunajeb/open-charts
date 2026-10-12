@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
+import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 
@@ -28,7 +28,7 @@ export function layoutCombo(ctx: Ctx) {
   let dmin = clustered ? Math.min(0, ...colVals, ...lineVals) : Math.min(0, ...neg, ...lineVals);
   let dmax = clustered ? Math.max(0, ...colVals, ...lineVals) : Math.max(0, ...pos, ...lineVals);
   if (dmax === dmin) dmax = dmin + 1;
-  const ticks = o.valueAxis ? niceTicks(dmin, dmax) : null;
+  const ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
   const axisFmt = axisFormatter(ctx, ticks);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;

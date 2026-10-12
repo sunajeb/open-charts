@@ -1,6 +1,6 @@
 import type { Ctx } from '../common.ts';
 import type { TextShape } from '../types.ts';
-import { legend, text, valueAxis } from '../common.ts';
+import { legend, text, valueAxis, valueTicks } from '../common.ts';
 import { formatValue, inferDecimals, niceTicks, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 
@@ -49,18 +49,19 @@ export function layoutScatter(ctx: Ctx) {
   const radius = (p: Point) => (bubble ? (maxSize > 0 ? Math.max(1.5, rMax * Math.sqrt(p.size / maxSize)) : r0) : r0);
 
   // Domain: data (with zero unless narrow), widened so every marker fits inside the axes.
-  const domain = (vals: number[], lenPx: number, rad: number[]) => {
+  const domain = (vals: number[], lenPx: number, rad: number[], horizontal = false) => {
     const lo = Math.min(...vals), hi = Math.max(...vals);
     const narrow = (lo > 0 && (hi - lo) / hi < 0.6) || (hi < 0 && (hi - lo) / -lo < 0.6);
     const zero = o.zeroBased ?? !narrow;
     let a = zero ? Math.min(0, lo) : lo, b = zero ? Math.max(0, hi) : hi;
     if (a === b) { a -= 1; b += 1; }
-    let ticks = niceTicks(a, b);
+    const count = valueTicks(ctx, horizontal, lenPx);
+    let ticks = niceTicks(a, b, count);
     for (let k = 0; k < 3; k++) {
       const perPx = (ticks[ticks.length - 1] - ticks[0]) / lenPx;
       const a2 = Math.min(a, ...vals.map((v, i) => v - rad[i] * perPx)), b2 = Math.max(b, ...vals.map((v, i) => v + rad[i] * perPx));
       // A marker that would cross an axis widens the domain past it (even past zero).
-      const next = niceTicks(a2, b2);
+      const next = niceTicks(a2, b2, count);
       if (next[0] === ticks[0] && next[next.length - 1] === ticks[ticks.length - 1]) break;
       ticks = next;
     }
@@ -71,11 +72,11 @@ export function layoutScatter(ctx: Ctx) {
   const yFmt = fmtAxis(yTicks);
   const axisW = Math.max(...yTicks.map((t) => m.width(yFmt(t), fs))) + pad * 1.5;
   const px = frame.x + axisW;
-  let xTicks = domain(points.map((p) => p.x), frame.w - axisW, rad);
+  let xTicks = domain(points.map((p) => p.x), frame.w - axisW, rad, true);
   let xFmt = fmtAxis(xTicks);
   const overhang = () => (m.width(xFmt(xTicks[xTicks.length - 1]), fs) + 2) / 2;
   let pw = frame.x + frame.w - overhang() - px;
-  xTicks = domain(points.map((p) => p.x), pw, rad);
+  xTicks = domain(points.map((p) => p.x), pw, rad, true);
   xFmt = fmtAxis(xTicks);
   pw = frame.x + frame.w - overhang() - px;
   if (ph < lh * 3 || pw < lh * 3) ctx.hidden.push('chart frame too small');

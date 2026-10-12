@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
+import { axisFormatter, fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps } from '../place.ts';
 
@@ -36,7 +36,7 @@ export function layoutMekko(ctx: Ctx) {
 
   // Value domain: 0–100% or 0–max total.
   let dmax = percent ? 100 : Math.max(...totals);
-  const ticks = o.valueAxis ? niceTicks(0, dmax) : null;
+  const ticks = o.valueAxis ? niceTicks(0, dmax, valueTicks(ctx)) : null;
   if (ticks) dmax = ticks[ticks.length - 1];
   const axisFmt = axisFormatter(ctx, ticks, percent);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;

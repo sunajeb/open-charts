@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelsRight, text, valueAxis } from '../common.ts';
+import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 import type { LineShape } from '../types.ts';
@@ -21,7 +21,7 @@ export function layoutLine(ctx: Ctx) {
   const narrow = lo > 0 && (hi - lo) / hi < 0.4;
   const zero = o.zeroBased ?? !narrow;
   const [vmin, vmax] = zero ? [Math.min(0, lo), Math.max(0, hi)] : [lo, hi];
-  const ticks = o.valueAxis === false ? null : niceTicks(vmin, vmax);
+  const ticks = o.valueAxis === false ? null : niceTicks(vmin, vmax, valueTicks(ctx));
   let [dmin, dmax] = ticks ? [ticks[0], ticks[ticks.length - 1]] : [vmin, vmax];
   if (dmax === dmin) dmax = dmin + 1;
   const axisFmt = axisFormatter(ctx, ticks);

@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
+import { fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
 import { formatValue, inferDecimals, niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { placeRow, type RowItem } from './mekko.ts';
 
@@ -44,12 +44,12 @@ export function layoutMekkoXY(ctx: Ctx) {
 
   let dmin = Math.min(0, ...down), dmax = Math.max(0, ...up);
   if (dmax === dmin) dmax = dmin + 1;
-  const ticks = o.valueAxis ? niceTicks(dmin, dmax) : null;
+  const ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx, false)) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
   const yFmt = (v: number) => ctx.fmt(v, { decimals: ticks ? inferDecimals(ticks.map((t) => t / ctx.scale.div)) : 0 });
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(yFmt(t), fs))) + pad * 1.5 : 0;
   // The columns always span the plot; the width axis shows the nice ticks that fall inside it.
-  const xTicks = o.valueAxis ? niceTicks(0, grandW).filter((t) => t <= grandW * (1 + 1e-9)) : null;
+  const xTicks = o.valueAxis ? niceTicks(0, grandW, valueTicks(ctx, true)).filter((t) => t <= grandW * (1 + 1e-9)) : null;
   const xMax = grandW;
   const xFmt = (v: number) => fmtW(v, xTicks ? inferDecimals(xTicks) : 0);
 
