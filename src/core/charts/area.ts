@@ -139,7 +139,9 @@ export function layoutArea(ctx: Ctx) {
       if (!totals[c]) continue;
       const t = ctx.fmt(totals[c]);
       const w = m.width(t, fs, true) + 2;
-      const x = clampX(xOf(c) - w / 2, w);
+      // Centred over the point like the category label below, overhanging the plot's ends where the
+      // frame is free (not over tick labels on the left or series names on the right).
+      const x = Math.min(Math.max(xOf(c) - w / 2, axisW ? pxL + inset : frame.x), (o.seriesLabels === 'right' ? pxR - inset : frame.x + frame.w) - w);
       const edge = Math.min(...[x, x + w, ...xs.filter((v) => v > x && v < x + w)].map((v) => edgeAt(upper[top], v)));
       const box = { x, y: edge - lh - pad * 0.2, w, h: lh };
       if (box.y < frame.y || placed.some((p) => overlaps(p, box, 0))) { ctx.hidden.push(`${spec.categories[c]}: no room for total`); continue; }
