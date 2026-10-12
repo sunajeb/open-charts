@@ -14,7 +14,7 @@ const m = createMeasurer();
 const F = CHART_FRAME;
 const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.roles![i]));
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text').map((t) => t.text);
-const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+)$/;
+const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+|legend:size|bracket:\d+|today)$/;
 
 const base = (type: ChartSpec['type'], options: ChartSpec['options'] = {}): ChartSpec => ({
   type, categories: ['2021', '2022', '2023', '2024'],

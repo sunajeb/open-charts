@@ -16,7 +16,7 @@ const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.rol
 const rectsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is RectShape => x.kind === 'rect');
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text');
 const strict = (s: Scene) => checkScene(s, { strict: true, measurer: m });
-const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|shade:\d+)$/;
+const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|shade:\d+|leader:c\d+|legend:size|bracket:\d+|today)$/;
 const NEW = ['combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt'] as const;
 const close = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 

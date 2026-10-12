@@ -8,6 +8,7 @@ import {
   type ChartSpec, type RectShape, type Scene, type TextShape,
 } from '../src/core/index.ts';
 import { createMeasurer } from '../src/fonts.ts';
+import { segmentHitsBox } from '../src/core/place.ts';
 import { CHART_FRAME } from '../src/deck.ts';
 
 const m = createMeasurer();
@@ -19,6 +20,7 @@ const roleOf = (s: Scene, sh: object) => s.roles![s.shapes.indexOf(sh as never)]
 const strict = (s: Scene) => checkScene(s, { strict: true, measurer: m });
 const close = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 const slides = (f: string): { title: string; chart: ChartSpec }[] => JSON.parse(readFileSync(`examples/${f}.json`, 'utf8')).slides;
+const segHits = (l: { x1: number; y1: number; x2: number; y2: number }, b: { x: number; y: number; w: number; h: number }) => segmentHitsBox(l.x1, l.y1, l.x2, l.y2, b);
 /** Distance between two boxes along the axis that separates them (negative when they overlap). */
 const gapBetween = (a: TextShape, b: TextShape) => Math.max(b.x - (a.x + a.w), a.x - (b.x + b.w), b.y - (a.y + a.h), a.y - (b.y + b.h));
 
@@ -53,4 +55,47 @@ test('combo: line labels read as their point\'s, segment labels stay inside, no 
     }
     assert.deepEqual(strict(scene), [], title);
   }
+});
+
+// ---- Scatter and bubble -----------------------------------------------------------------------------
+
+test('scatter and bubble: legend swatches are circles, like the markers they stand for', () => {
+  for (const { title, chart } of slides('scatter')) {
+    const sw = rectsOf(layoutChart(chart, F, m), /^legend:s\d+$/);
+    assert.equal(sw.length, chart.series.length, title);
+    assert.ok(sw.every((r) => r.geom === 'ellipse'), title);
+  }
+});
+
+test('scatter: a crowded point gets its label further out with a leader line that crosses nothing', () => {
+  const grid = [...Array(9).keys()].map((i) => [5 + (i % 3) * 0.15, 5 + Math.floor(i / 3) * 0.375]);
+  const pts = [[0, 0], [10, 10], ...grid];
+  const scene = layoutChart({ type: 'scatter', categories: pts.map((_, i) => `Pt ${i}`), series: [{ name: 'S', values: pts }] }, F, m);
+  const leaders = byRole(scene, /^leader:c\d+$/).filter((x) => x.kind === 'line') as import('../src/core/index.ts').LineShape[];
+  assert.ok(leaders.length > 0, 'some labels moved out with a leader');
+  assert.equal(textsOf(scene, /^label:value:/).length + scene.hidden.length, pts.length, 'labelled, or hidden and reported');
+  assert.ok(scene.hidden.length <= 2, scene.hidden.join('; '));
+  const labels = textsOf(scene, /^label:value:/);
+  for (const l of leaders) {
+    const c = /c(\d+)$/.exec(roleOf(scene, l))![1];
+    const mk = rectsOf(scene, new RegExp(`^marker:s0:c${c}$`))[0];
+    const lb = textsOf(scene, new RegExp(`^label:value:s0:c${c}$`))[0];
+    const r = mk.w / 2, mx = mk.x + r, my = mk.y + r;
+    assert.ok(Math.abs(Math.hypot(l.x1 - mx, l.y1 - my) - (r + 1)) < 0.01, 'starts at its marker');
+    assert.ok(l.x2 >= lb.x - 0.01 && l.x2 <= lb.x + lb.w + 0.01 && l.y2 >= lb.y - 0.01 && l.y2 <= lb.y + lb.h + 0.01, 'ends on its label');
+    for (const t of labels) if (t !== lb) assert.ok(!segHits(l, t), `leader of ${lb.text} crosses ${t.text}`);
+  }
+  assert.deepEqual(checkScene(scene, { measurer: m }), []);
+});
+
+test('bubble: the size legend bubble is drawn to the chart\'s scale and labelled with its round size', () => {
+  const spec = { ...slides('scatter')[1].chart };
+  const scene = layoutChart(spec, F, m);
+  const leg = rectsOf(scene, /^legend:size$/)[0];
+  const big = rectsOf(scene, /^marker:s0:c0$/)[0]; // Payments, size 420
+  assert.ok(close((leg.w / big.w) ** 2, 200 / 420, 1e-9));
+  assert.equal(textsOf(scene, /^legend:size$/)[0].text, 'Revenue ($m): 200');
+  assert.deepEqual(strict(scene), []);
+  const off = layoutChart({ ...spec, options: { ...spec.options, sizeLegend: undefined } }, F, m);
+  assert.equal(rectsOf(off, /^legend:size$/).length, 0, 'off unless asked for, as in the reference');
 });
