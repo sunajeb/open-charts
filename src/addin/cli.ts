@@ -110,16 +110,21 @@ export function registerScript(ppam: string): string {
 end tell`;
 }
 
-function uninstall() {
-  try {
-    osascript(`tell application "Microsoft PowerPoint"
-  repeat with a in add ins
-    if name of a starts with "${ADDIN_NAME}" then
-      set loaded of a to false
-      set auto load of a to false
+// PowerPoint's `add ins` collection cannot be walked by reference (the loop never ends), so go by name.
+export function unregisterScript(): string {
+  return `tell application "Microsoft PowerPoint"
+  repeat with n in (get name of every add in)
+    if (n as text) starts with "${ADDIN_NAME}" then
+      set loaded of add in (n as text) to false
+      set auto load of add in (n as text) to false
     end if
   end repeat
-end tell`);
+end tell`;
+}
+
+function uninstall() {
+  try {
+    osascript(unregisterScript(), 'pipe');
   } catch { /* PowerPoint not available: files are still removed */ }
   for (const p of [join(SCRIPTS_DIR, 'open-charts.scpt'), PPAM_DIR, join(addinHome(), 'engine')]) {
     if (existsSync(p)) rmSync(p, { recursive: true, force: true });
@@ -128,6 +133,6 @@ end tell`);
   console.log('open-charts add-in removed.');
 }
 
-export function osascript(script: string): string {
-  return execFileSync('osascript', ['-e', script], { encoding: 'utf8' }).trim();
+export function osascript(script: string, stderr: 'inherit' | 'pipe' = 'inherit'): string {
+  return execFileSync('osascript', ['-e', script], { encoding: 'utf8', stdio: ['ignore', 'pipe', stderr], timeout: 120_000 }).trim();
 }
