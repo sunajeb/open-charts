@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-10-13)
 
 The first build meant for people who make slides: charts made in PowerPoint, edited through a
 datasheet, laid out by the engine. No AI and no other apps yet.
@@ -8,7 +8,9 @@ datasheet, laid out by the engine. No AI and no other apps yet.
 ### PowerPoint add-in (Mac)
 
 - `open-charts addin install` builds `open-charts.ppam`, copies the engine, installs the AppleScript
-  bridge and registers the add-in; `addin uninstall`, `addin build`, `addin types`.
+  bridge, installs the `open-charts` command (linked into your PATH when possible) and registers
+  the add-in; `addin uninstall`, `addin build`, `addin types`. Error messages show a reinstall
+  command that works whether or not `open-charts` is on your PATH.
 - **open-charts** ribbon tab: **Insert chart** menu with every chart type (plus *100% with % axis* and
   *Step line*), **Edit data** and **Update chart**. A chart goes into an empty content placeholder
   when the slide has one.
@@ -46,13 +48,18 @@ balls, table and Gantt.
   numbered on the preview.
 - Deck mode with slide titles, JSON import/export and .pptx download; session mode for the add-in's
   Edit data window.
+- A control for every option (slice labels, bubble size legend, Gantt today line, shaded periods and
+  phase brackets, CAGR years included); untouched controls show the engine's default for the chart
+  type; switching type drops the options the new type does not use.
 
 ### Command line and file format
 
 - `open-charts <deck.json>` writes a .pptx (`--svg`, `--strict`, `--report`, `--font`);
   `inspect` lists the charts in a deck; `import` recovers the deck JSON from a .pptx.
 - Spec version 1 with JSON Schemas (`schema/`), path-addressed validation errors and `migrate()` for
-  older specs.
+  older specs. One table says which chart types read each option; an option on any other type is an
+  error (`/options/cagr: not used by pie charts`), and `migrate()` removes such options from
+  unversioned specs with a warning.
 - Tag contract v1 on every chart group (`OC_V`, `OC_ENGINE`, `OC_SPEC`, `OC_FRAME`, `OC_FONT`), so
   charts stay editable in any deck.
 
