@@ -48,7 +48,8 @@ Edit data and Update chart are greyed out unless an open-charts chart is selecte
    with the first data cell ready for typing. Type or paste your numbers; the preview updates as you
    type.
 3. **Apply.** Click **Apply to slide** (or press ⌘↵). The chart on the slide is replaced in place,
-   keeping its position and stacking order. The window stays open, so you can keep editing and apply
+   keeping its position and stacking order; the editor says **Updated on slide** once PowerPoint has
+   done it (or why not, see [Troubleshooting](#troubleshooting)). The window stays open, so you can keep editing and apply
    again. **Cancel** (or Esc twice) closes without changing the slide.
 4. **Resize.** Drag the chart's corner handles like any shape. When you click elsewhere, open-charts
    lays the chart out again at the new size: text keeps its size, and the bars, labels and arrows are
@@ -421,18 +422,29 @@ Run the command the message shows (the install command above).
 **"Select an open-charts chart first".** Click the chart once (select the whole group, not a shape
 inside it), then choose Edit data or Update chart.
 
+**"This chart was ungrouped, so it can't be edited as a chart".** The chart's data lives on its
+group; ungrouping removes it, and regrouping does not bring it back. Undo (⌘Z) the ungroup, or insert
+the chart again (the loose shapes stay as they are).
+
 **"Click a slide (Normal view) first".** Charts are inserted on the current slide in Normal view, not
 in Slide Sorter or the outline.
 
-**"The edited data is ready. Select the chart in PowerPoint and click Update chart."** The chart you
-were editing was no longer found (for example, you deleted or moved it to another slide). Select it
-and click **Update chart**.
+**After Apply, the editor says "Not updated".** The editor only says **Updated on slide** once
+PowerPoint has redrawn the chart; otherwise it says why, in a bar under its toolbar:
+
+- *PowerPoint did not respond. If macOS is asking whether PowerPoint may control PowerPoint, click
+  Allow…*: see the next item, then click **Apply** again.
+- *macOS does not allow PowerPoint to be controlled*: you clicked **Don't Allow** earlier; turn it on
+  as the next item says, then **Apply** again.
+- *PowerPoint isn't running*: open the presentation, click the chart once, then **Apply** again.
+- *PowerPoint could not find the chart*: you deleted it, or moved it to another slide. Click it once,
+  then **Apply** again (or click **Update chart**: it picks up the edit).
 
 **"open-charts is still updating a chart".** Wait a moment and click again.
 
 **macOS asks whether "Microsoft PowerPoint" may control "Microsoft PowerPoint".** Click **Allow**: that
-is how Apply in the browser updates the slide. While the question is unanswered, Apply does nothing on
-the slide. If you clicked **Don't Allow**, turn it back on in System Settings › Privacy & Security ›
+is how Apply in the browser updates the slide. While the question is unanswered, the editor shows
+"Waiting for PowerPoint…" and, after 20 seconds, that the slide was not updated. If you clicked **Don't Allow**, turn it back on in System Settings › Privacy & Security ›
 Automation (Microsoft PowerPoint › Microsoft PowerPoint).
 
 **The chart shows "Chart too small".** It is below its minimum size (see [Resizing](#resizing)). Drag

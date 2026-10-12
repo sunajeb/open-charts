@@ -63,11 +63,12 @@ End Sub
 
 ' Edit data and Update chart need a selected chart. Until PowerPoint has shown that it reports
 ' selection changes, they stay enabled and explain themselves when nothing suitable is selected.
+' A piece of an ungrouped chart also enables them, so the click can say why it is not a chart.
 Public Sub OCPREFIX_getEnabled(ByVal control As Object, ByRef enabled)
     If Not gEventsOk Then
         enabled = True
     Else
-        enabled = Not (FindSelectedChart() Is Nothing)
+        enabled = Not (FindSelectedChart() Is Nothing) Or UngroupedSelected()
     End If
 End Sub
 
@@ -593,10 +594,32 @@ Private Function FindSelectedChart() As Object
     End If
 End Function
 
+' True when the selection is a piece of an open-charts chart that was ungrouped: its shapes keep
+' their OC_ROLE tags, but no group carries the chart's data (OC_SPEC) any more, and regrouping
+' does not bring it back.
+Private Function UngroupedSelected() As Boolean
+    Dim sel As Object, shp As Object
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If sel.Type <> 2 And sel.Type <> 3 Then Exit Function ' ppSelectionShapes, ppSelectionText
+    Set shp = sel.ShapeRange(1)
+    If sel.HasChildShapeRange Then Set shp = sel.ChildShapeRange(1)
+    If shp Is Nothing Then Exit Function
+    If TagValue(shp, "OC_ROLE") <> "" Then UngroupedSelected = True: Exit Function
+    If shp.Type = 6 Then ' msoGroup: the pieces regrouped
+        If TagValue(shp.GroupItems(1), "OC_ROLE") <> "" Then UngroupedSelected = True
+    End If
+End Function
+
 ' The selected chart, or Nothing after telling the user what to select.
 Private Function SelectedChart() As Object
     Set SelectedChart = FindSelectedChart()
-    If SelectedChart Is Nothing Then Tell "Select an open-charts chart first (click it once), then choose Edit data or Update chart."
+    If Not SelectedChart Is Nothing Then Exit Function
+    If UngroupedSelected() Then
+        Tell "This chart was ungrouped, so it can't be edited as a chart. Undo (" & ChrW(&H2318) & "Z) the ungroup or insert it again."
+    Else
+        Tell "Select an open-charts chart first (click it once), then choose Edit data or Update chart."
+    End If
 End Function
 
 Private Function TagValue(ByVal shp As Object, ByVal key As String) As String

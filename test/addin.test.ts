@@ -233,6 +233,18 @@ test('VBA source is ASCII and every Sub/Function is closed', async () => {
   assert.equal(opens, closes);
 });
 
+test('VBA: Apply is silent, an ungrouped chart is named as such', () => {
+  const src = readFileSync(new URL('../addin/vba/OpenCharts.bas', import.meta.url), 'utf8');
+  const body = (name: string) => { const a = src.indexOf(`Sub ${name}(`); return src.slice(a, src.indexOf('End Sub', a)); };
+  // ApplyEdit runs under the server's AppleScript call: a dialog would block it until it times out.
+  assert.match(body('OCPREFIX_ApplyEdit'), /gSilent = True/);
+  assert.doesNotMatch(body('OCPREFIX_ApplyEdit'), /MsgBox|Tell /);
+  assert.match(body('OCPREFIX_ApplyEdit'), /On Error GoTo Failed/);
+  // O3: pieces of an ungrouped chart keep OC_ROLE; say so instead of "select a chart".
+  assert.match(src, /This chart was ungrouped, so it can't be edited as a chart\. Undo \(" & ChrW\(&H2318\) & "Z\) the ungroup or insert it again\./);
+  assert.match(body('OCPREFIX_getEnabled'), /UngroupedSelected\(\)/, 'the buttons stay enabled so the click can explain');
+});
+
 test('request parsing tolerates CRLF and missing fields', async () => {
   const r = parseRequest('update\r\n\r\n1,2,3,4\r\n5,6,7,8\r\n{"a":1}\r\n');
   assert.deepEqual([r.op, r.arg, r.frame, r.bounds, r.spec], ['update', '', { x: 1, y: 2, w: 3, h: 4 }, { x: 5, y: 6, w: 7, h: 8 }, '{"a":1}']);

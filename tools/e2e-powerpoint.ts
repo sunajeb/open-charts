@@ -143,15 +143,39 @@ if ('spec' in wf && slideOf.waterfall) {
   edited.series[0].values.splice(5, 0, 6);
   const before = logLines().length;
   t = Date.now();
-  await fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: edited, state: 'applied' }) });
-  const applied = waitForLog(/APPLIED|APPLY .* failed/, before);
+  const rev = (await (await fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: edited, state: 'applied' }) })).json()).rev;
+  // What the editor waits for: the server's outcome on the session (drawn, or error + message).
+  let outcome: { state: string; rev: number; message?: string } | undefined;
+  for (const end = Date.now() + 30_000; Date.now() < end && !(outcome && outcome.rev > rev && outcome.state !== 'applied'); sleep(100)) {
+    outcome = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
+  }
   timings.apply = Date.now() - t;
-  results.push(applied || 'APPLIED: nothing happened within 20 s');
-  if (!/APPLIED \w+ OK/.test(applied)) {
-    failures.push(`Apply in the editor did not update the chart (${applied || 'timeout'}); falling back to Update chart`);
+  const applied = waitForLog(/APPLIED|APPLY .* failed/, before, 1000);
+  results.push(applied || 'APPLIED: nothing in the log', `SESSION ${id} ${outcome?.state}${outcome?.message ? `: ${outcome.message}` : ''}`);
+  if (outcome?.state === 'error') console.log(`Apply did not reach the slide; the editor shows: ${outcome.message}`);
+  if (!/APPLIED \w+ OK/.test(applied) || outcome?.state !== 'drawn') {
+    failures.push(`Apply in the editor did not update the chart (${applied || 'timeout'}, session ${outcome?.state}); falling back to Update chart`);
     macro('SelectChart', '1');
     results.push(macro('Run', 'btnUpdate'));
   }
+}
+
+// 5b. A chart that was ungrouped: Edit data says so (its pieces keep OC_ROLE, the data is gone).
+{
+  const n = newSlide();
+  results.push(macro('Run', 'chart_clustered'));
+  try {
+    ppt(`ungroup shape 1 of slide ${n} of active presentation
+select shape 2 of slide ${n} of active presentation`);
+    const out = macro('Run', 'btnEditData');
+    const ok = /This chart was ungrouped, so it can't be edited as a chart/.test(out);
+    results.push(ok ? 'UNGROUPED edit data: "This chart was ungrouped…" OK' : out);
+    if (!ok) failures.push(`ungrouped chart: ${out}`);
+  } catch (err) {
+    results.push(`UNGROUPED skipped: ${(err as Error).message.split('\n')[0]}`);
+  }
+  ppt(`delete slide ${n} of active presentation`);
+  slideNo--;
 }
 
 // 6. Resize without breaking: shrink a chart to half, then double it back; clicking elsewhere
