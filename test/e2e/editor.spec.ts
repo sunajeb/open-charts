@@ -76,8 +76,8 @@ test('sample deck renders with title, totals, CAGR and a passing layout check', 
   expect(t).toContain('2025E');
   expect(t.some((s) => /^\+?\d+(\.\d)?%$/.test(s.replace(/\s/g, '')) || /CAGR|%/.test(s))).toBe(true);
   expect(await rects(page, NAVY)).toBeGreaterThanOrEqual(5);
-  // The only issues on the sample are the thin "Services" labels the engine hides; never overlaps.
-  for (const li of await page.locator('#issues li').allTextContents()) expect(li).toMatch(/^Label hidden \(no room\): Services/);
+  // Thin "Services" segments get their labels boxed or beside the column: nothing hidden, no overlaps.
+  await expect(page.locator('#issues li')).toHaveText(['Layout check passed: no overlaps']);
   await expect(page.locator('#delSlide')).toBeDisabled();
   await expect(page.locator('#tabs .tab')).toHaveCount(1);
 });
@@ -298,10 +298,38 @@ test('Download .pptx is a valid deck with one slide per tab', async ({ page }) =
   expect(files.has('ppt/slides/slide2.xml')).toBe(true);
 });
 
-test('issues panel: hidden labels, a clean pass, and non-numeric cells', async ({ page }) => {
-  await expect(page.locator('#issues li.info').first()).toContainText('Label hidden (no room): Services / 2021');
-  // Make Services big enough to label everywhere: the check passes.
-  for (let j = 0; j < 5; j++) await edit(page, () => cell(page, 3, j).fill('30'));
+const HIDDEN = ['hidden: Services / 2021: segment too small', 'hidden: Services / 2022: segment too small', 'hidden: Services / 2023: segment too small'];
+const inject = (page: Page, issues: string[]) => page.evaluate((list) => (window as unknown as { showSlide: (s: object) => void }).showSlide({
+  svg: document.querySelector('#preview')!.innerHTML, issues: list,
+}), issues);
+
+test('issues panel: hidden labels collapse into one quiet line that lists them on click; real problems stay prominent', async ({ page }) => {
+  await inject(page, HIDDEN);
+  await expect(page.locator('#issues li')).toHaveText(['Layout check passed: no overlaps', '3 labels too small to show — click to list']);
+  const summary = page.locator('#issues li.summary');
+  await expect(summary).toHaveClass(/info/);
+  await expect(summary).toHaveAttribute('aria-expanded', 'false');
+  await summary.click();
+  await expect(page.locator('#issues li.sub')).toHaveText(HIDDEN.map((h) => h.slice(8)));
+  await expect(page.locator('#issues li.summary')).toHaveAttribute('aria-expanded', 'true');
+  // A listed label selects its cell.
+  await page.locator('#issues li.sub').nth(1).click();
+  await expect(cell(page, 3, 1)).toBeFocused();
+  // Keyboard closes the list again.
+  await page.locator('#issues li.summary').focus();
+  await page.keyboard.press('Enter');
+  await expect(page.locator('#issues li.sub')).toHaveCount(0);
+  // An overlap and a frame too small are problems: one prominent line each, above the summary, no pass line.
+  await inject(page, ['overlap: "97m" × "120m"', ...HIDDEN, 'hidden: chart frame too small']);
+  await expect(page.locator('#issues li')).toHaveText(['overlap: "97m" × "120m"', 'chart frame too small', '3 labels too small to show — click to list']);
+  await expect(page.locator('#issues li').nth(0)).not.toHaveClass(/info/);
+  await expect(page.locator('#issues li').nth(1)).not.toHaveClass(/info/);
+  await expect(page.locator('#issues li.ok')).toHaveCount(0);
+  await inject(page, ['hidden: Services / 2021: segment too small']);
+  await expect(page.locator('#issues li.summary')).toHaveText('1 label too small to show — click to list');
+});
+
+test('issues panel: a clean pass, and non-numeric cells', async ({ page }) => {
   await expect(page.locator('#issues li')).toHaveText(['Layout check passed: no overlaps']);
   // A typo is flagged on the cell and in the panel instead of silently becoming empty.
   await edit(page, () => cell(page, 0, 1).fill('5o'));
@@ -794,7 +822,9 @@ test('preview: zoom in, 100% and fit', async ({ page }) => {
 });
 
 test('issues: markers on the slide, click pulses the shapes; a hidden label selects its cell', async ({ page }) => {
-  await page.locator('#issues li').first().click();
+  await inject(page, HIDDEN);
+  await page.locator('#issues li.summary').click();
+  await page.locator('#issues li.sub').first().click();
   await expect(cell(page, 3, 0)).toBeFocused(); // Services / 2021
   // Overlap issues quote the label texts: they get numbered markers around those texts.
   await page.evaluate(() => (window as unknown as { showSlide: (s: object) => void }).showSlide({
