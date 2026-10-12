@@ -94,6 +94,9 @@ The datasheet is the same in the add-in's **Edit data** window and in the standa
 
 The options panel on the right only shows what applies to the current chart type, in sections:
 *Chart*, *Numbers*, *Axes & layout*, *Labels & legend*, *Decorations*. Every control has a tooltip.
+A control you have not touched shows the chart type's default, which is what the preview draws
+(totals are ticked on a new Mekko, the value axis on a new line chart). Switching type drops the
+options the new type does not use.
 
 Under the preview, problems are listed and numbered on the slide: click one to highlight the shapes
 it concerns, or, for a hidden label, to jump to its cell.
@@ -103,11 +106,8 @@ it concerns, or, for a hidden label, to jump to its cell.
 Run `open-charts serve` (see the README) and open http://localhost:4173. It works on a deck of
 slides: add, duplicate and delete slides, give each an action title, then **Download .pptx**.
 **Export JSON** saves the deck as JSON; **Import JSON** opens a deck or single-chart JSON file. Your
-work is kept in the browser between visits.
-
-A few options exist only in the JSON, not in the editor's panel: `labelContent` (pie values or
-shares), `sizeLegend` (bubble), `shades`, `brackets` and `today` (Gantt), and an explicit number of
-years for CAGR. Set them in a JSON file and import it; the editor keeps them.
+work is kept in the browser between visits. Every option of the
+[data format](DATA-FORMAT.md#options) has a control in the panel.
 
 ## Chart types
 
@@ -232,7 +232,8 @@ more.
 **Use it for** portfolios: growth vs. share, sized by revenue.
 **Datasheet:** like scatter, but each cell is **`x; y; size`**. Bubble *area* is proportional to
 size; small bubbles are drawn in front of large ones.
-**Options:** axis titles, axis start; a size legend via the JSON option `sizeLegend`.
+**Options:** axis titles, axis start; **Size legend** (a reference bubble of a round size, top
+right) with an optional caption such as `Revenue ($m)`.
 
 ### Pie and doughnut (`pie`, `doughnut`)
 
@@ -242,8 +243,9 @@ size; small bubbles are drawn in front of large ones.
 **Datasheet:** only the first row is drawn: one slice per column. Negative values are ignored, zero
 values get no slice.
 **Options:** decimals (shares are rounded to add up to exactly 100%), series labels (category names
-outside the slices, a legend, or none), totals (doughnut: the grand total in the hole). Labels show
-shares by default; the JSON option `labelContent` shows values or both.
+outside the slices, a legend, or none), totals (doughnut: the grand total in the hole). **Slice
+labels** show the share (default), the value, or both (`118m (52%)`); values use the unit and
+number options.
 
 ### Harvey balls (`harvey`)
 
@@ -273,8 +275,10 @@ row when the headers are periods (a financial summary), per column otherwise.
 date), e.g. "Milestone" and "Decision". An activity needs both a start and an end, or neither (a row
 with only milestones). The end must come after the start. A date means the beginning of that day, so
 a bar ending `2026-03-16` covers the 15th.
-**Options:** the calendar scale (weeks, months, quarters, years) is picked to fit. Shaded periods,
-phase brackets and a "today" line are set in the JSON (`shades`, `brackets`, `today`). Separators
+**Options:** the calendar scale (weeks, months, quarters, years) is picked to fit. Under
+*Decorations*: **Today line** (a date; applied on Enter), **Shaded periods** (holidays, freezes)
+and **Phase brackets**, each a list of from / to dates with an optional label (**+** adds one,
+starting from the first activity's dates; **×** removes it). Separators
 (locale) set the date style of milestone labels: US month-first, others day-first.
 
 ## Numbers: units, decimals, magnitudes, separators
@@ -285,7 +289,7 @@ The *Numbers* section applies to every label, total, arrow and axis tick of the 
 |---|---|---|
 | Unit | Text added to every value | `m` → `42m`; `%` → `42%` |
 | Unit before the number | Puts the unit in front | `$` → `$42` |
-| Decimals | Fixed digits after the decimal point; empty = automatic | `1` → `42.0` |
+| Decimals | Fixed digits after the decimal point (0–10); empty = automatic | `1` → `42.0` |
 | Magnitude | Divides by a thousand, million or billion and adds k / m / bn; *Auto* picks one for the whole chart | 1,250,000 → `1.25m` |
 | Separators | Decimal mark and grouping: US, UK, India (`12,34,567`), DE (`1.234,5`), FR (`1 234,5`) | |
 | Number format | An Excel format code; overrides decimals; applied on Enter | `#,##0;(#,##0)` → `(480)` |
@@ -297,12 +301,13 @@ minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail 
 
 ## Decorations: totals, CAGR and difference arrows
 
-- **Totals**: the sum above each column. On by default for stacked and Mekko charts; available on
-  100%, combination (stacked), stacked area, Mekko XY and doughnut (in the hole).
+- **Totals**: the sum above each column. On by default for stacked, Mekko and Mekko XY charts;
+  available on 100%, combination (stacked), stacked area and doughnut (in the hole).
 - **CAGR arrow** (stacked and 100%): pick the two categories. The growth rate is computed from the
   column totals, over the number of years read from the category labels (`2021`, `FY24`, `Q1 2023`,
   `Jan 2024`, `2025E` all work), or, if the labels aren't dates, the number of columns between them.
-  Both totals must be positive; otherwise the arrow is left out and reported.
+  **Years** overrides that number (e.g. `2.5`); empty = automatic. Both totals must be positive;
+  otherwise the arrow is left out and reported.
 - **Difference arrow** (stacked and 100%): the signed difference between two column totals.
 - **Total columns** (waterfall): which categories stand on the baseline.
 

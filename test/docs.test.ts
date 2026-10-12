@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { CHART_TYPES, OPTION_KEYS, STYLE_KEYS, migrate, migrateDeck, validateDeck, validateSpec } from '../src/core/index.ts';
 import { buildDeck, type DeckSpec } from '../src/deck.ts';
 import { createMeasurer } from '../src/fonts.ts';
+import { optionsTable } from '../scripts/options-table.ts';
 
 const DOC = readFileSync(new URL('../docs/DATA-FORMAT.md', import.meta.url), 'utf8');
 const examples = [...DOC.matchAll(/```json\n([\s\S]*?)```/g)].map((m) => m[1]);
@@ -26,6 +27,10 @@ examples.forEach((text, i) => {
     const { slides } = buildDeck(deck, m);
     assert.equal(slides.length, deck.slides.length);
   });
+});
+
+test('DATA-FORMAT.md options table is the one generated from the applicability table and defaults', () => {
+  assert.ok(DOC.includes(`${optionsTable()}\n`), 'run scripts/options-table.ts and paste its output into DATA-FORMAT.md');
 });
 
 test('DATA-FORMAT.md documents every chart type, option and style key', () => {

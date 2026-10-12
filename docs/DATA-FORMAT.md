@@ -197,37 +197,40 @@ reported. A table shows numbers formatted with the chart's number options and te
 
 ## Options
 
-All options are optional. The validator rejects an option outside its own chart types where the
-table says **checked**; other options are accepted on any type and simply have no effect where they
-do not apply.
+All options are optional. Each option is read by the chart types in the table below; on any other
+type the validator rejects it (`/options/cagr: not used by pie charts (only stacked, percent)`).
+Older specs without `specVersion` still open: `migrate()` removes such options and reports each one
+as a warning. The defaults are what the engine draws when an option is left out (the editor shows the
+same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optionDefaults`); run
+`node --experimental-strip-types --no-warnings scripts/options-table.ts` to print it.
 
-| Option | Type | Chart types | Default |
+| Option | Value | Chart types | Default |
 |---|---|---|---|
-| [`unit`](#unit) | string or `{text, position, space}` | all with numbers | none |
-| [`decimals`](#decimals) | whole number 0–10 | all with numbers | inferred from the data |
-| [`format`](#format) | Excel number format | all with numbers | none |
-| [`locale`](#locale) | `en-US` `en-GB` `en-IN` `de-DE` `fr-FR` | all with numbers; Gantt date labels | `en-US` |
-| [`scale`](#scale) | `none` `auto` `k` `m` `bn` | all with numbers | `none` |
-| [`orientation`](#orientation) | `vertical` `horizontal` | stacked, clustered, percent (**checked**) | `vertical` |
-| [`valueAxis`](#valueaxis) | boolean | column types, waterfall, combo, area, area100, mekko, mekkoxy, line | off; **on for line** |
+| [`unit`](#unit) | string or `{text, position, space}` | all except harvey, gantt | none |
+| [`decimals`](#decimals) | whole number 0–10 | all except harvey, gantt | inferred from the data |
+| [`format`](#format) | Excel number format | all except harvey, gantt | none |
+| [`locale`](#locale) | `en-US` `en-GB` `en-IN` `de-DE` `fr-FR` | all except harvey | `en-US` |
+| [`scale`](#scale) | `none` `auto` `k` `m` `bn` | all except harvey, gantt | `none` |
+| [`orientation`](#orientation) | `vertical` `horizontal` | stacked, clustered, percent | `vertical` |
+| [`valueAxis`](#valueaxis) | boolean | stacked, clustered, percent, waterfall, mekko, line, area, area100, combo, mekkoxy | on for line; off otherwise |
 | [`zeroBased`](#zerobased) | boolean | line, scatter, bubble | on, unless the data sits in a narrow band far from zero |
 | [`gap`](#gap) | number 0–10 | stacked, clustered, percent, waterfall, combo | `0.5` |
-| [`seriesLabels`](#serieslabels) | `right` `legend` `none` | most types | depends on the type |
-| [`totals`](#totals) | boolean | stacked, percent, combo, area, mekko, mekkoxy, doughnut | on for stacked, mekko, mekkoxy |
+| [`seriesLabels`](#serieslabels) | `right` `legend` `none` | all except harvey, table | chosen per type and data |
+| [`totals`](#totals) | boolean | stacked, percent, mekko, area, doughnut, combo, mekkoxy | on for stacked, mekko, mekkoxy; off otherwise |
 | [`cagr`](#cagr) | `{from, to, years?}` or `null` | stacked, percent | none |
 | [`difference`](#difference) | `{from, to}` or `null` | stacked, percent | none |
-| [`totalsAt`](#totalsat) | array of category indices | waterfall | first and last category |
-| [`step`](#step) | boolean | line (**checked**) | off |
-| [`percentData`](#percentdata) | boolean | percent (**checked**) | off |
-| [`combo`](#combo) | `stacked` `clustered` | combo (**checked**) | `stacked` |
+| [`totalsAt`](#totalsat) | array of category indices | waterfall | the first category and the `"e"` cells, else first and last |
+| [`step`](#step) | boolean | line | off |
+| [`percentData`](#percentdata) | boolean | percent | off |
+| [`combo`](#combo) | `stacked` `clustered` | combo | `stacked` |
 | [`mekko`](#mekko) | `percent` `unit` | mekko | `percent` |
-| [`sort`](#sort) | `sheet` `reverse` `ascending` `descending` | mekkoxy (**checked**) | `sheet` |
-| [`axisTitles`](#axistitles) | `{x?, y?}` | scatter, bubble (**checked**) | none |
-| [`sizeLegend`](#sizelegend) | boolean or caption | bubble (**checked**) | off |
+| [`sort`](#sort) | `sheet` `reverse` `ascending` `descending` | mekkoxy | `sheet` |
+| [`axisTitles`](#axistitles) | `{x?, y?}` | scatter, bubble | none |
+| [`sizeLegend`](#sizelegend) | boolean or caption | bubble | off |
 | [`labelContent`](#labelcontent) | `percent` `value` `both` | pie, doughnut | `percent` |
-| [`shades`](#shades) | array of `{from, to, label?}` | gantt (**checked**) | none |
-| [`brackets`](#brackets) | array of `{from, to, label?}` | gantt (**checked**) | none |
-| [`today`](#today) | date | gantt (**checked**) | none |
+| [`shades`](#shades) | array of `{from, to, label?}` | gantt | none |
+| [`brackets`](#brackets) | array of `{from, to, label?}` | gantt | none |
+| [`today`](#today) | date | gantt | none |
 
 ### Numbers
 
@@ -334,7 +337,7 @@ data. `true` forces zero in; `false` always fits the data.
 #### `gap`
 
 Space between columns as a fraction of the column width: `0` makes columns touch, `0.5` (the
-default) leaves half a column between them. The validator accepts 0–10; the editor offers 0–2.
+default) leaves half a column between them. From 0 to 10, in the editor too.
 
 ### Labels and legend
 
@@ -376,7 +379,7 @@ A bold total label above each column. On by default for `stacked`, `mekko` and `
 or more height series; with one, its value always sits on top); off by default for the others.
 `percent` and `combo` (stacked columns only) show the column totals of the raw values, `area` puts
 them above the top band (not `area100`), and `doughnut` shows the grand total in the hole. Other
-types ignore it.
+types reject it.
 
 #### `cagr`
 
@@ -588,16 +591,16 @@ place, for example:
 ```
 /series/1/values/3: must be a number or null, got string "n/a"
 /options/cagr/to: "to" must come after "from"
-/options/step: step lines are available for line charts, not stacked
+/options/step: not used by stacked charts (only line)
 ```
 
 The rules beyond the types listed above:
 
 - every series has exactly one value per category, and series names are unique;
 - `cagr`, `difference` and `totalsAt` indices are within the categories;
-- `orientation: "horizontal"` only on stacked, clustered and percent; `step` only on line;
-- `percentData`, `combo`, `sort`, `axisTitles`, `sizeLegend`, `shades`, `brackets` and `today` only on
-  their chart types;
+- every option only on the chart types the options table lists for it (`null` for `cagr` or
+  `difference` is accepted anywhere: it means none);
+- `decimals` and `gap` within 0–10;
 - Gantt: at least a Start and an End series, both dates or neither for each activity, end after start;
 - Mekko XY: at least two series; widths not negative.
 
