@@ -2,9 +2,9 @@
 
 Plan of record: docs/MASTER-PLAN.md · Repo: https://github.com/sunajeb/open-charts
 
-## Goal (2026-10-13)
-A working, end-to-end tested open-charts covering everything in the master plan that can be built and proven on this Mac.
-Every editor button and every chart type must be exercised in a real browser and rendered through LibreOffice and PowerPoint for Mac.
+## Goal (2026-10-13) — lean first build
+Add every chart type into PowerPoint, tested end to end: every editor button in a real browser, every chart type rendered through LibreOffice and PowerPoint for Mac.
+**Out of the first build (owner, 2026-10-13):** AI features, other apps (Excel, Keynote, Sheets), CSV/XLSX inputs, template fill, HTTP API, SDKs.
 
 ### Not buildable on this machine (stays planned, not faked)
 - P4 native Windows add-in (needs Windows + Office; gated at M7, skipped by default when solo)
@@ -18,14 +18,13 @@ Every editor button and every chart type must be exercised in a real browser and
 
 ## Wave 1 (three agents in parallel, git worktrees)
 - [ ] **A — engine (P1):** B3 date CAGR (30/360), B5, B7 hhea/OS2 line height, B8 long-word overflow, B9 legend wrap, B10, B11, B12 gate v2, B13, B14 numbers/locale service, B15 path-addressed validation; spec v1 + `migrate` + hand-written JSON Schema; `Scene.roles`; horizontal bar orientation
-- [ ] **B — I/O (P1 tags + P2 data-to-deck):** writer emits tag contract v1; `inspect` and `import`; CSV/XLSX inputs; `fill` template; `--strict` / `--report`; HTTP `POST /api/render`
+- [ ] **B — I/O (P1 tags):** writer emits tag contract v1; `inspect` and `import`; `--strict` / `--report`
 - [ ] **C — QA + editor (P1 editor polish):** Playwright E2E for every editor button; LibreOffice golden pipeline (soffice → pdftoppm → pixel diff); editor transpose / reverse / all chart types; fix whatever the E2E finds
 
 ## Wave 2
 - [ ] Merge wave 1, resolve conflicts, full test suite once
-- [ ] More chart types (area, pie/doughnut, scatter, combo) — P2
-- [ ] Office.js add-in (P3 path A): task pane, sideload on PowerPoint for Mac
-- [ ] `@open-charts/ai` with injectable client + verifier (no live key needed for tests)
+- [ ] Remaining chart types: area, combo (column + line), pie, doughnut, scatter, bubble, butterfly
+- [ ] PowerPoint add-in (Office.js, path A): task pane = editor, inserts the chart into the current presentation; re-edit a selected chart from its tags; sideload and test on PowerPoint for Mac
 
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
