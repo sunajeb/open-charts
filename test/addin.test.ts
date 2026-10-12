@@ -130,6 +130,7 @@ function fakeSessions() {
       store.set(id, { id, rev: 1, state: 'open', chart, title, updatedAt: '' });
       opened.push(id);
     },
+    async settle(id) { store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'open' }); },
   };
   const apply = (id: string, chart: object) => store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'applied', chart });
   return { sessions, opened, apply };
@@ -150,12 +151,17 @@ test('edit data opens a session; the applied chart is used by update of that cha
   assert.equal(JSON.parse(Object.fromEntries(r1.tags).OC_SPEC).categories[0], 'North America');
   assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, true);
 
-  apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
+  const cats = async (op: string, arg: string) =>
+    JSON.parse(Object.fromEntries(parseResponse(await handleRequest(req(op, arg, '48,96,864,408', '48,96,864,408', json), m, sessions)).tags).OC_SPEC ?? '{}').categories;
   for (const arg of [id, '']) { // by session id (ApplyEdit) and by the chart's own spec (Update chart)
-    const r = parseResponse(await handleRequest(req('update', arg, '48,96,864,408', '48,96,864,408', json), m, sessions));
-    assert.deepEqual(JSON.parse(Object.fromEntries(r.tags).OC_SPEC).categories, ['A', 'B', 'C', 'D']);
+    apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
+    assert.deepEqual(await cats('update', arg), ['A', 'B', 'C', 'D']);
+    // Drawn once: another chart that still has the old data (a fresh sample, a copy) keeps it.
+    assert.equal((await sessions.get(id))!.state, 'open');
+    assert.equal((await cats('update', ''))[0], 'North America');
   }
   // The automatic check also picks up an applied edit.
+  apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
   assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, false);
 });
 

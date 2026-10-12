@@ -58,6 +58,11 @@ export function httpSessions(base = BASE, open = (url: string) => { spawn('open'
       if (!r.ok) throw new Error(`The editor refused the chart: ${await r.text()}`);
       open(`http://localhost:${ADDIN_PORT}/?session=${id}`);
     },
+    async settle(id) {
+      try {
+        await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ state: 'open' }), signal: AbortSignal.timeout(2000) });
+      } catch { /* the chart is drawn either way */ }
+    },
   };
 }
 

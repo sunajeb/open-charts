@@ -57,7 +57,9 @@ Flow:
 2. Editor: `GET` the session, edits the chart (type, data, options), **Apply** → `POST { chart, state: "applied" }`.
    The window stays open; the user may apply again (each Apply bumps `rev`).
 3. Add-in: reacts in `onSession` (PowerPoint for Mac VBA cannot poll): on `state: "applied"` it
-   re-lays out the chart on the slide; on `"cancelled"` it stops. Other hosts may instead poll `GET`
+   re-lays out the chart on the slide, then sets the session back to `open` (`POST { state: "open" }`,
+   chart kept) so the edit is never applied to another chart that has the same data; the next Apply
+   sets it to `applied` again. On `"cancelled"` it stops. Other hosts may instead poll `GET`
    and act when `rev` grows. When the editor runs inside an Office dialog it
    also calls `Office.context.ui.messageParent(JSON.stringify({ type: "open-charts:apply" | "open-charts:cancel", id, rev }))`,
    and posts the same object to `window.opener` / `window.parent` when present, so the add-in can

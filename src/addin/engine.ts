@@ -29,6 +29,12 @@ export interface Sessions {
   get(id: string): Promise<Session | undefined>;
   /** Stores the chart as an open session and shows it in the editor. */
   open(id: string, chart: object, title: string): Promise<void>;
+  /**
+   * Marks an applied session as drawn (back to "open", chart kept). Sessions are keyed by the
+   * chart's OC_SPEC, so without this an edit would later be applied to any other chart that still
+   * has the same data (a fresh sample of the same type, a copy) once the editor was closed.
+   */
+  settle?(id: string): Promise<void>;
 }
 
 export function parseRequest(text: string): AddinRequest {
@@ -61,12 +67,15 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
       case 'update':
       case 'relayout': {
         if (!req.spec) return error(SELECT_FIRST);
-        const session = await sessions?.get(req.arg || specKey(req.spec));
+        const id = req.arg || specKey(req.spec);
+        const session = await sessions?.get(id);
         const edited = session?.state === 'applied' && session.chart && typeof session.chart === 'object';
         const { chart, style } = edited ? splitSpec(session!.chart as ChartSpec & { style?: Partial<Style> }) : readSpec(req.spec);
         const frame = resolveFrame(chart, style, req.frame, req.bounds, m);
         if (req.op === 'relayout' && !edited && req.frame && sameFrame(frame, req.frame)) return `${header()}\n${record('N')}\n`;
-        return respond(chart, style, frame, m);
+        const out = respond(chart, style, frame, m);
+        if (edited) await sessions?.settle?.(id);
+        return out;
       }
       case 'edit': {
         if (!req.spec) return error(SELECT_FIRST);
