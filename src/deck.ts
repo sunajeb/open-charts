@@ -5,6 +5,9 @@ import { SLIDE, writePptx } from './render/pptx.ts';
 import { sceneToSvg } from './render/svg.ts';
 
 export interface DeckSpec {
+  /** Spec format version (see migrateDeck / validateDeck in src/core). */
+  specVersion?: 1;
+  $schema?: string;
   style?: Partial<Style>;
   slides: { title?: string; chart: ChartSpec }[];
 }

@@ -155,7 +155,7 @@ export function seriesLabelsRight(ctx: Ctx, items: SeriesItem[], x: number, top:
  * Legend: colour swatch + name, laid left to right from the frame's top-left, wrapping onto as many
  * rows as the frame width needs (B9). Returns its height.
  */
-export function legend(ctx: Ctx, swatch: 'box' | 'line' = 'box'): number {
+export function legend(ctx: Ctx, swatch: 'box' | 'line' = 'box', colorOf: (s: number) => string = ctx.color): number {
   if (ctx.o.seriesLabels !== 'legend') return 0;
   const { frame, fs, lh, pad } = ctx;
   const sw = fs * 0.75;
@@ -168,9 +168,9 @@ export function legend(ctx: Ctx, swatch: 'box' | 'line' = 'box'): number {
     if (x > frame.x && x + itemW > frame.x + frame.w) { x = frame.x; y += lh; }
     const role = `legend:s${i}`;
     if (swatch === 'box') {
-      ctx.add(role, { kind: 'rect', x, y: y + (lh - sw) / 2, w: sw, h: sw, fill: ctx.color(i) });
+      ctx.add(role, { kind: 'rect', x, y: y + (lh - sw) / 2, w: sw, h: sw, fill: colorOf(i) });
     } else {
-      ctx.add(role, { kind: 'line', x1: x, y1: y + lh / 2, x2: x + swW, y2: y + lh / 2, color: ctx.color(i), width: 2 });
+      ctx.add(role, { kind: 'line', x1: x, y1: y + lh / 2, x2: x + swW, y2: y + lh / 2, color: colorOf(i), width: 2 });
     }
     text(ctx, role, { x: x + swW + pad * 0.6, y, w, h: lh, text: s.name, align: 'left', role: 'series' });
     x += itemW + pad * 2;

@@ -65,7 +65,10 @@ export function layoutWaterfall(ctx: Ctx) {
 
   // Reserve space: legend on top, a label row above the highest bar, a label row below the lowest
   // bar when something dips below the baseline, categories at the bottom.
-  const legendH = legend(ctx);
+  const serColor = (s: number) =>
+    (spec.series[s].color ?? (nSer > 1 ? style.palette[(s + 1) % style.palette.length] : '')).replace('#', '');
+  // Legend swatches use the same colours as the delta bars (palette[0] is reserved for totals).
+  const legendH = legend(ctx, 'box', (s) => serColor(s) || ctx.color(s));
   const labelH = lh + pad * 0.3;
   const belowH = dmin < 0 ? labelH : 0;
   const slot = (frame.w - axisW) / nCat;
@@ -81,8 +84,6 @@ export function layoutWaterfall(ctx: Ctx) {
   const xl = (c: number) => cx(c) - colW / 2;
   const plotBottom = yOf(dmin) + belowH;
 
-  const serColor = (s: number) =>
-    (spec.series[s].color ?? (nSer > 1 ? style.palette[(s + 1) % style.palette.length] : '')).replace('#', '');
   const segColor = (col: typeof cols[number], g: Seg) =>
     col.total ? style.palette[0].replace('#', '') : serColor(g.s) || (g.v >= 0 ? style.positive : style.negative).replace('#', '');
 

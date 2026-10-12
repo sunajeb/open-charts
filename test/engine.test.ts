@@ -294,6 +294,15 @@ test('waterfall "e" cells mark computed totals and do not change inferred decima
   assert.deepEqual(textsOf(mid, /^label:total:/), ['10', '15', '12']);
 });
 
+test('multi-series waterfall: legend swatches match the delta bars', () => {
+  const scene = layoutChart({ type: 'waterfall', categories: ['S', 'a', 'b', 'E'], series: [{ name: 'Organic', values: [10, 2, -1, null] }, { name: 'Acquired', values: [0, 3, 1, null] }] }, F, m);
+  for (const s of [0, 1]) {
+    const swatch = byRole(scene, new RegExp(`^legend:s${s}$`)).find((x): x is RectShape => x.kind === 'rect')!;
+    const bar = byRole(scene, new RegExp(`^bar:s${s}:c1$`))[0] as RectShape;
+    assert.equal(swatch.fill, bar.fill);
+  }
+});
+
 test('spec v1: migrate stamps v0 losslessly; decks too; newer versions are rejected', () => {
   const v0 = base('stacked', { cagr: { from: 0, to: 3 }, unit: 'm' });
   const v1 = migrate(v0);
