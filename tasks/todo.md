@@ -52,6 +52,9 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [x] Editor: "label hidden (no room)" notices dominate the issue list on the default chart — collapse into one low-severity line ("4 labels too small to show"); keep real problems prominent
 - [x] Thin segments: place labels outside with a leader (reference behaviour) instead of hiding, where there is room
 
+- [ ] Minor: mekko-3 Asia Pacific "3%" gets a long, nearly flat leader (valid, not pretty)
+- [ ] Later: user drag pins a label (needs a fixed-position field in the placer + add-in support)
+
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
 - [ ] CI runs unit + E2E + goldens on PRs
