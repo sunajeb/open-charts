@@ -54,8 +54,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
     case 'install':
       return stopServer().then(() => install(opts.register !== false));
     case 'uninstall':
-      uninstall();
-      return;
+      return stopServer().then(uninstall);
     default:
       console.error(ADDIN_USAGE);
       process.exit(1);
