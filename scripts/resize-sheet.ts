@@ -10,7 +10,7 @@ import { allCases } from '../test/resize-matrix.ts';
 
 const m = createMeasurer();
 const [pattern = '.', out = 'out/resize'] = process.argv.slice(2);
-const SIZES: [number, number][] = [[160, 90], [240, 130], [360, 200], [520, 300], [864, 408], [900, 120], [200, 500], [360, 560]];
+const SIZES: [number, number][] = [[200, 120], [240, 130], [360, 200], [520, 300], [864, 408], [200, 500], [900, 120], [360, 560]];
 mkdirSync(out, { recursive: true });
 for (const c of allCases().filter((c) => new RegExp(pattern).test(c.name))) {
   const scenes: Scene[] = [];
