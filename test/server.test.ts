@@ -2,7 +2,21 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import { serve, type Session } from '../src/server.ts';
+import { editorHtml, serve, type Session } from '../src/server.ts';
+import { editorSpec } from '../src/core/spec.ts';
+
+test('the editor page carries the engine option table, per-type defaults and limits before its script', () => {
+  const html = editorHtml();
+  const m = /<script>window\.OC_SPEC = (.*?);<\/script>/.exec(html);
+  assert.ok(m, 'OC_SPEC is set');
+  assert.ok(html.indexOf(m[0]) < html.indexOf('<script>', html.indexOf(m[0]) + m[0].length), 'before the editor script');
+  assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify(editorSpec())));
+  const spec = editorSpec();
+  assert.equal(spec.defaults.mekko.totals, true);
+  assert.equal(spec.defaults.line.valueAxis, true);
+  assert.deepEqual(spec.options.cagr, ['stacked', 'percent']);
+  assert.equal(spec.limits.gap.max, 10);
+});
 
 const chart = { type: 'stacked', categories: ['a', 'b'], series: [{ name: 'S', values: [1, 2] }] };
 

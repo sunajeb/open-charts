@@ -156,6 +156,13 @@
   .check { display: flex; flex-direction: row; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; cursor: pointer; }
   .range { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
   .range > span { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+  .range .years { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .range .years input { width: 7em; }
+  .periods { display: flex; flex-direction: column; gap: 6px; }
+  .period { display: grid; grid-template-columns: 1fr 1fr 24px; gap: 4px; }
+  .period input { min-width: 0; }
+  .period input.lbl { grid-column: 1 / 3; }
+  .period button { padding: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px 12px; }
   .chips .check { font-size: 12px; }
   .type-btn { width: 100%; justify-content: flex-start; padding: 6px 10px; gap: 10px; }
@@ -268,7 +275,7 @@
       <div class="sec-body">
         <button id="typeBtn" class="type-btn" type="button" aria-haspopup="dialog" aria-expanded="false" data-tip="Chart type — the data carries over where the shapes match"></button>
         <label class="field ctl" data-mode="deck" data-tip="Slide title above the chart (the action title)">Slide title<input id="title" type="text" autocomplete="off"></label>
-        <label class="check ctl" data-for="stacked clustered percent" data-tip="Draw the categories as horizontal bars instead of columns"><input id="orientation" type="checkbox"> Horizontal bars</label>
+        <label class="check ctl" data-opt="orientation" data-tip="Draw the categories as horizontal bars instead of columns"><input id="orientation" type="checkbox"> Horizontal bars</label>
         <div class="field ctl" data-for="combo" data-tip="Series drawn as a line on top of the columns">Series drawn as lines<div class="chips" id="asLine"></div></div>
       </div>
     </section>
@@ -277,44 +284,44 @@
       <summary><h2>Numbers</h2></summary>
       <div class="sec-body">
         <div class="pair">
-          <label class="field ctl" data-hide="pie harvey gantt" data-tip="Text added to every value label, e.g. m, %, bn or $">Unit<input id="unit" type="text" placeholder="m, k, %" autocomplete="off"></label>
-          <label class="field ctl" data-hide="harvey gantt" data-tip="Digits after the decimal point; empty = automatic">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
+          <label class="field ctl" data-opt="unit" data-tip="Text added to every value label, e.g. m, %, bn or $">Unit<input id="unit" type="text" placeholder="m, k, %" autocomplete="off"></label>
+          <label class="field ctl" data-opt="decimals" data-tip="Digits after the decimal point; empty = automatic">Decimals<input id="decimals" type="number" placeholder="auto"></label>
         </div>
-        <label class="check ctl" data-hide="pie harvey gantt" data-tip="Put the unit before the number, e.g. $12 instead of 12$"><input id="unitPrefix" type="checkbox"> Unit before the number</label>
+        <label class="check ctl" data-opt="unit" data-tip="Put the unit before the number, e.g. $12 instead of 12$"><input id="unitPrefix" type="checkbox"> Unit before the number</label>
         <div class="pair">
-          <label class="field ctl" data-hide="harvey gantt" data-tip="Divide the values by a thousand, million or billion and add k / m / bn">Magnitude
+          <label class="field ctl" data-opt="scale" data-tip="Divide the values by a thousand, million or billion and add k / m / bn">Magnitude
             <select id="scale"><option value="">None</option><option value="auto">Auto</option><option value="k">Thousands (k)</option><option value="m">Millions (m)</option><option value="bn">Billions (bn)</option></select>
           </label>
-          <label class="field ctl" data-hide="harvey" data-tip="Decimal and thousands separators of the labels">Separators
+          <label class="field ctl" data-opt="locale" data-tip="Decimal and thousands separators of the labels">Separators
             <select id="locale"><option value="">1,234.5 (US)</option><option value="en-GB">1,234.5 (UK)</option><option value="en-IN">1,23,456.5 (India)</option><option value="de-DE">1.234,5 (DE)</option><option value="fr-FR">1 234,5 (FR)</option></select>
           </label>
         </div>
-        <label class="field ctl" data-hide="harvey gantt" data-tip="Excel number format code, e.g. #,##0.0;(#,##0.0) — overrides decimals; applied on Enter">Number format<input id="format" type="text" placeholder="e.g. #,##0.0" autocomplete="off" spellcheck="false"></label>
-        <label class="check ctl" data-for="percent" data-tip="The datasheet already holds percentages: each column keeps its own total"><input id="percentData" type="checkbox"> Values are %</label>
+        <label class="field ctl" data-opt="format" data-tip="Excel number format code, e.g. #,##0.0;(#,##0.0) — overrides decimals; applied on Enter">Number format<input id="format" type="text" placeholder="e.g. #,##0.0" autocomplete="off" spellcheck="false"></label>
+        <label class="check ctl" data-opt="percentData" data-tip="The datasheet already holds percentages: each column keeps its own total"><input id="percentData" type="checkbox"> Values are %</label>
       </div>
     </details>
 
     <details class="panel" open data-section>
       <summary><h2>Axes &amp; layout</h2></summary>
       <div class="sec-body">
-        <label class="check ctl" data-hide="pie doughnut harvey scatter bubble table gantt" data-tip="Show a value axis with gridlines next to the chart"><input id="valueAxis" type="checkbox"> Value axis</label>
-        <label class="check ctl" data-for="line" data-tip="Draw the line as horizontal steps between categories"><input id="step" type="checkbox"> Step line</label>
-        <label class="field ctl" data-for="line scatter bubble" data-tip="Start the value axis at zero, or fit it to the range of the data">Axis start
+        <label class="check ctl" data-opt="valueAxis" data-tip="Show a value axis with gridlines next to the chart"><input id="valueAxis" type="checkbox"> Value axis</label>
+        <label class="check ctl" data-opt="step" data-tip="Draw the line as horizontal steps between categories"><input id="step" type="checkbox"> Step line</label>
+        <label class="field ctl" data-opt="zeroBased" data-tip="Start the value axis at zero, or fit it to the range of the data">Axis start
           <select id="zeroBased"><option value="">Auto</option><option value="true">Zero</option><option value="false">Fit data</option></select>
         </label>
-        <label class="field ctl" data-for="stacked percent clustered waterfall combo" data-tip="Gap between columns as a share of the column width (0–2)">Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
-        <label class="field ctl" data-for="mekko" data-tip="Column heights as shares of 100% or in absolute units">Mekko heights
+        <label class="field ctl" data-opt="gap" data-tip="Gap between columns as a share of the column width">Column gap<input id="gap" type="number" placeholder="0.5"></label>
+        <label class="field ctl" data-opt="mekko" data-tip="Column heights as shares of 100% or in absolute units">Mekko heights
           <select id="mekko"><option value="percent">100% (share)</option><option value="unit">Absolute</option></select>
         </label>
-        <label class="field ctl" data-for="combo" data-tip="How the column series of a combination chart are drawn">Columns
+        <label class="field ctl" data-opt="combo" data-tip="How the column series of a combination chart are drawn">Columns
           <select id="combo"><option value="stacked">Stacked</option><option value="clustered">Clustered</option></select>
         </label>
-        <label class="field ctl" data-for="mekkoxy" data-tip="Order of the Mekko XY columns from left to right">Order
+        <label class="field ctl" data-opt="sort" data-tip="Order of the Mekko XY columns from left to right">Order
           <select id="sort"><option value="sheet">Sheet order</option><option value="reverse">Reverse</option><option value="ascending">Ascending height</option><option value="descending">Descending height</option></select>
         </label>
         <div class="pair">
-          <label class="field ctl" data-for="scatter bubble" data-tip="Title along the horizontal axis">X axis title<input id="xTitle" type="text" autocomplete="off"></label>
-          <label class="field ctl" data-for="scatter bubble" data-tip="Title along the vertical axis">Y axis title<input id="yTitle" type="text" autocomplete="off"></label>
+          <label class="field ctl" data-opt="axisTitles" data-tip="Title along the horizontal axis">X axis title<input id="xTitle" type="text" autocomplete="off"></label>
+          <label class="field ctl" data-opt="axisTitles" data-tip="Title along the vertical axis">Y axis title<input id="yTitle" type="text" autocomplete="off"></label>
         </div>
       </div>
     </details>
@@ -322,19 +329,27 @@
     <details class="panel" open data-section>
       <summary><h2>Labels &amp; legend</h2></summary>
       <div class="sec-body">
-        <label class="field ctl" data-for="stacked percent clustered line waterfall mekko area area100 pie doughnut combo mekkoxy scatter bubble gantt" data-tip="Where series names go: next to the chart, in a legend, or nowhere">Series labels
+        <label class="field ctl" data-opt="seriesLabels" data-tip="Where series names go: next to the chart, in a legend, or nowhere">Series labels
           <select id="seriesLabels"><option value="">Auto</option><option value="right">Right of chart</option><option value="legend">Legend</option><option value="none">None</option></select>
         </label>
+        <label class="field ctl" data-opt="labelContent" data-tip="What each slice label shows: its share, its value, or both">Slice labels
+          <select id="labelContent"><option value="percent">Share (%)</option><option value="value">Value</option><option value="both">Value and share</option></select>
+        </label>
+        <label class="check ctl" data-opt="sizeLegend" data-tip="A reference bubble of a round size, top right"><input id="sizeLegend" type="checkbox"> Size legend</label>
+        <label class="field ctl" data-opt="sizeLegend" data-tip="Caption of the size legend, e.g. Revenue ($m)">Size legend caption<input id="sizeCaption" type="text" placeholder="e.g. Revenue ($m)" autocomplete="off"></label>
       </div>
     </details>
 
     <details class="panel" open data-section>
       <summary><h2>Decorations</h2></summary>
       <div class="sec-body">
-        <label class="check ctl" data-for="stacked percent mekko area doughnut combo mekkoxy" data-tip="Show the sum above each column (in the hole for a doughnut)"><input id="totals" type="checkbox"> Totals</label>
-        <div class="range ctl" data-for="stacked percent" data-tip="Compound annual growth arrow between two categories, from the column totals"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select></div>
-        <div class="range ctl" data-for="stacked percent" data-tip="Arrow showing the difference between two column totals"><span>Difference arrow</span><select id="diffFrom" aria-label="Difference from"></select><select id="diffTo" aria-label="Difference to"></select></div>
-        <div class="field ctl" data-for="waterfall" data-tip="Columns drawn from the baseline as totals instead of steps">Total columns<div class="chips" id="totalsAt"></div></div>
+        <label class="check ctl" data-opt="totals" data-tip="Show the sum above each column (in the hole for a doughnut)"><input id="totals" type="checkbox"> Totals</label>
+        <div class="range ctl" data-opt="cagr" data-tip="Compound annual growth arrow between two categories, from the column totals"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select><label class="years" data-tip="Years the growth spans; empty = read from the category labels">Years<input id="cagrYears" type="number" min="0" step="any" placeholder="auto"></label></div>
+        <div class="range ctl" data-opt="difference" data-tip="Arrow showing the difference between two column totals"><span>Difference arrow</span><select id="diffFrom" aria-label="Difference from"></select><select id="diffTo" aria-label="Difference to"></select></div>
+        <div class="field ctl" data-opt="totalsAt" data-tip="Columns drawn from the baseline as totals instead of steps">Total columns<div class="chips" id="totalsAt"></div></div>
+        <label class="field ctl" data-opt="today" data-tip="A line through every row at this date, e.g. 2026-03-15; applied on Enter">Today line<input id="today" type="text" placeholder="e.g. 2026-03-15" autocomplete="off" spellcheck="false"></label>
+        <div class="field ctl" data-opt="shades" data-tip="Periods shaded across every row (holidays, freezes), with an optional label">Shaded periods<div class="periods" id="shades"></div></div>
+        <div class="field ctl" data-opt="brackets" data-tip="Brackets under the rows that name periods of time (phases)">Phase brackets<div class="periods" id="brackets"></div></div>
       </div>
     </details>
   </aside>
@@ -389,11 +404,16 @@ const GANTT_SAMPLE = {
     { name: 'Milestone', values: ['2026-02-02', null, '2026-05-04', '2026-11-30', '2026-03-16'] },
   ],
 };
-// Engine defaults per chart type, mirrored so the form shows what the chart actually does.
-const DEFAULTS = {
-  totals: (t) => t === 'stacked' || t === 'mekkoxy',
-  valueAxis: (t) => t === 'line',
-};
+// Which chart types read each option, the engine's default per type, and numeric limits: injected by
+// the server from src/core/spec.ts (OPTIONS, optionDefaults, LIMITS), so the form shows what is drawn.
+const SPEC = window.OC_SPEC;
+const applies = (k, type) => !!SPEC.options[k]?.includes(type);
+const defaultOf = (type, k) => SPEC.defaults[type]?.[k];
+/** Remove options the chart type does not read (they would fail validation). */
+function dropUnused(c) {
+  if (!c.options) return;
+  for (const k of Object.keys(c.options)) if (k in SPEC.options && !applies(k, c.type)) delete c.options[k];
+}
 const PALETTE = ['1F3A5F', '3E6A9E', '7FA3CC', 'B9CDE5', 'A6A6A6', 'D9D9D9'];
 const ACCENTS = ['C0504D', 'E46C0A', 'F2B134', '4F9D69', '2E8B9A', '7B5EA7', '1C2330'];
 // Series colours do not apply to these types (slices per category, scores, cells, schedule rows).
@@ -465,6 +485,11 @@ const cellErrors = new Map(); // "r,c" -> engine validation message for that cel
 let hasError = false;
 
 for (const el of document.querySelectorAll('[data-mode]')) el.hidden = el.dataset.mode !== (session ? 'session' : 'deck');
+// Numeric inputs take the validator's limits (LIMITS in src/core/spec.ts).
+for (const [k, { min, max, step }] of Object.entries(SPEC.limits)) {
+  Object.assign($(k), { min: String(min), max: String(max), step: String(step) });
+  $(k).closest('[data-tip]').dataset.tip += ` (${min}–${max})`;
+}
 
 /** Accepts a deck, or a bare chart; returns a deck or throws with a readable reason. */
 function toDeck(d) {
@@ -473,9 +498,11 @@ function toDeck(d) {
   if (d && Array.isArray(d.slides)) {
     if (!d.slides.length) throw new Error('the deck has no slides');
     d.slides.forEach((s, i) => { if (!isChart(s?.chart)) throw new Error(`slide ${i + 1} has no valid chart (needs type, categories, series)`); });
+    // Older decks may carry options their chart type ignores; drop them like the engine's migrate().
+    d.slides.forEach((s) => dropUnused(s.chart));
     return d;
   }
-  if (isChart(d)) return { slides: [{ title: '', chart: d }] };
+  if (isChart(d)) { dropUnused(d); return { slides: [{ title: '', chart: d }] }; }
   throw new Error('expected a deck ({ "slides": [...] }) or a chart ({ "type", "categories", "series" })');
 }
 function load() {
@@ -521,6 +548,8 @@ function convertData(c, from, to) {
     const src = b === 'date' ? GANTT_SAMPLE : SAMPLE.slides[0].chart;
     c.categories = [...src.categories];
     c.series = structuredClone(src.series);
+    // Gantt to scatter / bubble: from the numbers, on to points.
+    if (typeof b === 'number') return convertData(c, 'stacked', to);
   } else if (a === 'num') {
     c.series = [{ name: 'Points', values: c.categories.map((_, j) => {
       const p = Array.from({ length: b }, (_, k) => (k < c.series.length ? c.series[k].values[j] : 1));
@@ -616,7 +645,11 @@ function renderArrowSelects() {
     $(from).value = o[key] ? String(o[key].from) : '';
     $(to).value = o[key] ? String(o[key].to) : '';
   }
-  const totals = o.totalsAt ?? (c.categories.length > 1 ? [0, c.categories.length - 1] : [0]);
+  $('cagrYears').value = o.cagr?.years ?? '';
+  $('cagrYears').disabled = !o.cagr;
+  // Engine default (layoutWaterfall): the first category and the "e" cells, else first and last.
+  const eCats = c.categories.map((_, j) => j).filter((j) => c.series.some((s) => s.values[j] === 'e'));
+  const totals = o.totalsAt ?? (eCats.length ? [0, ...eCats] : c.categories.length > 1 ? [0, c.categories.length - 1] : [0]);
   $('totalsAt').replaceChildren(...c.categories.map((cat, i) => check(cat || `#${i + 1}`, i, totals.includes(i), () => {
     setOpt('totalsAt', [...$('totalsAt').querySelectorAll('input:checked')].map((b) => +b.value));
   })));
@@ -645,21 +678,31 @@ function renderForm() {
   if (![...$('locale').options].some((op) => op.value === $('locale').value)) $('locale').add(new Option(o.locale, o.locale));
   $('locale').value = o.locale ?? '';
   $('format').value = o.format ?? '';
+  // Unset options show the engine's default for this type (what the preview draws).
+  const shown = (k) => o[k] ?? defaultOf(c.type, k);
   $('gap').value = o.gap ?? '';
+  $('gap').placeholder = String(defaultOf(c.type, 'gap') ?? '');
   $('seriesLabels').value = o.seriesLabels ?? '';
-  $('mekko').value = o.mekko ?? 'percent';
-  $('totals').checked = o.totals ?? DEFAULTS.totals(c.type);
-  $('valueAxis').checked = o.valueAxis ?? DEFAULTS.valueAxis(c.type);
+  $('mekko').value = shown('mekko') ?? 'percent';
+  $('totals').checked = !!shown('totals');
+  $('valueAxis').checked = !!shown('valueAxis');
   $('zeroBased').value = o.zeroBased === undefined ? '' : String(o.zeroBased);
-  $('step').checked = !!o.step;
-  $('orientation').checked = o.orientation === 'horizontal';
-  $('percentData').checked = !!o.percentData;
-  $('combo').value = o.combo ?? 'stacked';
-  $('sort').value = o.sort ?? 'sheet';
+  $('step').checked = !!shown('step');
+  $('orientation').checked = shown('orientation') === 'horizontal';
+  $('percentData').checked = !!shown('percentData');
+  $('combo').value = shown('combo') ?? 'stacked';
+  $('sort').value = shown('sort') ?? 'sheet';
   $('xTitle').value = o.axisTitles?.x ?? '';
   $('yTitle').value = o.axisTitles?.y ?? '';
+  $('labelContent').value = shown('labelContent') ?? 'percent';
+  $('sizeLegend').checked = !!shown('sizeLegend');
+  $('sizeCaption').value = typeof o.sizeLegend === 'string' ? o.sizeLegend : '';
+  $('sizeCaption').disabled = !shown('sizeLegend');
+  $('today').value = o.today ?? '';
+  renderPeriods('shades');
+  renderPeriods('brackets');
+  for (const el of document.querySelectorAll('[data-opt]')) el.hidden = !applies(el.dataset.opt, c.type);
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(c.type);
-  for (const el of document.querySelectorAll('[data-hide]')) el.hidden = el.dataset.hide.split(' ').includes(c.type);
   if (session) $('title').closest('.ctl').hidden = true;
   // A section with no control that applies to this type disappears.
   for (const sec of document.querySelectorAll('[data-section]')) {
@@ -1212,15 +1255,13 @@ function setOpt(k, v, key = k) { if (v === undefined) delete opts()[k]; else opt
 function setType(to) {
   const c = chart(), o = opts(), from = c.type;
   // Options left at the old type's default follow the new type's default.
-  for (const [k, def] of Object.entries(DEFAULTS)) if (o[k] !== undefined && o[k] === def(from)) delete o[k];
+  for (const k of Object.keys(o)) if (o[k] === defaultOf(from, k)) delete o[k];
   convertData(c, from, to);
   // A combination chart needs a line: the last series becomes one unless a series already is.
   if (to === 'combo' && c.series.length > 1 && !c.series.some((s) => s.as === 'line')) c.series[c.series.length - 1].as = 'line';
-  // Options that only some types read would fail validation on another.
-  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['axisTitles', ['scatter', 'bubble']], ['shades', ['gantt']], ['orientation', ['stacked', 'clustered', 'percent']], ['step', ['line']]]) {
-    if (!types.includes(to)) delete o[k];
-  }
   c.type = to;
+  // Options the new type does not read are never sent (they would fail validation).
+  dropUnused(c);
   // Harvey balls read 0–4 quarters (or 0–1): start from a small assessment grid if the data does not fit.
   if (to === 'harvey' && c.series.some((s) => s.values.some((v) => typeof v === 'number' && (v < 0 || v > 4)))) {
     Object.assign(c, structuredClone(HARVEY_SAMPLE));
@@ -1267,9 +1308,58 @@ for (const [id, axis] of [['xTitle', 'x'], ['yTitle', 'y']]) {
 for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
   const update = () => {
     const a = $(from).value, b = $(to).value;
-    setOpt(key, a !== '' && b !== '' && a !== b ? { from: Math.min(+a, +b), to: Math.max(+a, +b) } : undefined);
+    const years = key === 'cagr' ? opts().cagr?.years : undefined;
+    setOpt(key, a !== '' && b !== '' && a !== b ? { from: Math.min(+a, +b), to: Math.max(+a, +b), ...(years ? { years } : {}) } : undefined);
+    if (key === 'cagr') $('cagrYears').disabled = !opts().cagr;
   };
   $(from).onchange = update; $(to).onchange = update;
+}
+$('cagrYears').oninput = (e) => {
+  const c = opts().cagr, y = Number(e.target.value);
+  if (!c) return;
+  const { years, ...range } = c;
+  setOpt('cagr', e.target.value !== '' && y > 0 ? { ...range, years: y } : range, 'cagrYears');
+};
+$('labelContent').onchange = (e) => { setOpt('labelContent', e.target.value === defaultOf(chart().type, 'labelContent') ? undefined : e.target.value); };
+const writeSizeLegend = () => {
+  const on = $('sizeLegend').checked, caption = $('sizeCaption').value.trim();
+  $('sizeCaption').disabled = !on;
+  setOpt('sizeLegend', on ? caption || true : undefined, 'sizeLegend');
+};
+$('sizeLegend').onchange = writeSizeLegend;
+$('sizeCaption').oninput = writeSizeLegend;
+$('today').onchange = (e) => { setOpt('today', e.target.value.trim() || undefined); };
+$('today').onkeydown = (e) => { if (e.key === 'Enter') e.target.dispatchEvent(new Event('change')); };
+
+/** Gantt shaded periods / brackets: one row per period (from, to, label), plus an Add button. */
+function renderPeriods(key) {
+  const list = opts()[key] ?? [];
+  const write = () => setOpt(key, list.length ? list : undefined, key);
+  const input = (p, field, label, cls = '') => {
+    const inp = Object.assign(document.createElement('input'), { type: 'text', value: p[field] ?? '', placeholder: label, className: cls, autocomplete: 'off', spellcheck: false });
+    inp.setAttribute('aria-label', label);
+    inp.dataset.field = field;
+    inp.onchange = () => { if (inp.value.trim()) p[field] = inp.value.trim(); else if (field === 'label') delete p[field]; write(); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter') inp.dispatchEvent(new Event('change')); };
+    return inp;
+  };
+  const rows = list.map((p, i) => {
+    const row = Object.assign(document.createElement('div'), { className: 'period' });
+    const del = Object.assign(document.createElement('button'), { type: 'button', textContent: '×' });
+    del.setAttribute('aria-label', `Remove period ${i + 1}`);
+    del.onclick = () => { list.splice(i, 1); write(); renderPeriods(key); };
+    row.append(input(p, 'from', 'From'), input(p, 'to', 'To'), del, input(p, 'label', 'Label (optional)', 'lbl'));
+    return row;
+  });
+  const add = Object.assign(document.createElement('button'), { type: 'button', textContent: key === 'shades' ? '+ Shaded period' : '+ Bracket', className: 'add' });
+  add.onclick = () => {
+    // Start from the first activity's dates, which are valid for this chart.
+    const [s, e] = chart().series;
+    const j = Math.max(0, s?.values.findIndex((v, k) => v && e?.values[k]) ?? 0);
+    list.push({ from: s?.values[j] || '2026-01-01', to: e?.values[j] || '2026-02-01' });
+    write(); renderPeriods(key);
+  };
+  $(key).replaceChildren(...rows, add);
 }
 
 // ---- Slides, files ------------------------------------------------------------------------------

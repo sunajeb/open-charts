@@ -2,8 +2,20 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { readFileSync } from 'node:fs';
 import { createMeasurer } from './fonts.ts';
 import { buildDeck, type DeckSpec } from './deck.ts';
+import { editorSpec } from './core/spec.ts';
 
 const EDITOR = new URL('./web/editor.html', import.meta.url);
+
+/**
+ * The editor page with the engine's option table, per-type defaults and limits (`window.OC_SPEC`,
+ * from src/core/spec.ts) set before its script runs, so its controls never drift from the engine.
+ */
+export function editorHtml(): string {
+  const html = readFileSync(EDITOR, 'utf8');
+  const boot = `<script>window.OC_SPEC = ${JSON.stringify(editorSpec()).replace(/</g, '\\u003c')};</script>\n`;
+  const at = html.indexOf('<script');
+  return html.slice(0, at) + boot + html.slice(at);
+}
 
 async function body(req: IncomingMessage): Promise<DeckSpec> {
   const chunks: Buffer[] = [];
@@ -51,7 +63,7 @@ export function serve(port: number, fonts: { font?: string; bold?: string } = {}
       if (opts.routes && (await opts.routes(req, res))) return;
       if (req.method === 'GET' && /^\/(index\.html)?(\?|$)/.test(req.url ?? '')) {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(readFileSync(EDITOR));
+        res.end(editorHtml());
         return;
       }
       const sm = req.url?.match(/^\/api\/session\/([^/?]+)$/);

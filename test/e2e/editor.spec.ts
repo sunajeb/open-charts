@@ -446,6 +446,118 @@ test('switching type shows the controls that apply and keeps defaults sensible',
   expect(await texts(page)).toContain('97m');
 });
 
+test('option defaults come from the engine: Mekko totals show checked and are drawn', async ({ page }) => {
+  await edit(page, () => setType(page, 'mekko'));
+  await expect(page.locator('#totals')).toBeChecked();
+  expect((await deck(page)).slides[0].chart.options.totals).toBeUndefined();
+  await edit(page, () => setType(page, 'mekkoxy'));
+  await expect(page.locator('#totals')).toBeChecked();
+  await edit(page, () => setType(page, 'percent'));
+  await expect(page.locator('#totals')).not.toBeChecked();
+  await edit(page, () => setType(page, 'mekko'));
+  await expect(page.locator('#totals')).toBeChecked();
+  const before = await page.locator('#preview svg text').count();
+  await edit(page, () => page.uncheck('#totals'));
+  expect(await page.locator('#preview svg text').count()).toBeLessThan(before);
+  expect((await deck(page)).slides[0].chart.options.totals).toBe(false);
+});
+
+test('options: only applicable controls show, switching never keeps unused options, old decks open', async ({ page }) => {
+  const OC = await page.evaluate(() => (window as unknown as { OC_SPEC: { options: Record<string, string[]> } }).OC_SPEC);
+  for (const type of ['pie', 'gantt', 'bubble', 'waterfall', 'line']) {
+    await edit(page, () => setType(page, type));
+    const o = (await deck(page)).slides[0].chart.options ?? {};
+    for (const k of Object.keys(o)) expect(OC.options[k], `${k} kept on ${type}`).toContain(type);
+    for (const el of await page.locator('[data-opt]').all()) {
+      const k = (await el.getAttribute('data-opt'))!;
+      expect(await el.isHidden(), `${k} control on ${type}`).toBe(!OC.options[k].includes(type));
+    }
+  }
+  // A deck saved by an older version, with options its chart type ignores, opens cleanly.
+  await page.evaluate(() => localStorage.setItem('open-charts-deck-v1', JSON.stringify({ slides: [{ title: 'Old', chart: {
+    type: 'pie', categories: ['A', 'B'], series: [{ name: 'S', values: [3, 1] }], options: { cagr: { from: 0, to: 1 }, totals: true, gap: 1, labelContent: 'value' },
+  } }] })));
+  await page.reload();
+  await settled(page);
+  await expect(page.locator('#labelContent')).toHaveValue('value');
+  expect(await texts(page)).toEqual(expect.arrayContaining(['Old', '3', '1']));
+  await edit(page, () => page.fill('#title', 'Old deck'));
+  expect((await deck(page)).slides[0].chart.options).toEqual({ labelContent: 'value' });
+});
+
+test('numeric limits come from the validator', async ({ page }) => {
+  await expect(page.locator('#decimals')).toHaveAttribute('max', '10');
+  await expect(page.locator('#decimals')).toHaveAttribute('min', '0');
+  await expect(page.locator('#gap')).toHaveAttribute('max', '10');
+  await edit(page, () => page.fill('#gap', '4'));
+  expect((await deck(page)).slides[0].chart.options.gap).toBe(4);
+});
+
+test('pie: slice labels show shares, values or both', async ({ page }) => {
+  await edit(page, () => setType(page, 'pie'));
+  const pct = (await texts(page)).filter((t) => /%$/.test(t));
+  expect(pct.length).toBeGreaterThan(0);
+  await edit(page, () => page.selectOption('#labelContent', 'value'));
+  expect(await texts(page)).toContain('42m');
+  expect((await texts(page)).some((t) => /^\d+%$/.test(t))).toBe(false);
+  await edit(page, () => page.selectOption('#labelContent', 'both'));
+  expect((await texts(page)).some((t) => /^42m \(\d+%\)$/.test(t))).toBe(true);
+  await edit(page, () => page.selectOption('#labelContent', 'percent'));
+  expect((await deck(page)).slides[0].chart.options.labelContent).toBeUndefined();
+});
+
+test('bubble: size legend with an optional caption', async ({ page }) => {
+  await edit(page, () => setType(page, 'bubble'));
+  await expect(page.locator('#sizeCaption')).toBeDisabled();
+  const ellipses = () => page.locator('#preview svg ellipse').count();
+  const n0 = await ellipses();
+  await edit(page, () => page.check('#sizeLegend'));
+  expect(await ellipses()).toBe(n0 + 1);
+  expect((await deck(page)).slides[0].chart.options.sizeLegend).toBe(true);
+  await edit(page, () => page.fill('#sizeCaption', 'Revenue'));
+  expect((await texts(page)).some((t) => t.startsWith('Revenue:'))).toBe(true);
+  expect((await deck(page)).slides[0].chart.options.sizeLegend).toBe('Revenue');
+  await edit(page, () => page.uncheck('#sizeLegend'));
+  expect(await ellipses()).toBe(n0);
+});
+
+test('gantt: today line, shaded periods and phase brackets', async ({ page }) => {
+  await edit(page, () => setType(page, 'gantt'));
+  await edit(page, async () => { await page.fill('#today', '2026-03-16'); await page.press('#today', 'Enter'); });
+  expect(await texts(page)).toContain('Today');
+  expect((await deck(page)).slides[0].chart.options.today).toBe('2026-03-16');
+  await edit(page, () => page.click('#shades button.add'));
+  expect((await deck(page)).slides[0].chart.options.shades).toEqual([{ from: '2026-01-05', to: '2026-02-02' }]);
+  await edit(page, async () => { await page.fill('#shades input[data-field="label"]', 'Freeze'); await page.press('#shades input[data-field="label"]', 'Enter'); });
+  expect(await texts(page)).toContain('Freeze');
+  await edit(page, () => page.click('#brackets button.add'));
+  await edit(page, async () => {
+    await page.fill('#brackets input[data-field="to"]', '2026-05-04');
+    await page.fill('#brackets input[data-field="label"]', 'Phase 1');
+    await page.press('#brackets input[data-field="label"]', 'Enter');
+  });
+  expect(await texts(page)).toContain('Phase 1');
+  expect((await deck(page)).slides[0].chart.options.brackets).toEqual([{ from: '2026-01-05', to: '2026-05-04', label: 'Phase 1' }]);
+  await edit(page, () => page.click('#shades button[aria-label="Remove period 1"]'));
+  expect(await texts(page)).not.toContain('Freeze');
+  expect((await deck(page)).slides[0].chart.options.shades).toBeUndefined();
+});
+
+test('CAGR years override the years read from the labels', async ({ page }) => {
+  const cagr = async () => (await texts(page)).filter((t) => /%/.test(t));
+  const [auto] = await cagr();
+  await edit(page, () => page.fill('#cagrYears', '2'));
+  expect((await deck(page)).slides[0].chart.options.cagr).toEqual({ from: 0, to: 4, years: 2 });
+  const [two] = await cagr();
+  expect(two).not.toBe(auto);
+  await edit(page, () => page.selectOption('#cagrTo', '3'));
+  expect((await deck(page)).slides[0].chart.options.cagr).toEqual({ from: 0, to: 3, years: 2 });
+  await edit(page, () => page.fill('#cagrYears', ''));
+  expect((await deck(page)).slides[0].chart.options.cagr).toEqual({ from: 0, to: 3 });
+  await page.selectOption('#cagrFrom', '');
+  await expect(page.locator('#cagrYears')).toBeDisabled();
+});
+
 test('line: axis start auto / zero / fit data', async ({ page }) => {
   await edit(page, () => setType(page, 'line'));
   await edit(page, () => page.fill('#unit', ''));
