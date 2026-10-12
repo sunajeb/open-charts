@@ -69,3 +69,18 @@ test('harvey sample passes the quality gate', () => {
   assert.deepEqual(checkScene(scene, { measurer: m }), []);
   assert.equal(scene.hidden.length, 0);
 });
+
+test('harvey: the table is centred vertically in the frame and a single row keeps text-sized balls', () => {
+  for (const series of [spec.series, [spec.series[0]]]) {
+    const scene = layoutChart({ ...spec, series }, CHART_FRAME, m);
+    const head = scene.shapes.filter((s, i): s is TextShape => s.kind === 'text' && scene.roles![i].startsWith('label:category'));
+    const rules = scene.shapes.filter((s, i) => s.kind === 'line' && scene.roles![i].startsWith('gridline:')) as { y1: number }[];
+    const top = Math.min(...head.map((t) => t.y));
+    const bottom = Math.max(...rules.map((l) => l.y1));
+    const mid = CHART_FRAME.y + CHART_FRAME.h / 2;
+    assert.ok(Math.abs((top + bottom) / 2 - mid) < 3, `centred (${top}–${bottom} around ${mid})`);
+    const r = ball(scene, 0, 0)[0] as RectShape;
+    assert.ok(r.w <= 24 + 1e-9 && r.w >= 20, `ball ${r.w} pt`);
+    assert.deepEqual(checkScene(scene, { measurer: m }), []);
+  }
+});

@@ -39,6 +39,16 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
   - `install` copies the add-in into Office's add-in folder and the bridge script into `~/Library/Application Scripts/com.microsoft.Powerpoint`
   - Tests: unit (scene serialiser, vbaProject writer, package), and an end-to-end run in real PowerPoint via AppleScript `run VB macro` for every chart type → `inspect` the saved deck → export PNGs and check by eye
 
+## Owner acceptance criteria (2026-10-13)
+- [ ] Easy data editing: Edit data on a selected chart opens its datasheet in ~1 s; Apply updates the chart on the slide in place, no extra clicks
+- [ ] Resize without breaking: resizing a chart re-lays it out at the new size (no stretched text); every type is clean from small to large frames; below a minimum it shows a clear "too small" message
+- [ ] Fast and seamless: insert < 1.5 s, update < 1 s in real PowerPoint; layout p95 < 20 ms per chart; 100-slide deck < 2 s
+
+## Follow-ups queued (after polish-b + resize-perf merge, to avoid golden churn)
+- [ ] `textOn` contrast: switch to dark text near luminance 0.21 (white on #7FA3CC / #A6A6A6 is ~2.5:1)
+- [ ] `niceTicks`: 620m max picks a 0–800m axis (22% empty) — prefer tighter steps
+- [ ] MASTER-PLAN §7.1: kerning decision changed — writer and add-in now set kern so PowerPoint never kerns (it kerns when the attribute is missing)
+
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
 - [ ] CI runs unit + E2E + goldens on PRs
