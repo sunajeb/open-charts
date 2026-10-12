@@ -2,6 +2,8 @@ import type { Ctx } from '../common.ts';
 import { axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
+import { placePending, type PendingLabel } from '../labels.ts';
+import type { RectShape } from '../types.ts';
 
 /**
  * Waterfall (bridge) chart.
@@ -91,12 +93,15 @@ export function layoutWaterfall(ctx: Ctx) {
 
   // Bars.
   const bars: Box[] = [];
+  const segRect = new Map<Seg, RectShape>();
   for (const col of cols) {
     for (const g of col.segs) {
       const y = yOf(g.hi), h = Math.max(0.01, yOf(g.lo) - y);
       const box = { x: xl(col.c), y, w: colW, h };
       bars.push(box);
-      ctx.add(`bar:s${g.s}:c${col.c}`, { kind: 'rect', ...box, fill: segColor(col, g), stroke: style.background, strokeWidth: 0.75 });
+      const rect = { kind: 'rect', ...box, fill: segColor(col, g), stroke: style.background, strokeWidth: 0.75 } as const;
+      segRect.set(g, rect);
+      ctx.add(`bar:s${g.s}:c${col.c}`, rect);
     }
   }
 
@@ -112,12 +117,13 @@ export function layoutWaterfall(ctx: Ctx) {
 
   // Labels: inside the segment when it fits, otherwise outside the column, never over a bar or another label.
   const placed: Box[] = [];
+  const pending: PendingLabel[] = [];
   const inFrame = (b: Box) => b.y >= frame.y - 0.5 && b.y + b.h <= plotBottom + 0.5 && b.x >= frame.x && b.x + b.w <= frame.x + frame.w;
   const free = (b: Box) => inFrame(b) && !placed.some((p) => overlaps(p, b)) && !bars.some((p) => overlaps(p, b, 0.5));
   for (const col of cols) {
     const { c } = col;
-    let above = Math.min(...col.segs.map((g) => yOf(g.hi))) - pad * 0.3;
-    let below = Math.max(...col.segs.map((g) => yOf(g.lo))) + pad * 0.3;
+    const top = Math.min(...col.segs.map((g) => yOf(g.hi))), bottom = Math.max(...col.segs.map((g) => yOf(g.lo)));
+    let above = top - pad * 0.3, below = bottom + pad * 0.3, upFree = true, dnFree = true;
     // Segments farthest from the entry level go first, so outside labels stack away from the column.
     const reach = (g: Seg) => (g.v >= 0 ? g.hi - col.entry : col.entry - g.lo);
     const order = [...col.segs].sort((a, b) => reach(b) - reach(a));
@@ -134,13 +140,20 @@ export function layoutWaterfall(ctx: Ctx) {
         text(ctx, role, { ...inside, text: label, color: textOn(fill), role: 'value' });
         continue;
       }
-      const up = { x: cx(c) - tw / 2, y: above - lh, w: tw, h: lh };
-      const dn = { x: cx(c) - tw / 2, y: below, w: tw, h: lh };
-      const spot = (g.v >= 0 ? [up, dn] : [dn, up]).find(free);
-      if (!spot) { ctx.hidden.push(`${spec.categories[c]}: no room for label "${label}"`); continue; }
+      // Above / below the column only for the outermost segment on that side, before any other label
+      // takes that spot: anything further away would need a leader across other segments.
+      const up = upFree && yOf(g.hi) <= top + 0.01 ? { x: cx(c) - tw / 2, y: above - lh, w: tw, h: lh } : null;
+      const dn = dnFree && yOf(g.lo) >= bottom - 0.01 ? { x: cx(c) - tw / 2, y: below, w: tw, h: lh } : null;
+      const spot = (g.v >= 0 ? [up, dn] : [dn, up]).find((b): b is Box => !!b && free(b));
+      if (!spot) {
+        // Neither above nor below: on the segment (boxed) or beside the column with a leader.
+        pending.push({ s: g.s, c, text: label, seg: segRect.get(g)!, sides: ['right', 'left'], boxCover: bold ? undefined : col.segs.map((x) => segRect.get(x)!), reason: `${spec.categories[c]}: no room for label "${label}"`, bold, role });
+        continue;
+      }
       placed.push(spot);
-      if (spot === up) above = spot.y - pad * 0.15; else below = spot.y + lh + pad * 0.15;
+      if (spot === up) { above = spot.y - pad * 0.15; upFree = false; } else { below = spot.y + lh + pad * 0.15; dnFree = false; }
       text(ctx, role, { ...spot, text: label, bold, role: bold ? 'total' : 'value' });
     }
   }
+  placePending(ctx, pending);
 }

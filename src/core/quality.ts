@@ -29,6 +29,9 @@ export const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: 
 /** "bar:s1:c2" / "label:value:s1:c2" → "s1:c2"; "line:s1" → "s1". */
 const owner = (role: string) => role.match(/s\d+(:c\d+)?$/)?.[0] ?? null;
 
+/** "label:value:s1:c2" / "bar:s0:c2" → "c2". */
+const column = (role: string) => role.match(/:(c\d+)$/)?.[1] ?? null;
+
 export function ownedBy(textRole: string, markRole: string): boolean {
   const t = owner(textRole), mk = owner(markRole);
   if (!t || !mk) return false;
@@ -37,11 +40,13 @@ export function ownedBy(textRole: string, markRole: string): boolean {
 
 /**
  * Text over a mark (bar or marker) of another owner is a collision — except a line's label sitting
- * wholly inside a column (combination chart). Shared with resolve.ts so both judge alike.
+ * wholly inside a column (combination chart) and a boxed segment label (drawn on a rectangle of its
+ * segment's colour) over its own column. Shared with resolve.ts so both judge alike.
  */
-export function coversMark(textRole: string, text: Box, markRole: string, mark: Box, lineOwners: Set<string | null>, tol: number): boolean {
+export function coversMark(textRole: string, text: Box & { fill?: string }, markRole: string, mark: Box, lineOwners: Set<string | null>, tol: number): boolean {
   const within = text.x >= mark.x - tol && text.y >= mark.y - tol && text.x + text.w <= mark.x + mark.w + tol && text.y + text.h <= mark.y + mark.h + tol;
   if (within && markRole.startsWith('bar:') && lineOwners.has(owner(textRole)?.split(':')[0] ?? null)) return false;
+  if (text.fill && textRole.startsWith('label:value:') && markRole.startsWith('bar:') && column(textRole) === column(markRole)) return false;
   return !ownedBy(textRole, markRole) && overlaps(text, mark, tol);
 }
 

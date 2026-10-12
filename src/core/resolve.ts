@@ -96,6 +96,12 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
   // Pie / doughnut leaders belong to the labels of their slice: drop them when no label is left.
   const labelled = new Set(shapes.flatMap((s, i) => (s.kind === 'text' && !drop.has(i) ? [roles[i].match(/:c(\d+)$/)?.[1]] : [])));
   shapes.forEach((_, i) => { const c = roles[i].match(/^leader:c(\d+)$/)?.[1]; if (c != null && !labelled.has(c)) drop.add(i); });
+  // A segment label's leader goes with its label.
+  const keptRoles = new Set(shapes.flatMap((s, i) => (s.kind === 'text' && !drop.has(i) ? [roles[i]] : [])));
+  shapes.forEach((_, i) => {
+    const mm = roles[i].match(/^leader:(s\d+):(c\d+)$/);
+    if (mm && !keptRoles.has(`label:value:${mm[1]}:${mm[2]}`) && !keptRoles.has(`label:total:${mm[2]}`)) drop.add(i);
+  });
 
   let w = 0;
   for (let i = 0; i < shapes.length; i++) {

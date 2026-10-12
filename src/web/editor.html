@@ -108,6 +108,9 @@
   .issues li[tabindex]:hover { filter: brightness(.97); text-decoration: underline; }
   .issues li.ok { background: var(--ok-soft); color: var(--ok); }
   .issues li.info { background: var(--panel-2); color: var(--muted); }
+  .issues li.summary::after { content: ''; flex: none; margin-left: auto; border: 4px solid transparent; border-top-color: currentColor; align-self: center; translate: 0 2px; }
+  .issues li.summary[aria-expanded="true"]::after { border-top-color: transparent; border-bottom-color: currentColor; translate: 0 -2px; }
+  .issues li.sub { margin-left: 14px; }
   .issues li.error { background: var(--err-soft); color: var(--err); font-weight: 600; white-space: pre-line; }
 
   /* ---- Datasheet ---- */
@@ -1444,12 +1447,23 @@ function focusIssue(note) {
   }
   if (note.cell) moveTo(note.cell.r, note.cell.c);
 }
+/** Hidden-label notices ("Services / 2021: segment too small"); other hidden notes are not about labels. */
+const LABEL_NOTICE = /segment too small|label|too thin|too wide|no room|covered by a line/;
+let hiddenOpen = false, lastSlide = null;
 function renderNotes(notes) {
   let n = 0;
   const marked = [];
   $('issues').replaceChildren(...notes.map((note) => {
     const li = document.createElement('li');
     li.textContent = note.text; li.className = note.cls ?? '';
+    if (note.toggle) {
+      li.tabIndex = 0; li.role = 'button';
+      li.setAttribute('aria-expanded', String(hiddenOpen));
+      const flip = () => { hiddenOpen = !hiddenOpen; showSlide(lastSlide); $('issues').querySelector('li.summary')?.focus(); };
+      li.onclick = flip;
+      li.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); flip(); } };
+      return li;
+    }
     if (note.boxes?.length) { note.n = String(++n); li.dataset.n = note.n; marked.push(note); }
     if (note.n || note.cell) {
       li.tabIndex = 0; li.role = 'button';
@@ -1474,8 +1488,26 @@ function showSlide(s) {
   }
   if (c.type === 'waterfall' && c.series.length > 1) notes.push({ text: `Waterfall shows the first series (${c.series[0].name}) only`, cls: 'info' });
   if ((c.type === 'pie' || c.type === 'doughnut') && c.series.length > 1) notes.push({ text: `${c.type === 'pie' ? 'Pie' : 'Doughnut'} shows the first series (${c.series[0].name}) only`, cls: 'info' });
-  for (const t of s.issues) notes.push({ text: t.replace(/^hidden: /, 'Label hidden (no room): '), cls: t.startsWith('hidden') ? 'info' : '', ...issueTargets(t) });
-  if (!s.issues.length) notes.push({ text: 'Layout check passed: no overlaps', cls: 'ok' });
+  // Real problems (overlaps, out of frame, a frame too small) stay prominent, one line each. Labels
+  // the engine left out because they did not fit collapse into one low-severity line that lists them.
+  const labelsHidden = [];
+  let problems = 0;
+  for (const t of s.issues) {
+    const h = t.startsWith('hidden: ') ? t.slice(8) : null;
+    if (h !== null && LABEL_NOTICE.test(h)) labelsHidden.push({ text: h, cls: 'info sub', cell: issueTargets(t).cell });
+    else {
+      const serious = h === null || /chart frame/.test(h);
+      if (serious) problems++;
+      notes.push({ text: h ?? t, cls: serious ? '' : 'info', ...issueTargets(t) });
+    }
+  }
+  if (!problems) notes.push({ text: 'Layout check passed: no overlaps', cls: 'ok' });
+  if (labelsHidden.length) {
+    const n = labelsHidden.length;
+    notes.push({ text: `${n} label${n === 1 ? '' : 's'} too small to show — click to ${hiddenOpen ? 'hide the list' : 'list'}`, cls: 'info summary', toggle: true });
+    if (hiddenOpen) notes.push(...labelsHidden);
+  }
+  lastSlide = s;
   renderNotes(notes);
   const a = document.activeElement;
   if (a?.dataset?.r !== undefined) showCellTip(a);

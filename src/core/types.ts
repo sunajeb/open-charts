@@ -178,7 +178,7 @@ export interface Scene {
    * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
    * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
-   * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
+   * `leader:c<j>` (pie label leader), `leader:s<i>:c<j>` (leader of a segment label placed outside its segment), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
    * `shade:<k>` (Gantt shaded period), `bracket:<k>` (Gantt bracket), `today` (Gantt today line),
    * `legend:size` (bubble size legend), `placeholder` (frame outline and message of a chart below its
    * minimum size); `leader:c<j>` also links a scatter label to its point. Always set by `layoutChart`.
