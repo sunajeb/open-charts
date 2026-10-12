@@ -166,7 +166,8 @@ export interface Scene {
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
    * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
    * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
-   * `shade:<k>` (Gantt shaded period). Always set by `layoutChart`.
+   * `shade:<k>` (Gantt shaded period), `placeholder` (frame outline and message of a chart below its
+   * minimum size). Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

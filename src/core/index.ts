@@ -2,6 +2,8 @@ import type { ChartSpec, Frame, Scene, Style } from './types.ts';
 import type { Measurer } from './text.ts';
 import { makeCtx } from './common.ts';
 import { prepareSpec } from './spec.ts';
+import { resolveCollisions } from './resolve.ts';
+import { minimumSize, placeholder, TooSmall } from './minsize.ts';
 import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
 import { layoutMekko } from './charts/mekko.ts';
@@ -19,6 +21,8 @@ export * from './types.ts';
 export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
 export type { Measurer } from './text.ts';
 export { checkScene } from './quality.ts';
+export { minimumSize, TooSmall } from './minsize.ts';
+export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
 export {
   SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError,
@@ -63,13 +67,24 @@ const layouts: Record<ChartSpec['type'], Layout> = {
 };
 
 /**
- * Lay out one chart. The spec is migrated to the current version and validated first; an invalid
+ * Lay out one chart. Below the chart type's minimum size (see `minimumSize`) the scene is a "too small"
+ * placeholder (frame outline + message, role `placeholder`) and `hidden` says how large to make it.
+ * Labels that still collide after the chart type has fitted them are hidden and reported (resolve.ts).
+ * The spec is migrated to the current version and validated first; an invalid
  * spec throws InvalidSpecError whose message lists every "/path: problem" (also on `.errors`).
  */
 export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle): Scene {
   const s = prepareSpec(spec);
+  const min = minimumSize(s);
+  if (frame.w < min.w || frame.h < min.h) return placeholder(s, frame, min, m, style);
   const ctx = makeCtx(s, style, frame, m);
-  layouts[s.type](ctx);
+  try {
+    layouts[s.type](ctx);
+  } catch (e) {
+    if (!(e instanceof TooSmall)) throw e;
+    return placeholder(s, frame, { w: Math.max(min.w, e.need.w ?? 0), h: Math.max(min.h, e.need.h ?? 0) }, m, style, e.message);
+  }
   if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
+  ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m));
   return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden };
 }

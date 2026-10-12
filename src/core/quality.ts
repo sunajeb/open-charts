@@ -19,17 +19,17 @@ export interface CheckOptions {
   measurer?: Measurer;
 }
 
-const bounds = (s: Shape): Box =>
+export const bounds = (s: Shape): Box =>
   s.kind === 'line'
     ? { x: Math.min(s.x1, s.x2), y: Math.min(s.y1, s.y2), w: Math.abs(s.x2 - s.x1), h: Math.abs(s.y2 - s.y1) }
     : s.kind === 'path' ? pathBounds(s) : { x: s.x, y: s.y, w: s.w, h: s.h };
 
-const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: Math.max(0, b.w - 2 * d), h: Math.max(0, b.h - 2 * d) });
+export const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: Math.max(0, b.w - 2 * d), h: Math.max(0, b.h - 2 * d) });
 
 /** "bar:s1:c2" / "label:value:s1:c2" → "s1:c2"; "line:s1" → "s1". */
 const owner = (role: string) => role.match(/s\d+(:c\d+)?$/)?.[0] ?? null;
 
-function ownedBy(textRole: string, markRole: string): boolean {
+export function ownedBy(textRole: string, markRole: string): boolean {
   const t = owner(textRole), mk = owner(markRole);
   if (!t || !mk) return false;
   return t === mk || (markRole.startsWith('line:') && t.startsWith(`${mk}:`));
