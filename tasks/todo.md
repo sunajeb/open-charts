@@ -17,12 +17,13 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - `specVersion: 1` at chart and deck root; unversioned input = v0, migrated by `migrate()`
 
 ## Wave 1 (three agents in parallel, git worktrees)
-- [ ] **A — engine (P1):** B3 date CAGR (30/360), B5, B7 hhea/OS2 line height, B8 long-word overflow, B9 legend wrap, B10, B11, B12 gate v2, B13, B14 numbers/locale service, B15 path-addressed validation; spec v1 + `migrate` + hand-written JSON Schema; `Scene.roles`; horizontal bar orientation
-- [ ] **B — I/O (P1 tags):** writer emits tag contract v1; `inspect` and `import`; `--strict` / `--report`
-- [ ] **C — QA + editor (P1 editor polish):** Playwright E2E for every editor button; LibreOffice golden pipeline (soffice → pdftoppm → pixel diff); editor transpose / reverse / all chart types; fix whatever the E2E finds
+- [x] **A — engine (P1):** B3 date CAGR (30/360), B5, B7 hhea/OS2 line height, B8 long-word overflow, B9 legend wrap, B10, B11, B12 gate v2, B13, B14 numbers/locale service, B15 path-addressed validation; spec v1 + `migrate` + hand-written JSON Schema; `Scene.roles`; horizontal bar orientation
+- [x] **B — I/O (P1 tags):** writer emits tag contract v1; `inspect` and `import`; `--strict` / `--report`
+- [x] **C — QA + editor (P1 editor polish):** Playwright E2E for every editor button; LibreOffice golden pipeline (soffice → pdftoppm → pixel diff); editor transpose / reverse / all chart types; fix whatever the E2E finds
 
 ## Wave 2
-- [ ] Merge wave 1, resolve conflicts, full test suite once
+- [x] Merge wave 1 (68 unit, 30 editor E2E, 13 goldens green; goldens rebaselined after review)
+- [x] Scene `path` shape + preset outlines (diamond, roundRect, triangle)
 - [ ] Chart catalogue (owner's list, 2026-10-13). ✅ = exists today
   - Column/bar: ✅ stacked, ✅ clustered, ✅ 100%, [ ] percent-axis variant, ✅ waterfall (subtotals, connectors, below-zero), [ ] combination (stacked/clustered + line); [ ] bar orientation for all (agent A)
   - Line/area: ✅ line, [ ] ortho/step line, [ ] stacked area, [ ] area 100%
