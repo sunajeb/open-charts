@@ -23,7 +23,14 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 
 ## Wave 2
 - [ ] Merge wave 1, resolve conflicts, full test suite once
-- [ ] Remaining chart types: area, combo (column + line), pie, doughnut, scatter, bubble, butterfly
+- [ ] Chart catalogue (owner's list, 2026-10-13). ✅ = exists today
+  - Column/bar: ✅ stacked, ✅ clustered, ✅ 100%, [ ] percent-axis variant, ✅ waterfall (subtotals, connectors, below-zero), [ ] combination (stacked/clustered + line); [ ] bar orientation for all (agent A)
+  - Line/area: ✅ line, [ ] ortho/step line, [ ] stacked area, [ ] area 100%
+  - Marimekko: ✅ Mekko (% and units), [ ] Mekko XY (variable width and height)
+  - XY: [ ] scatter, [ ] bubble
+  - Circular: [ ] pie, [ ] doughnut
+  - Special: [ ] Gantt (timeline: tasks, milestones, scales), [ ] Harvey ball, [ ] table
+  - Needs new scene shapes first: `path` (polygon/step/area fills, wedges via arcs) for writer, SVG and add-in
 - [ ] PowerPoint add-in (Office.js, path A): task pane = editor, inserts the chart into the current presentation; re-edit a selected chart from its tags; sideload and test on PowerPoint for Mac
 
 ## Wave 3 — verification
