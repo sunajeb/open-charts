@@ -20,7 +20,8 @@ type Pt = { x: number; y: number };
  * - Outside labels carry the category names, left or right of the pie depending on the slice's side
  *   (default, `seriesLabels: 'right'`); or the names go in a legend (`'legend'`) or nowhere (`'none'`).
  * - An inside label larger than its slice: with names outside it sits on a rectangle in the slice's
- *   colour, still at the rim (the manual's rule); without names outside it becomes an outside label.
+ *   colour, still at the rim (the manual's rule) — unless the rectangle would be wider than the slice;
+ *   then, and without names outside, it becomes an outside label (with the name, on a leader).
  * - Outside labels hug the rim next to their slice. Where they crowd they stack in a column, pushed
  *   away from the equator (upwards in the top half, downwards in the bottom half), each joined to
  *   its slice by a leader from the mid-angle rim point; leaders never enter the pie, cross each
@@ -109,11 +110,17 @@ export function layoutPie(ctx: Ctx) {
       const box = radial(c, m.width(valueText[c], fs) + 2, (b) => corners(b).every(([x, y]) => inSlice(c, x, y)));
       if (box) { placed.push(box); inside.set(c, box); }
     }
-    // With names outside, a label larger than its slice stays inside on a rectangle in the slice colour.
+    // With names outside, a label larger than its slice stays inside on a rectangle in the slice colour,
+    // as long as the rectangle is no wider than the slice where it sits; else it joins the name outside.
+    const narrower = (c: number, b: Box) => {
+      if (full || sweep[c] >= 180) return true;
+      const t = midOf(c), d = Math.hypot(b.x + b.w / 2 - cx, b.y + b.h / 2 - cy);
+      return b.w * Math.abs(Math.sin(t)) + b.h * Math.abs(Math.cos(t)) <= 2 * d * Math.sin(rad(sweep[c]) / 2);
+    };
     if (names) {
       for (const c of live) {
         if (inside.has(c)) continue;
-        const box = radial(c, m.width(valueText[c], fs) + 2 + boxPad * 2, (b) => corners(b).every(([x, y]) => inRing(x, y)));
+        const box = radial(c, m.width(valueText[c], fs) + 2 + boxPad * 2, (b) => narrower(c, b) && corners(b).every(([x, y]) => inRing(x, y)));
         if (box) { placed.push(box); inside.set(c, box); boxed.add(c); }
       }
     }

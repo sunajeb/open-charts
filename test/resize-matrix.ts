@@ -57,13 +57,15 @@ export function resizeProblems(scene: Scene, m: Measurer, reference?: Scene): st
   });
   for (const issue of checkScene(scene, { tol: 1, measurer: m })) out.push(`${issue.kind}: ${issue.detail}`);
   if (reference && !isPlaceholder(scene)) {
-    // A label may move (a pie share inside its slice joins the name outside it): lost means its role
-    // and its text are both gone. Tick labels follow the axis length and are not compared.
+    // A label may move (a pie share inside its slice joins the name outside it, a name outside goes to
+    // the legend and its share inside): lost means its role is gone and so is one of its words.
+    // Tick labels follow the axis length and are not compared.
     const have = textRoles(scene);
-    const shown = scene.shapes.flatMap((s) => (s.kind === 'text' ? [s.text.replace(/\n/g, ' ')] : [])).join('\u0000');
+    const words = (t: string) => t.split(/\s+/).filter(Boolean);
+    const shown = new Set(scene.shapes.flatMap((s) => (s.kind === 'text' ? words(s.text) : [])));
     const lost = reference.shapes.flatMap((s, i) => {
       const r = reference.roles![i];
-      return s.kind === 'text' && !have.has(r) && !r.startsWith('axis:tick:') && !shown.includes(s.text.replace(/\n/g, ' ')) ? [r] : [];
+      return s.kind === 'text' && !have.has(r) && !r.startsWith('axis:tick:') && !words(s.text).every((w) => shown.has(w)) ? [r] : [];
     });
     if (lost.length && scene.hidden.length === 0) out.push(`silently dropped: ${lost.join(', ')}`);
   }
