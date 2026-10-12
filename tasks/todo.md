@@ -12,7 +12,8 @@ Plan of record: docs/MASTER-PLAN.md (shareable page: https://claude.ai/artifact/
 - [x] Plan: docs/plan/01–04, docs/native-windows-design.md, docs/MASTER-PLAN.md
 
 ## Next: P1 first 30 days (see MASTER-PLAN §6)
-- [ ] Week 1: fix B5, B10, B13; CI on PRs; line height from font hhea/OS2; behaviour-spec.md; CLEAN-ROOM.md
+- [x] Public repo + CI on PRs (Node 22, 24): https://github.com/sunajeb/open-charts
+- [ ] Week 1: fix B5, B10, B13; CI on PRs; line height from font hhea/OS2; behaviour-spec.md
 - [ ] Week 2: numbers/locale service (B14); start spec v1 + JSON Schema + migration (B15)
 - [ ] Week 3: finish spec v1; scene ids/roles; writer emits tag contract v1; `inspect`
 - [ ] Week 4: reservation ledger; plugin pipeline; label solver v1; LibreOffice golden CI; 10 bench fixtures

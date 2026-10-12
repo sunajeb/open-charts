@@ -69,4 +69,4 @@ node --experimental-strip-types --no-warnings --test test/
 
 ## Licence and provenance
 
-Apache-2.0. This is a clean-room implementation, built from public chart-design conventions, published algorithms (Heckbert and Talbot et al. for axis ticks, largest-remainder rounding, Liang–Barsky clipping) and the open OOXML standard. It contains no code, file formats or assets from any commercial charting product. `vendor/opentype.module.js` is opentype.js (MIT).
+Apache-2.0. Built from public chart-design conventions, published algorithms (Heckbert and Talbot et al. for axis ticks, largest-remainder rounding, Liang–Barsky clipping), the open OOXML standard and study of how existing charting tools behave. All code is original; none is copied from a commercial product. `vendor/opentype.module.js` is opentype.js (MIT).
