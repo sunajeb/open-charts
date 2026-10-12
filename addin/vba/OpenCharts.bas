@@ -328,6 +328,9 @@ Private Sub SetText(ByVal s As Object, f() As String)
         .Font.Name = f(12)
         .Font.Size = Val(f(13))
         .Font.Bold = IIf(f(14) = "1", -1, 0)
+        ' No kerning, as the engine measured. Decks often kern text of 12 pt and up by default;
+        ' Kerning is the size from which pairs are kerned (0 = all sizes), so push it past any text.
+        .Font.Kerning = 4000
         .Font.Fill.Visible = -1
         .Font.Fill.ForeColor.RGB = HexColor(f(15))
         Select Case f(16)

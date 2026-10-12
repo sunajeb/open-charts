@@ -8,7 +8,12 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { addinMain } from '../src/addin/cli.ts';
+import { addinMain, PPAM_DIR } from '../src/addin/cli.ts';
+import { createMeasurer } from '../src/fonts.ts';
+import { defaultStyle, layoutChart } from '../src/core/index.ts';
+import { chartContent } from '../src/deck.ts';
+import { writePptx } from '../src/render/pptx.ts';
+import { decodePng, diffImages, encodePng } from '../test/goldens/png.ts';
 import { addinHome } from '../src/addin/edit.ts';
 import { specKey } from '../src/addin/engine.ts';
 import { buildAddin } from '../src/addin/package.ts';
@@ -20,6 +25,7 @@ const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const OUT = join(ROOT, 'out', 'e2e-powerpoint');
 const DECK = join(OUT, 'addin.pptx');
 const PNG_DIR = join(OUT, 'png');
+const CLI_PNG_DIR = join(OUT, 'cli-png');
 const LOG = join(addinHome(), 'addin.log');
 
 if (process.platform !== 'darwin') {
@@ -31,7 +37,7 @@ const osa = (script: string, timeoutSec = 120): string =>
   execFileSync('osascript', ['-e', `with timeout of ${timeoutSec} seconds\n${script}\nend timeout`], { encoding: 'utf8' }).trim();
 const ppt = (body: string, timeoutSec?: number) => osa(`tell application "Microsoft PowerPoint"\n${body}\nend tell`, timeoutSec);
 const q = (s: string) => JSON.stringify(s);
-const logLines = () => (existsSync(LOG) ? readFileSync(LOG, 'utf8').split('\n') : []);
+const logLines = () => (existsSync(LOG) ? readFileSync(LOG, 'utf8').split('\n').filter(Boolean) : []);
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(PNG_DIR, { recursive: true });
@@ -159,7 +165,34 @@ const wfChart = slides.find((x) => x.index === slideOf.waterfall)?.charts[0];
 if (slideOf.waterfall && !wfChart?.spec?.includes('One-offs')) failures.push('waterfall: edited data was not applied by Update chart');
 const st = slides.find((x) => x.index === slideOf.stacked)?.charts[0];
 if (st?.bounds && (Math.abs(st.bounds.x - 300) > 40 || st.bounds.w > 420)) failures.push(`stacked: not re-laid out in the moved frame (bounds ${JSON.stringify(st.bounds)})`);
-console.log(`PNGs: ${PNG_DIR}`);
+// 9. Same charts written by the CLI's own .pptx writer (same spec, same frame), rendered by the
+// same PowerPoint: the add-in's native shapes must look the same.
+const style = defaultStyle;
+const cliSlides = slides.map((sl) => {
+  const c = sl.charts[0];
+  const { style: overrides, ...chart } = JSON.parse(c.spec!);
+  const scene = layoutChart(chart, c.frame!, createMeasurer(), { ...style, ...overrides });
+  return { scenes: [chartContent(chart, scene, style.font, overrides)] };
+});
+const compareDeck = join(PPAM_DIR, 'compare.pptx'); // a folder PowerPoint's sandbox may read
+writeFileSync(compareDeck, writePptx(cliSlides, style.font));
+ppt(`activate\nopen POSIX file ${q(compareDeck)}`);
+ready = false; // PowerPoint restarted: the add-in compiles again
+macro('ExportCopy', CLI_PNG_DIR, 'png');
+ppt('close active presentation saving no\nquit saving no');
+rmSync(compareDeck, { force: true });
+for (const sl of slides) {
+  const a = join(PNG_DIR, `slide${sl.index}.png`), b = join(CLI_PNG_DIR, `slide${sl.index}.png`);
+  if (!existsSync(a) || !existsSync(b)) { failures.push(`slide ${sl.index}: PNG missing for comparison`); continue; }
+  const d = diffImages(decodePng(readFileSync(a)), decodePng(readFileSync(b)));
+  console.log(`slide ${sl.index} add-in vs CLI writer: ${d.ok ? 'same' : 'DIFFERENT'} (${(d.fraction * 100).toFixed(3)}% pixels differ)`);
+  if (!d.ok) {
+    failures.push(`slide ${sl.index}: add-in rendering differs from the CLI writer (${d.reason})`);
+    if (d.diff) writeFileSync(join(OUT, `diff-${sl.index}.png`), encodePng(d.diff));
+  }
+}
+
+console.log(`PNGs: ${PNG_DIR} (CLI writer: ${CLI_PNG_DIR})`);
 if (failures.length) {
   console.error(`\nFAILED:\n  ${failures.join('\n  ')}`);
   process.exit(1);
