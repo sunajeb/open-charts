@@ -21,7 +21,7 @@ export const CHART_FRAME = { x: 48, y: 96, w: SLIDE.w - 96, h: SLIDE.h - 132 };
 const TYPE_NAMES: Record<ChartSpec['type'], string> = {
   stacked: 'Stacked column chart', clustered: 'Clustered column chart', percent: '100% column chart',
   waterfall: 'Waterfall chart', mekko: 'Mekko chart', line: 'Line chart',
-  area: 'Stacked area chart', area100: '100% area chart',
+  area: 'Stacked area chart', area100: '100% area chart', pie: 'Pie chart', doughnut: 'Doughnut chart',
 };
 
 export function altText(chart: ChartSpec): string {

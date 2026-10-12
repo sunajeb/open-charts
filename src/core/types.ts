@@ -3,7 +3,7 @@ import type { Scale, Unit } from './numbers.ts';
 export type { Scale, Unit } from './numbers.ts';
 
 export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line'
-  | 'area' | 'area100';
+  | 'area' | 'area100' | 'pie' | 'doughnut';
 
 /** A cell: a number, empty (null), or "e" in a waterfall = this category is a computed total. */
 export type Value = number | null | 'e';
@@ -147,7 +147,9 @@ export interface Scene {
    * Role of each shape, parallel to `shapes`, assigned by the engine only: `bar:s<i>:c<j>`,
    * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
-   * `marker:s<i>:c<j>`, `line:s<i>`. Always set by `layoutChart`.
+   * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
+   * `leader:c<j>` (pie label leader), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball).
+   * Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

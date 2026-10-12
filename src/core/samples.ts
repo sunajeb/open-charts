@@ -85,4 +85,17 @@ export const samples: Partial<Record<ChartType, ChartSpec>> = {
       { name: 'SMB', values: [18, 21, 22, 26, 29] },
     ],
   },
+  pie: {
+    specVersion: 1,
+    type: 'pie',
+    categories: ['Enterprise', 'Mid-market', 'SMB', 'Public sector', 'Other'],
+    series: [{ name: 'Revenue 2025', values: [118, 60, 29, 14, 6] }],
+  },
+  doughnut: {
+    specVersion: 1,
+    type: 'doughnut',
+    categories: ['Enterprise', 'Mid-market', 'SMB', 'Public sector', 'Other'],
+    series: [{ name: 'Revenue 2025', values: [118, 60, 29, 14, 6] }],
+    options: { unit: 'm', totals: true },
+  },
 };

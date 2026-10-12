@@ -1,0 +1,30 @@
+{
+  "slides": [
+    {
+      "title": "Enterprise makes up more than half of 2025 revenue",
+      "chart": {
+        "type": "pie",
+        "categories": ["Enterprise", "Mid-market", "SMB", "Public sector", "Other"],
+        "series": [{ "name": "Revenue 2025", "values": [118, 60, 29, 14, 6] }]
+      }
+    },
+    {
+      "title": "Cost base 2025: people costs dominate",
+      "chart": {
+        "type": "doughnut",
+        "categories": ["Salaries", "Contractors", "Cloud hosting", "Facilities", "Travel", "Software licences", "Other"],
+        "series": [{ "name": "Cost 2025", "values": [412, 96, 71, 38, 9, 6, 3] }],
+        "options": { "unit": "m", "totals": true }
+      }
+    },
+    {
+      "title": "Survey: how customers first heard of us",
+      "chart": {
+        "type": "pie",
+        "categories": ["Search", "Word of mouth", "Events", "Partners", "Social media", "Press", "Other"],
+        "series": [{ "name": "Respondents", "values": [312, 254, 61, 40, 18, 9, 6] }],
+        "options": { "decimals": 1, "seriesLabels": "legend" }
+      }
+    }
+  ]
+}
