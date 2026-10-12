@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage } from 'node:http';
 import { readFileSync } from 'node:fs';
-import { createMeasurer } from './core/text.ts';
+import { createMeasurer } from './fonts.ts';
 import { buildDeck, type DeckSpec } from './deck.ts';
 
 const EDITOR = new URL('./web/editor.html', import.meta.url);

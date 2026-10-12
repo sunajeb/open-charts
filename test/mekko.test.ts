@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { ChartSpec, RectShape, TextShape } from '../src/core/index.ts';
-import { checkScene, createMeasurer, layoutChart } from '../src/core/index.ts';
+import { checkScene, layoutChart } from '../src/core/index.ts';
+import { createMeasurer } from '../src/fonts.ts';
 import { buildDeck, CHART_FRAME, type DeckSpec } from '../src/deck.ts';
 
 const m = createMeasurer();

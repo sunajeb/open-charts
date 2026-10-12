@@ -2,7 +2,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
-import { createMeasurer } from './core/text.ts';
+import { createMeasurer } from './fonts.ts';
 import { buildDeck, type DeckSpec } from './deck.ts';
 import { serve } from './server.ts';
 

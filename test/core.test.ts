@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { formatNumber, inferDecimals, niceTicks, roundToTotal, textOn } from '../src/core/numbers.ts';
 import { spread } from '../src/core/place.ts';
-import { checkScene, createMeasurer, layoutChart } from '../src/core/index.ts';
+import { checkScene, layoutChart } from '../src/core/index.ts';
+import { createMeasurer } from '../src/fonts.ts';
 import { buildDeck, CHART_FRAME, type DeckSpec } from '../src/deck.ts';
 
 const m = createMeasurer();

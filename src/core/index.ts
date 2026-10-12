@@ -7,7 +7,7 @@ import { layoutMekko } from './charts/mekko.ts';
 import { layoutLine } from './charts/line.ts';
 
 export * from './types.ts';
-export { createMeasurer } from './text.ts';
+export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
 export type { Measurer } from './text.ts';
 export { checkScene } from './quality.ts';
 
