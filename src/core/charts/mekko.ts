@@ -1,7 +1,8 @@
 import type { Ctx } from '../common.ts';
 import { axisFormatter, fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
-import { overlaps } from '../place.ts';
+import { overlaps, type Box } from '../place.ts';
+import { placePending, type PendingLabel } from '../labels.ts';
 
 /**
  * Mekko (Marimekko) chart: a stacked column chart whose column widths are proportional to the
@@ -52,40 +53,60 @@ export function layoutMekko(ctx: Ctx) {
   const showTotals = spec.options?.totals ?? true;
   // Without labels on the right, a narrow last column still needs room to centre its labels over it.
   const lastLabelW = Math.max(m.width(ctx.fmt(totals[nCat - 1]), fs, true), Math.min(fs * 6, m.width(spec.categories[nCat - 1], fs))) + 2;
-  const rightW = ctx.o.seriesLabels === 'right' ? seriesLabelWidth(ctx, 0) : narrowLast ? lastLabelW / 2 : 0;
-  const pw = frame.w - axisW - rightW;
-  const colW = totals.map((t) => (pw * t) / grand);
-  const x0 = cats.map((c) => px + colW.slice(0, c).reduce((a, w) => a + w, 0));
-  const cx = (c: number) => x0[c] + colW[c] / 2;
+  const segText = (s: number, c: number) => (percent ? ctx.pct(shares[c][s], pctDecimals) : rounded[c] ? ctx.fmt(rounded[c]![s], { scaled: true }) : ctx.fmt(raw(s, c)));
+  const fitsIn = (label: string, w: number, h: number) => m.width(label, fs) + 2 <= w && lh * 0.9 <= h;
 
-  // Totals: bold, centred on their column, nudged sideways over narrow columns, kept a clear gap
-  // apart. Totals that still collide are staggered into a second row above; beyond that, hidden.
-  const totalItems = showTotals ? cats.filter((c) => totals[c]).map((c) => ({ c, cx: cx(c), w: m.width(ctx.fmt(totals[c]), fs, true) + 2 })) : [];
-  const row1 = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 1.5);
-  const row2 = placeRow(totalItems.filter((it) => !row1.has(it.c)), colW, px, frame.x + frame.w, pad * 1.5);
-  const totalsH = showTotals ? (lh + pad * 0.3) * (row2.size ? 2 : 1) : 0;
+  // Geometry for `outW` points of extra room right of the last column, where its segment labels go
+  // when they do not fit inside (the series names move further right).
+  const geometry = (outW: number) => {
+    const rightW = (ctx.o.seriesLabels === 'right' ? seriesLabelWidth(ctx, 0) + outW : Math.max(narrowLast ? lastLabelW / 2 : 0, outW));
+    const pw = frame.w - axisW - rightW;
+    const colW = totals.map((t) => (pw * t) / grand);
+    const x0 = cats.map((c) => px + colW.slice(0, c).reduce((a, w) => a + w, 0));
+    const cx = (c: number) => x0[c] + colW[c] / 2;
 
-  // Category labels wrap inside their column; narrow columns wrap to a minimum width and borrow room.
-  const minLabelW = Math.min(fs * 6, pw / nCat);
-  const fit = fitCategories(ctx, cats.map((c) => Math.max(colW[c], minLabelW)));
+    // Totals: bold, centred on their column, nudged sideways over narrow columns, kept a clear gap
+    // apart. Totals that still collide are staggered into a second row above; beyond that, hidden.
+    const totalItems = showTotals ? cats.filter((c) => totals[c]).map((c) => ({ c, cx: cx(c), w: m.width(ctx.fmt(totals[c]), fs, true) + 2 })) : [];
+    const row1 = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 1.5);
+    const row2 = placeRow(totalItems.filter((it) => !row1.has(it.c)), colW, px, frame.x + frame.w, pad * 1.5);
+    const totalsH = showTotals ? (lh + pad * 0.3) * (row2.size ? 2 : 1) : 0;
+
+    // Category labels wrap inside their column; narrow columns wrap to a minimum width and borrow room.
+    const minLabelW = Math.min(fs * 6, pw / nCat);
+    const fit = fitCategories(ctx, cats.map((c) => Math.max(colW[c], minLabelW)));
+    const catH = Math.max(...fit.lines.map((l) => l.length)) * fit.lh + lh + pad * 0.6;
+
+    const py = frame.y + legendH + totalsH;
+    const ph = frame.y + frame.h - catH - py;
+    const yOf = (v: number) => py + ph - (v / dmax) * ph;
+    // Width the last column's outside labels need.
+    const last = nCat - 1;
+    const need = totals[last] ? Math.max(0, ...sers.filter((s) => raw(s, last) > 0).map((s) => {
+      const label = segText(s, last);
+      const h = ((percent ? (raw(s, last) / totals[last]) * 100 : raw(s, last)) / dmax) * ph;
+      return fitsIn(label, colW[last], h) ? 0 : m.width(label, fs) + 2 + pad * 0.8;
+    })) : 0;
+    return { pw, colW, x0, cx, totalItems, row1, row2, fit, py, ph, yOf, need };
+  };
+  let g = geometry(0);
+  if (g.need) g = geometry(g.need);
+  const { pw, colW, x0, cx, totalItems, row1, row2, fit, py, ph, yOf } = g;
   if (fit.size < fs) ctx.hidden.push(`category labels shrunk to ${fit.size} pt to fit`);
   const catLines = fit.lines;
   const shareText = cats.map((c) => ctx.pct(colShares[c], 0));
-  const catH = Math.max(...catLines.map((l) => l.length)) * fit.lh + lh + pad * 0.6;
-
-  const py = frame.y + legendH + totalsH;
-  const ph = frame.y + frame.h - catH - py;
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
-  const yOf = (v: number) => py + ph - (v / dmax) * ph;
 
   if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
 
   const lastSegs: { s: number; y: number }[] = [];
   const tops: number[] = [];
+  const pending: PendingLabel[] = [];
 
   for (const c of cats) {
     if (!totals[c]) { ctx.hidden.push(`${spec.categories[c]}: zero total, no column`); continue; }
     let up = 0;
+    const colBars: Box[] = [];
     for (const s of sers) {
       const v = raw(s, c);
       if (!v) continue;
@@ -93,12 +114,17 @@ export function layoutMekko(ctx: Ctx) {
       const y1 = yOf(up + hv), y2 = yOf(up), h = y2 - y1;
       up += hv;
       const fill = ctx.color(s);
-      ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', x: x0[c], y: y1, w: colW[c], h, fill, stroke: style.background, strokeWidth: 0.75 });
-      const label = percent ? ctx.pct(shares[c][s], pctDecimals) : rounded[c] ? ctx.fmt(rounded[c]![s], { scaled: true }) : ctx.fmt(v);
+      const seg = { kind: 'rect', x: x0[c], y: y1, w: colW[c], h, fill, stroke: style.background, strokeWidth: 0.75 } as const;
+      ctx.add(`bar:s${s}:c${c}`, seg);
+      colBars.push(seg);
+      const label = segText(s, c);
       const tw = m.width(label, fs);
-      if (tw + 2 <= colW[c] && lh * 0.9 <= h) {
+      if (fitsIn(label, colW[c], h)) {
         text(ctx, `label:value:s${s}:c${c}`, { x: cx(c) - tw / 2 - 1, y: y1 + h / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
-      } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
+      } else {
+        // Columns touch, so outside means beyond the first or last column, or above the stack.
+        pending.push({ s, c, text: label, seg, sides: ['right', 'left', 'above'], boxCover: colBars, reason: `${spec.series[s].name} / ${spec.categories[c]}: segment too small` });
+      }
       if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
     }
     tops[c] = yOf(up);
@@ -146,7 +172,8 @@ export function layoutMekko(ctx: Ctx) {
     text(ctx, `label:category:c${c}`, { x: p.x, y: sy, w: p.w, h: lh, text: shareText[c], color: style.muted, valign: 'top', role: 'decoration' });
   }
 
-  if (o.seriesLabels === 'right') seriesLabelsRight(ctx, lastSegs.reverse(), px + pw, py, bottom);
+  if (o.seriesLabels === 'right') seriesLabelsRight(ctx, lastSegs.reverse(), px + pw + g.need, py, bottom);
+  placePending(ctx, pending);
 }
 
 export interface RowItem { c: number; cx: number; w: number; alt?: number }

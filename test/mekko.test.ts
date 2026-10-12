@@ -69,14 +69,20 @@ test('unit mekko: segment heights are absolute and labelled with values', () => 
   assert.deepEqual(checkScene(scene), []);
 });
 
-test('narrow columns hide labels that cannot fit instead of overlapping', () => {
+test('a column too narrow for its labels gets them beside it, with leaders, instead of overlapping', () => {
   const scene = layoutChart({
     type: 'mekko',
     categories: ['A very long category name indeed', 'Another rather long category name', 'Tiny'],
     series: [{ name: 'x', values: [500, 500, 2] }, { name: 'y', values: [300, 300, 1] }],
   }, CHART_FRAME, m);
-  assert.deepEqual(checkScene(scene), []);
-  assert.ok(scene.hidden.some((h) => h.includes('Tiny')));
+  assert.deepEqual(checkScene(scene, { measurer: m }), []);
+  assert.ok(!scene.hidden.some((h) => h.includes('segment too small')), scene.hidden.join('; '));
+  const tiny = scene.shapes.find((s, i): s is RectShape => scene.roles![i] === 'bar:s0:c2')!;
+  for (const s of [0, 1]) {
+    const label = scene.shapes.find((x, i): x is TextShape => scene.roles![i] === `label:value:s${s}:c2`)!;
+    assert.ok(label.x >= tiny.x + tiny.w, `label ${label.text} sits right of the column`);
+    assert.ok(scene.roles!.includes(`leader:s${s}:c2`));
+  }
 });
 
 test('negative and zero data are tolerated', () => {
