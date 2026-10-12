@@ -51,13 +51,16 @@ export function layoutArea(ctx: Ctx) {
     step = nCat > 1 ? (pxR - pxL) / (nCat - 1) : pxR - pxL;
     const fit = fitCategories(ctx, step);
     const half = (c: number) => (fit.hidden.has(c) ? 0 : Math.min(step / 2, Math.max(...fit.lines[c].map((l) => m.width(l, fit.size))) / 2 + 1));
-    // With a value axis the first label starts at the axis instead of centring on the point.
-    pxL = frame.x + (axisW ? axisW : half(0));
+    pxL = frame.x + Math.max(axisW, half(0));
     pxR = frame.x + frame.w - Math.max(rightW, half(nCat - 1));
   }
   step = nCat > 1 ? (pxR - pxL) / (nCat - 1) : pxR - pxL;
   const fit = fitCategories(ctx, step);
-  const catH = fit.height;
+  // Every category label is centred on its point. With a value axis the first point is on the axis,
+  // so its label reaches under the bottom tick label: the label row then drops clear of it.
+  const firstHalf = fit.hidden.has(0) ? 0 : Math.max(...fit.lines[0].map((l) => m.width(l, fit.size))) / 2 + 1;
+  const drop = axisW && firstHalf > pad ? Math.max(0, lh / 2 - pad * 0.4) : 0;
+  const catH = fit.height + drop;
   const xOf = (c: number) => (nCat > 1 ? pxL + c * step : (pxL + pxR) / 2);
 
   const totalsH = showTotals ? lh + pad * 0.3 : 0;
@@ -152,10 +155,8 @@ export function layoutArea(ctx: Ctx) {
     if (fit.hidden.has(c)) continue;
     const lines = fit.lines[c];
     const w = Math.min(step, Math.max(...lines.map((l) => m.width(l, fit.size))) + 2);
-    let x = xOf(c) - w / 2;
-    if (c === 0 && axisW) x = Math.max(x, pxL);
     text(ctx, `label:category:c${c}`, {
-      x, y: bottom + pad * 0.4, w, h: lines.length * fit.lh, text: lines.join('\n'), valign: 'top', role: 'category', size: fit.size,
+      x: xOf(c) - w / 2, y: bottom + pad * 0.4 + drop, w, h: lines.length * fit.lh, text: lines.join('\n'), valign: 'top', role: 'category', size: fit.size,
     });
   }
 

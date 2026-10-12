@@ -81,3 +81,12 @@ test('area samples and the legend variant pass the quality gate', () => {
   assert.equal(scene.roles!.filter((r) => r.startsWith('legend:s')).length, 6);
   assert.deepEqual(checkScene(scene, { measurer: m }), []);
 });
+
+test('area: every category label is centred under its point, also the first one next to a value axis', () => {
+  for (const options of [{ valueAxis: true }, { valueAxis: true, seriesLabels: 'legend' as const }, {}]) {
+    const scene = layoutChart({ ...spec, options }, CHART_FRAME, m);
+    const xs = points(band(scene, 0)).slice(0, spec.categories.length).map((p) => p.x);
+    labels(scene, 'label:category').forEach((t, c) => assert.ok(Math.abs(t.x + t.w / 2 - xs[c]) < 0.01, `category ${c} centred`));
+    assert.deepEqual(checkScene(scene, { measurer: m }), [], JSON.stringify(options));
+  }
+});
