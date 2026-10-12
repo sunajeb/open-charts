@@ -2,6 +2,7 @@
 // these rules (a sync test keeps the key lists identical).
 import type { ChartSpec } from './types.ts';
 import { LOCALES } from './numbers.ts';
+import { parseCategoryDate } from './dates.ts';
 
 export const SPEC_VERSION = 1;
 
@@ -11,12 +12,16 @@ export interface SpecError {
   message: string;
 }
 
-export const CHART_TYPES = ['stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line'] as const;
+export const CHART_TYPES = [
+  'stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line',
+  'combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt',
+] as const;
 export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options'] as const;
-export const SERIES_KEYS = ['name', 'values', 'color'] as const;
+export const SERIES_KEYS = ['name', 'values', 'color', 'as'] as const;
 export const OPTION_KEYS = [
   'totals', 'cagr', 'difference', 'valueAxis', 'zeroBased', 'decimals', 'unit', 'format', 'locale',
   'scale', 'orientation', 'mekko', 'gap', 'seriesLabels', 'totalsAt',
+  'percentData', 'combo', 'sort', 'shades', 'axisTitles',
 ] as const;
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart'] as const;
@@ -105,13 +110,20 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
       if (nCat >= 0 && s.values.length !== nCat) {
         e.add(['series', i, 'values'], `has ${s.values.length} values but there are ${nCat} categories`);
       }
+      if (s.as !== undefined && s.as !== 'column' && s.as !== 'line') e.add(['series', i, 'as'], `must be "column" or "line", got ${describe(s.as)}`);
       s.values.forEach((v, j) => {
+        const at = ['series', i, 'values', j];
         if (v === null) return;
         if (v === 'e' && type === 'waterfall') return;
-        if (typeof v !== 'number') e.add(['series', i, 'values', j], `must be a number or null, got ${describe(v)}`);
-        else if (!Number.isFinite(v)) e.add(['series', i, 'values', j], `must be a finite number, got ${v}`);
+        if (type === 'scatter' || type === 'bubble') return checkPoint(e, v, at, type === 'bubble' ? 3 : 2);
+        if (type === 'gantt') { if (!isDate(v)) e.add(at, `must be a date like "2026-03-15", "Mar 2026" or "Q2 2026", or null, got ${describe(v)}`); return; }
+        if (type === 'table' && typeof v === 'string') return;
+        if (typeof v !== 'number') e.add(at, `must be a number or null, got ${describe(v)}`);
+        else if (!Number.isFinite(v)) e.add(at, `must be a finite number, got ${v}`);
+        else if (type === 'mekkoxy' && i === 0 && v < 0) e.add(at, `width must not be negative, got ${v}`);
       });
     });
+    checkTypeSeries(e, type as string, spec.series);
   }
 
   if (spec.options !== undefined) {
@@ -181,6 +193,55 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   if (o.totalsAt !== undefined) {
     if (!Array.isArray(o.totalsAt)) e.add(p('totalsAt'), 'must be an array of category indices');
     else o.totalsAt.forEach((v, i) => index(v, p('totalsAt', i)));
+  }
+  if (o.percentData !== undefined && typeof o.percentData !== 'boolean') e.add(p('percentData'), `must be true or false, got ${describe(o.percentData)}`);
+  enumOf('combo', ['stacked', 'clustered']);
+  enumOf('sort', ['sheet', 'reverse', 'ascending', 'descending']);
+  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['shades', ['gantt']], ['axisTitles', ['scatter', 'bubble']]] as const) {
+    if (o[k] !== undefined && !(types as readonly string[]).includes(type)) e.add(p(k), `applies to ${types.join(', ')} charts, not ${type}`);
+  }
+  if (o.axisTitles !== undefined) {
+    if (!isObj(o.axisTitles)) e.add(p('axisTitles'), 'must be {x, y}');
+    else {
+      e.unknown(o.axisTitles, ['x', 'y'], p('axisTitles'));
+      for (const k of ['x', 'y']) if (o.axisTitles[k] !== undefined && typeof o.axisTitles[k] !== 'string') e.add(p('axisTitles', k), 'must be a string');
+    }
+  }
+  if (o.shades !== undefined) {
+    if (!Array.isArray(o.shades)) e.add(p('shades'), 'must be an array of {from, to, label}');
+    else o.shades.forEach((sh, i) => {
+      if (!isObj(sh)) { e.add(p('shades', i), 'must be {from, to, label}'); return; }
+      e.unknown(sh, ['from', 'to', 'label'], p('shades', i));
+      for (const k of ['from', 'to'] as const) if (!isDate(sh[k])) e.add(p('shades', i, k), `must be a date like "2026-03-15", got ${describe(sh[k])}`);
+      if (isDate(sh.from) && isDate(sh.to) && dayOf(sh.to) <= dayOf(sh.from)) e.add(p('shades', i, 'to'), '"to" must come after "from"');
+      if (sh.label !== undefined && typeof sh.label !== 'string') e.add(p('shades', i, 'label'), 'must be a string');
+    });
+  }
+}
+
+const isDate = (v: unknown): v is string => typeof v === 'string' && parseCategoryDate(v) !== null;
+const dayOf = (v: string) => { const d = parseCategoryDate(v)!; return Date.UTC(d.y, d.m - 1, d.d); };
+
+/** Scatter / bubble cell: [x, y] or [x, y, size] of finite numbers, size not negative. */
+function checkPoint(e: Errors, v: unknown, at: (string | number)[], n: number) {
+  const what = n === 3 ? '[x, y, size]' : '[x, y]';
+  if (!Array.isArray(v) || v.length !== n) { e.add(at, `must be ${what} or null, got ${describe(v)}`); return; }
+  v.forEach((x, k) => { if (typeof x !== 'number' || !Number.isFinite(x)) e.add([...at, k], `must be a finite number, got ${describe(x)}`); });
+  if (n === 3 && typeof v[2] === 'number' && v[2] < 0) e.add([...at, 2], `bubble size must not be negative, got ${v[2]}`);
+}
+
+/** Rules on the series as a whole that depend on the chart type. */
+function checkTypeSeries(e: Errors, type: string, series: unknown[]) {
+  if (type === 'mekkoxy' && series.length < 2) e.add(['series'], 'Mekko XY needs a width series (the first) and at least one height series');
+  if (type === 'gantt') {
+    if (series.length < 2) { e.add(['series'], 'Gantt needs a Start series (the first) and an End series (the second); further series are milestones'); return; }
+    const [a, b] = series as { values?: unknown[] }[];
+    if (!Array.isArray(a?.values) || !Array.isArray(b?.values)) return;
+    a.values.forEach((s, j) => {
+      const f = b.values![j];
+      if (isDate(s) !== isDate(f)) e.add(['series', isDate(s) ? 1 : 0, 'values', j], 'a bar needs both a start and an end date');
+      else if (isDate(s) && isDate(f) && dayOf(f) <= dayOf(s)) e.add(['series', 1, 'values', j], 'end must come after start');
+    });
   }
 }
 

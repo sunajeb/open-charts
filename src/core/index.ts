@@ -6,6 +6,11 @@ import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
 import { layoutMekko } from './charts/mekko.ts';
 import { layoutLine } from './charts/line.ts';
+import { layoutCombo } from './charts/combo.ts';
+import { layoutMekkoXY } from './charts/mekkoxy.ts';
+import { layoutScatter } from './charts/scatter.ts';
+import { layoutTable } from './charts/table.ts';
+import { layoutGantt } from './charts/gantt.ts';
 
 export * from './types.ts';
 export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
@@ -41,6 +46,12 @@ const layouts: Record<ChartSpec['type'], Layout> = {
   waterfall: layoutWaterfall,
   mekko: layoutMekko,
   line: layoutLine,
+  combo: layoutCombo,
+  mekkoxy: layoutMekkoXY,
+  scatter: layoutScatter,
+  bubble: layoutScatter,
+  table: layoutTable,
+  gantt: layoutGantt,
 };
 
 /**

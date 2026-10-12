@@ -1,0 +1,28 @@
+{
+  "slides": [
+    {
+      "title": "Larger accounts pay more per seat",
+      "chart": {
+        "type": "scatter",
+        "categories": ["Acme", "Globex", "Initech", "Umbrella", "Hooli", "Stark", "Wayne", "Wonka", "Tyrell", "Cyberdyne", "Soylent", "Oscorp"],
+        "series": [
+          { "name": "Enterprise", "values": [[12.5, 42], [9.8, 39], null, [14.1, 47], null, [11.2, 44], [8.9, 36], null, null, null, null, [10.4, 40]] },
+          { "name": "Mid-market", "values": [null, null, [4.2, 31], null, [5.6, 33], null, null, [3.1, 27], [6.3, 35], [2.4, 24], [4.9, 29], null] }
+        ],
+        "options": { "axisTitles": { "x": "Seats (thousands)", "y": "Price per seat ($)" } }
+      }
+    },
+    {
+      "title": "Portfolio: two large businesses sit in the attractive quadrant",
+      "chart": {
+        "type": "bubble",
+        "categories": ["Payments", "Lending", "Wealth", "Insurance", "Cards", "FX", "Custody"],
+        "series": [
+          { "name": "Core", "values": [[8.5, 2.1, 420], [3.2, 1.4, 260], [6.1, 0.6, 180], null, [11.4, 1.8, 310], null, null] },
+          { "name": "Non-core", "values": [null, null, null, [1.8, 0.4, 90], null, [4.6, 0.9, 60], [2.7, 0.3, 40]] }
+        ],
+        "options": { "zeroBased": true, "axisTitles": { "x": "Market growth (%)", "y": "Relative market share (x)" } }
+      }
+    }
+  ]
+}

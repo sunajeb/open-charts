@@ -130,14 +130,14 @@ export function layoutMekko(ctx: Ctx) {
   if (o.seriesLabels === 'right') seriesLabelsRight(ctx, lastSegs.reverse(), px + pw, py, bottom);
 }
 
-interface RowItem { c: number; cx: number; w: number; alt?: number }
+export interface RowItem { c: number; cx: number; w: number; alt?: number }
 
 /**
  * Lay a row of labels out along x, each centred on its column. Labels wider than their column
  * are nudged sideways so they do not collide; a label that would no longer cover its column
  * centre, or still collides, is narrowed to its `alt` width or dropped (narrowest column first).
  */
-function placeRow(items: RowItem[], colW: number[], min: number, max: number, gap: number) {
+export function placeRow(items: RowItem[], colW: number[], min: number, max: number, gap: number) {
   const live = items.map((i) => ({ ...i, narrowed: false }));
   for (;;) {
     const xs = spread(live.map((i) => i.cx), live.map((i) => i.w), min, max, gap);

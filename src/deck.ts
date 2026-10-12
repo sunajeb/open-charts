@@ -21,6 +21,8 @@ export const CHART_FRAME = { x: 48, y: 96, w: SLIDE.w - 96, h: SLIDE.h - 132 };
 const TYPE_NAMES: Record<ChartSpec['type'], string> = {
   stacked: 'Stacked column chart', clustered: 'Clustered column chart', percent: '100% column chart',
   waterfall: 'Waterfall chart', mekko: 'Mekko chart', line: 'Line chart',
+  combo: 'Combination chart', mekkoxy: 'Mekko XY chart', scatter: 'Scatter chart', bubble: 'Bubble chart',
+  table: 'Table', gantt: 'Gantt chart',
 };
 
 export function altText(chart: ChartSpec): string {

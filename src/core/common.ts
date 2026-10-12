@@ -155,14 +155,19 @@ export function seriesLabelsRight(ctx: Ctx, items: SeriesItem[], x: number, top:
  * Legend: colour swatch + name, laid left to right from the frame's top-left, wrapping onto as many
  * rows as the frame width needs (B9). Returns its height.
  */
-export function legend(ctx: Ctx, swatch: 'box' | 'line' = 'box', colorOf: (s: number) => string = ctx.color): number {
+export function legend(
+  ctx: Ctx, swatchKind: 'box' | 'line' | ((s: number) => 'box' | 'line') = 'box', colorOf: (s: number) => string = ctx.color,
+  include: (s: number) => boolean = () => true,
+): number {
   if (ctx.o.seriesLabels !== 'legend') return 0;
   const { frame, fs, lh, pad } = ctx;
   const sw = fs * 0.75;
-  const swW = swatch === 'box' ? sw : sw * 1.6;
   let x = frame.x;
   let y = frame.y;
   ctx.spec.series.forEach((s, i) => {
+    if (!include(i)) return;
+    const swatch = typeof swatchKind === 'function' ? swatchKind(i) : swatchKind;
+    const swW = swatch === 'box' ? sw : sw * 1.6;
     const w = ctx.m.width(s.name, fs) + 2;
     const itemW = swW + pad * 0.6 + w;
     if (x > frame.x && x + itemW > frame.x + frame.w) { x = frame.x; y += lh; }
