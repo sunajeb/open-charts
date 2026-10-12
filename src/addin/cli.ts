@@ -14,7 +14,7 @@ export const ADDIN_USAGE = `Usage: open-charts addin build [-o dist/open-charts.
        open-charts addin install [--no-register]
        open-charts addin uninstall
        open-charts addin types
-       open-charts addin run <request.txt>     (called by the add-in)
+       open-charts addin run <request.txt|->   (called by the add-in)
        open-charts addin serve                 (edit-data server, started by the add-in)`;
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url));
@@ -29,7 +29,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
     case 'run': {
       // Always answers in the line format and exits 0: the VBA side shows E records to the user.
       let request = '';
-      try { request = readFileSync(arg, 'utf8'); } catch (err) { request = ''; }
+      try { request = readFileSync(!arg || arg === '-' ? 0 : arg, 'utf8'); } catch { request = ''; }
       let out: string;
       try {
         out = handleRequest(parseRequest(request), createMeasurer(), fileEdits());

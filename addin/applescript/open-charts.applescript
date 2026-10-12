@@ -11,9 +11,8 @@ property homeDir : "__HOME__"
 -- One request in, the engine's line-format response out (src/addin/engine.ts, format.ts).
 on engine(request)
 	try
-		set requestFile to homeDir & "/request.txt"
-		my writeUtf8(requestFile, request)
-		set command to quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin run " & quoted form of requestFile
+		-- The request goes in on stdin (no temp file: file I/O from this context fails with -50).
+		set command to "printf '%s' " & quoted form of request & " | " & quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin run -"
 		return do shell script command without altering line endings
 	on error message
 		return "OC" & tab & "1" & linefeed & "E" & tab & "The open-charts engine failed: " & my oneLine(message) & linefeed
@@ -28,6 +27,21 @@ on logLine(lineText)
 	return ""
 end logLine
 
+-- "source<tab>destination": copies a file or folder PowerPoint wrote in its sandbox to the
+-- destination (used to export a copy of the deck).
+on copyOut(arg)
+	try
+		set AppleScript's text item delimiters to tab
+		set {src, dest} to text items of arg
+		set AppleScript's text item delimiters to ""
+		do shell script "rm -rf " & quoted form of dest & " && mkdir -p \"$(dirname " & quoted form of dest & ")\" && cp -R " & quoted form of src & " " & quoted form of dest & " && rm -rf " & quoted form of src
+		return "OK " & dest
+	on error message
+		set AppleScript's text item delimiters to ""
+		return "failed: " & my oneLine(message)
+	end try
+end copyOut
+
 on findNode()
 	try
 		do shell script "test -x " & quoted form of nodePath
@@ -37,17 +51,6 @@ on findNode()
 	end try
 end findNode
 
-on writeUtf8(filePath, txt)
-	set fh to open for access (POSIX file filePath) with write permission
-	try
-		set eof fh to 0
-		write txt to fh as «class utf8»
-		close access fh
-	on error message
-		close access fh
-		error message
-	end try
-end writeUtf8
 
 on oneLine(txt)
 	set AppleScript's text item delimiters to {return, linefeed, tab}
