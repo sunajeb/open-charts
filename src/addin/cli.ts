@@ -2,11 +2,12 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMeasurer } from '../fonts.ts';
 import { handleRequest, parseRequest } from './engine.ts';
-import { addinHome, httpSessions, serveAddin, stopServer } from './server.ts';
+import { httpSessions, serveAddin, stopServer } from './server.ts';
+import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
 
@@ -62,6 +63,9 @@ function install(register: boolean) {
   const home = addinHome();
   // 1. Engine copy outside ~/Downloads & co., which macOS privacy protection guards from the bridge.
   const engine = join(home, 'engine');
+  if (resolve(ROOT) === resolve(engine)) {
+    throw new Error('This is the installed engine copy. Run addin install from the open-charts folder you downloaded.');
+  }
   rmSync(engine, { recursive: true, force: true });
   mkdirSync(engine, { recursive: true });
   for (const p of ['src', 'vendor', 'package.json']) cpSync(join(ROOT, p), join(engine, p), { recursive: true });
@@ -86,7 +90,10 @@ function install(register: boolean) {
   execFileSync('osacompile', ['-o', join(SCRIPTS_DIR, 'open-charts.scpt'), sourceFile]);
   console.log(`Bridge script compiled to ${join(SCRIPTS_DIR, 'open-charts.scpt')}`);
 
-  // 4. Register and load it in PowerPoint (starts PowerPoint if needed).
+  // 4. The open-charts command (runs this folder, so a later `open-charts addin install` updates).
+  for (const line of installLauncher(process.execPath, join(ROOT, 'src', 'cli.ts'), home)) console.log(line);
+
+  // 5. Register and load it in PowerPoint (starts PowerPoint if needed).
   if (register) {
     osascript(registerScript(ppam));
     console.log('Registered and loaded in PowerPoint: look for the open-charts tab.');
@@ -117,6 +124,7 @@ end tell`);
   for (const p of [join(SCRIPTS_DIR, 'open-charts.scpt'), PPAM_DIR, join(addinHome(), 'engine')]) {
     if (existsSync(p)) rmSync(p, { recursive: true, force: true });
   }
+  removeLauncher();
   console.log('open-charts add-in removed.');
 }
 

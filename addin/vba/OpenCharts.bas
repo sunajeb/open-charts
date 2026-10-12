@@ -14,6 +14,8 @@ Option Explicit
 Private Const SCRIPT_FILE As String = "open-charts.scpt"
 Private Const SCRIPT_HANDLER As String = "engine"
 Private Const TITLE As String = "open-charts"
+' The command that reinstalls the add-in; the build writes the launcher path of this install here.
+Private Const REINSTALL As String = """$HOME/Library/Application Support/open-charts/bin/open-charts"" addin install"
 
 Private gRibbon As Object
 Private gEvents As AppEvents
@@ -312,7 +314,7 @@ Private Function Engine(ByVal request As String) As String
     Exit Function
 NoBridge:
     Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & _
-        "Open Terminal and run:  open-charts addin install" & vbLf & "then restart PowerPoint."
+        "Open Terminal and run:" & vbLf & REINSTALL & vbLf & "then restart PowerPoint."
 End Function
 
 Private Function Timing() As String

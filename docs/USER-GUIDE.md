@@ -399,12 +399,19 @@ PowerPoint and click **Enable Macros** when asked.
 
 **"open-charts can't reach its chart engine".** The add-in calls Node through a small script that
 the install placed in PowerPoint's scripts folder. Run the install again from Terminal and restart
-PowerPoint. This also fixes **Node not found** after you upgraded or moved Node (for example with
+PowerPoint:
+
+```sh
+"$HOME/Library/Application Support/open-charts/bin/open-charts" addin install
+```
+
+(`open-charts addin install` if the install linked the command into your PATH; the message in
+PowerPoint shows the same line.) This also fixes **Node not found** after you upgraded or moved Node (for example with
 nvm): the install records the path of the Node that ran it. Check `node --version` is 22.6 or newer
 first.
 
 **"This add-in and its engine do not match".** You updated open-charts but not the installed copy.
-Run the install again.
+Run the command the message shows (the install command above).
 
 **"Select an open-charts chart first".** Click the chart once (select the whole group, not a shape
 inside it), then choose Edit data or Update chart.

@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { installLauncher, launcherPath, reinstallCommand, removeLauncher } from '../src/addin/launcher.ts';
 import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
@@ -221,4 +225,34 @@ test('request parsing tolerates CRLF and missing fields', async () => {
   const r = parseRequest('update\r\n\r\n1,2,3,4\r\n5,6,7,8\r\n{"a":1}\r\n');
   assert.deepEqual([r.op, r.arg, r.frame, r.bounds, r.spec], ['update', '', { x: 1, y: 2, w: 3, h: 4 }, { x: 5, y: 6, w: 7, h: 8 }, '{"a":1}']);
   assert.deepEqual(parseRequest(''), { op: '', arg: '', frame: undefined, bounds: undefined, spec: '' });
+});
+
+test('launcher: installed open-charts command runs the CLI; messages name a command that works', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oc-launcher-'));
+  const path = process.env.PATH;
+  try {
+    const cli = join(dir, 'fake cli.js');
+    writeFileSync(cli, 'console.log(JSON.stringify(process.argv.slice(2)))\n');
+    process.env.PATH = ''; // no folder to link into: the install explains how to add one
+    const lines = installLauncher(process.execPath, cli, dir);
+    assert.match(lines.join('\n'), /add its folder to your PATH/);
+    const bin = launcherPath(dir);
+    assert.equal(statSync(bin).mode & 0o111, 0o111, 'executable');
+    process.env.PATH = path;
+    assert.equal(execFileSync(bin, ['addin', 'install', "it's"], { encoding: 'utf8' }).trim(), JSON.stringify(['addin', 'install', "it's"]));
+    // The command shown to users is that launcher, quoted for a shell.
+    assert.equal(execFileSync('/bin/sh', ['-c', `${reinstallCommand(dir).replace(' addin install', '')} hello`], { encoding: 'utf8' }).trim(), '["hello"]');
+    removeLauncher(dir);
+    assert.throws(() => statSync(bin));
+  } finally {
+    process.env.PATH = path;
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // Every message that tells the user to reinstall shows reinstallCommand(), never a bare `open-charts`.
+  const mismatch = parseResponse(await handleRequest(req('bogus'), m)).errors[0];
+  assert.ok(mismatch.includes(`In Terminal, run: ${reinstallCommand()}`), mismatch);
+  const vba = buildAddin().source;
+  assert.ok(vba.includes(`Private Const REINSTALL As String = "${reinstallCommand().replace(/"/g, '""')}"`));
+  assert.match(vba, /"Open Terminal and run:" & vbLf & REINSTALL/);
+  assert.doesNotMatch(vba, /run:\s+open-charts addin/);
 });

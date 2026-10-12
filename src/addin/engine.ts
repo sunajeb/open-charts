@@ -20,6 +20,7 @@ import { parseFrame } from '../render/tags.ts';
 import type { Session } from '../server.ts';
 import { FORMAT_VERSION, num, record, shapeBounds, shapeRecord } from './format.ts';
 import { galleryItems, sampleFor, typeLabel } from './registry.ts';
+import { reinstallCommand } from './launcher.ts';
 
 export interface AddinRequest { op: string; arg: string; frame?: Frame; bounds?: Frame; spec: string }
 
@@ -78,7 +79,7 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
       default:
-        return error(`This add-in and its engine do not match ("${req.op}"). Run: open-charts addin install`);
+        return error(`This add-in and its engine do not match ("${req.op}"). In Terminal, run: ${reinstallCommand()}`);
     }
   } catch (err) {
     return error((err as Error).message);

@@ -7,7 +7,7 @@
 // chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro via AppleScript.
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { homedir } from 'node:os';
+import { addinHome } from './launcher.ts';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { serve, type Session } from '../server.ts';
@@ -20,10 +20,7 @@ const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
 const CLI = new URL('../cli.ts', import.meta.url);
 const EDITOR = new URL('../web/editor.html', import.meta.url);
 
-/** Where the add-in keeps its engine copy, settings and log. */
-export function addinHome(): string {
-  return process.env.OPEN_CHARTS_HOME ?? join(homedir(), 'Library', 'Application Support', 'open-charts');
-}
+export { addinHome };
 
 export function log(line: string, home = addinHome()) {
   try {

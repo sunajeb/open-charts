@@ -10,6 +10,7 @@ import { zip, type ZipInput } from '../render/zip.ts';
 import { ENGINE_VERSION } from '../version.ts';
 import { galleryItems, type ChartTypeEntry } from './registry.ts';
 import { vbaProjectBin } from './vba-project.ts';
+import { reinstallCommand } from './launcher.ts';
 
 export const MODULE_NAME = 'OpenCharts';
 // Must differ from every module name, or VBA refuses to open the project.
@@ -53,8 +54,10 @@ export function ribbonXml(prefix: string, items: ChartTypeEntry[]): string {
 `;
 }
 
+/** The module source: callback prefix filled in, and the reinstall command the error messages show. */
 export function vbaSource(prefix: string, bas = readFileSync(BAS_FILE, 'utf8')): string {
-  return bas.replace(PLACEHOLDER, prefix);
+  const reinstall = `"${reinstallCommand().replace(/"/g, '""')}"`;
+  return bas.replace(PLACEHOLDER, prefix).replace(/^(Private Const REINSTALL As String = ).*$/m, (_, decl) => decl + reinstall);
 }
 
 export interface BuiltAddin { ppam: Uint8Array; prefix: string; ribbon: string; source: string }

@@ -62,7 +62,11 @@ open-charts itself has no runtime dependencies; `npm install` only sets up the t
 3. installs the small bridge script PowerPoint uses to reach the engine
    (`~/Library/Application Scripts/com.microsoft.Powerpoint/open-charts.scpt`), with the path of the
    Node that ran the install;
-4. registers and loads the add-in in PowerPoint (it starts PowerPoint if needed).
+4. installs the `open-charts` command: a launcher at
+   `~/Library/Application Support/open-charts/bin/open-charts` that runs this folder, linked into
+   `~/.local/bin`, `~/bin`, `/opt/homebrew/bin` or `/usr/local/bin` when one of them is on your PATH
+   and writable (otherwise the install prints the line to add to `~/.zshrc`);
+5. registers and loads the add-in in PowerPoint (it starts PowerPoint if needed).
 
 Look for the **open-charts** tab, before Home. If PowerPoint asks about macros for
 `open-charts.ppam`, click **Enable Macros**: the add-in is a small macro file that passes your clicks
@@ -73,19 +77,22 @@ Options and related commands:
 
 | Command | What it does |
 |---|---|
-| `… src/cli.ts addin install --no-register` | Install without touching PowerPoint; then load it yourself: *Tools › PowerPoint Add-ins…*, **+**, pick the `.ppam` above. |
-| `… src/cli.ts addin uninstall` | Unload the add-in and remove the installed files. |
-| `… src/cli.ts addin build [-o dist/open-charts.ppam]` | Only build the `.ppam` file. |
-| `… src/cli.ts addin types` | List the chart types in the ribbon menu and whether each is available. |
+| `open-charts addin install --no-register` | Install without touching PowerPoint; then load it yourself: *Tools › PowerPoint Add-ins…*, **+**, pick the `.ppam` above. |
+| `open-charts addin uninstall` | Unload the add-in and remove the installed files and the `open-charts` command. |
+| `open-charts addin build [-o dist/open-charts.ppam]` | Only build the `.ppam` file. |
+| `open-charts addin types` | List the chart types in the ribbon menu and whether each is available. |
 
-Run `addin install` again after you update open-charts or move or upgrade Node.
-
-To type `open-charts` instead of `node --experimental-strip-types --no-warnings src/cli.ts`, add an
-alias to your shell, e.g. in `~/.zshrc`:
+Run `open-charts addin install` again after you update open-charts or move or upgrade Node. If
+`open-charts` is not on your PATH, the full form always works (this is what the add-in's messages
+show):
 
 ```sh
-alias open-charts="node --experimental-strip-types --no-warnings $HOME/path/to/open-charts/src/cli.ts"
+"$HOME/Library/Application Support/open-charts/bin/open-charts" addin install
 ```
+
+Without the add-in (Linux, Windows, or before installing), use
+`node --experimental-strip-types --no-warnings src/cli.ts` from the repository folder wherever this
+README says `open-charts`, or run `npm link` there once to put `open-charts` on your PATH.
 
 ## Quick start in PowerPoint
 
