@@ -14,7 +14,7 @@ const m = createMeasurer();
 const F = CHART_FRAME;
 const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.roles![i]));
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text').map((t) => t.text);
-const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+|legend:size|bracket:\d+|today)$/;
+const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|leader:s\d+:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+|legend:size|bracket:\d+|today)$/;
 
 const base = (type: ChartSpec['type'], options: ChartSpec['options'] = {}): ChartSpec => ({
   type, categories: ['2021', '2022', '2023', '2024'],
@@ -192,7 +192,12 @@ test('B12: gate v2 catches text over marks, shapes outside the frame and arrows 
 });
 
 test('B13: hidden labels are issues in strict mode, with an allow-list', () => {
-  const scene = layoutChart(JSON.parse(readFileSync('examples/deck.json', 'utf8')).slides[3].chart, F, m);
+  // A thin middle segment between touching columns (gap 0.05): no room inside, beside or above it.
+  const big = [90, 95, 100, 105, 110, 115];
+  const scene = layoutChart({
+    type: 'stacked', categories: ['a', 'b', 'c', 'd', 'e', 'f'],
+    series: [{ name: 'Big', values: big }, { name: 'Thin', values: big.map(() => 1) }, { name: 'Big2', values: big }], options: { gap: 0.05 },
+  }, F, m);
   assert.ok(scene.hidden.length > 0);
   assert.equal(checkScene(scene).filter((i) => i.kind === 'hidden').length, 0);
   assert.equal(checkScene(scene, { strict: true }).filter((i) => i.kind === 'hidden').length, scene.hidden.length);
@@ -200,15 +205,10 @@ test('B13: hidden labels are issues in strict mode, with an allow-list', () => {
 });
 
 test('B13: example decks pass the strict gate; declared stress slides list exactly what they hide', () => {
-  // Thin segments are hidden until the label solver can move them outside with a leader line;
-  // until then each fixture declares exactly which ones, so any new hidden label fails here.
+  // Thin segments get their labels boxed or outside with a leader; what still cannot be placed is
+  // declared here, so any new hidden label fails.
   const allowed: Record<string, RegExp[]> = {
-    'examples/deck.json#0': [/^Services \/ 202[123]: segment too small$/],
-    'examples/deck.json#3': [/^(Support|Training|Other) \/ Q\d FY2\d: segment too small$/],
-    'examples/mekko.json#1': [/^(G&A \/ Asia Pacific|(Sales & marketing|R&D|G&A) \/ Latin America): segment too small$/],
-    'examples/mekko.json#2': [/^(Other \/ (Asia Pacific \(excluding Japan\)|Europe, Middle East and Africa)|.* \/ Rest of world): segment too small$/],
     'examples/waterfall.json#2': [/^category labels shrunk to 11 pt to fit$/],
-    'examples/mekkoxy.json#1': [/^Services \/ Consumer: segment too small$/],
   };
   for (const file of ['examples/deck.json', 'examples/line.json', 'examples/mekko.json', 'examples/waterfall.json', 'examples/step.json', 'examples/area.json', 'examples/pie.json', 'examples/harvey.json', 'examples/percent.json', 'examples/combo.json', 'examples/mekkoxy.json', 'examples/scatter.json', 'examples/table.json', 'examples/gantt.json']) {
     const deck: DeckSpec = JSON.parse(readFileSync(file, 'utf8'));

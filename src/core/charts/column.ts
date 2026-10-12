@@ -5,6 +5,8 @@ import {
 } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { cagrYears } from '../dates.ts';
+import { placePending, type PendingLabel, type Side } from '../labels.ts';
+import type { Box } from '../place.ts';
 
 /** Numbers shared by both orientations: stacks, shares, rounded labels and the value domain. */
 function model(ctx: Ctx) {
@@ -98,6 +100,7 @@ function layoutVertical(ctx: Ctx, md: Model) {
 
   const tops: number[] = [];
   const lastSegs: { s: number; y: number }[] = [];
+  const pending: PendingLabel[] = [];
 
   for (const c of cats) {
     if (clustered) {
@@ -123,6 +126,7 @@ function layoutVertical(ctx: Ctx, md: Model) {
 
     let up = 0, down = 0;
     const x = cx(c) - colW / 2;
+    const colBars: Box[] = [];
     for (const s of sers) {
       const v = percent ? Math.max(0, shown(s, c)) : val(s, c);
       if (!v) {
@@ -134,12 +138,18 @@ function layoutVertical(ctx: Ctx, md: Model) {
       if (v > 0) up += v; else down += v;
       const y1 = yOf(b), y2 = yOf(a), h = y2 - y1;
       const fill = ctx.color(s);
-      ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', x, y: y1, w: colW, h, fill, stroke: style.background, strokeWidth: 0.75 });
+      const seg = { kind: 'rect', x, y: y1, w: colW, h, fill, stroke: style.background, strokeWidth: 0.75 } as const;
+      ctx.add(`bar:s${s}:c${c}`, seg);
+      colBars.push(seg);
       const label = segLabel(s, c);
       const tw = m.width(label, fs);
       if (tw + 2 <= colW && lh * 0.9 <= h) {
         text(ctx, `label:value:s${s}:c${c}`, { x: x + colW / 2 - tw / 2 - 1, y: y1 + h / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
-      } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
+      } else {
+        // Beside the column (never into the series names right of the last one), or above / below the stack.
+        const sides: Side[] = c === nCat - 1 && o.seriesLabels === 'right' ? ['left'] : ['right', 'left'];
+        pending.push({ s, c, text: label, seg, sides: [...sides, v > 0 ? 'above' : 'below'], boxCover: colBars, reason: `${spec.series[s].name} / ${spec.categories[c]}: segment too small` });
+      }
       if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
     }
     let top = yOf(percent && !md.pdata ? 100 : up);
@@ -170,6 +180,9 @@ function layoutVertical(ctx: Ctx, md: Model) {
     bracketArrow(ctx, kind, cx(a), tops[a] - pad * 0.3, cx(b), tops[b] - pad * 0.3, yLine, label);
     row++;
   }
+
+  // Segment labels that did not fit go where they can, once everything else is drawn.
+  placePending(ctx, pending);
 }
 
 /** Horizontal bars: categories down the left, values to the right, totals and arrows beyond the bar ends. */
@@ -217,6 +230,7 @@ function layoutBars(ctx: Ctx, md: Model) {
   }
 
   const ends: number[] = [];
+  const pending: PendingLabel[] = [];
   for (const c of cats) {
     if (clustered) {
       const barH = barT / nSer;
@@ -241,6 +255,7 @@ function layoutBars(ctx: Ctx, md: Model) {
 
     let right = 0, left = 0;
     const y = cy(c) - barT / 2;
+    const colBars: Box[] = [];
     for (const s of sers) {
       const v = percent ? Math.max(0, shown(s, c)) : val(s, c);
       if (!v) continue;
@@ -248,12 +263,17 @@ function layoutBars(ctx: Ctx, md: Model) {
       if (v > 0) right += v; else left += v;
       const x1 = xOf(a), x2 = xOf(b), w = x2 - x1;
       const fill = ctx.color(s);
-      ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', x: x1, y, w, h: barT, fill, stroke: style.background, strokeWidth: 0.75 });
+      const seg = { kind: 'rect', x: x1, y, w, h: barT, fill, stroke: style.background, strokeWidth: 0.75 } as const;
+      ctx.add(`bar:s${s}:c${c}`, seg);
+      colBars.push(seg);
       const label = segLabel(s, c);
       const tw = m.width(label, fs);
       if (tw + 2 <= w && lh * 0.9 <= barT) {
         text(ctx, `label:value:s${s}:c${c}`, { x: x1 + w / 2 - tw / 2 - 1, y: cy(c) - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
-      } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
+      } else {
+        // In the gap above or below the bar, or beyond its end.
+        pending.push({ s, c, text: label, seg, sides: ['above', 'below', v > 0 ? 'right' : 'left'], boxCover: colBars, reason: `${spec.series[s].name} / ${spec.categories[c]}: segment too small` });
+      }
     }
     let end = xOf(percent && !md.pdata ? 100 : right);
     if (showTotals) {
@@ -281,4 +301,6 @@ function layoutBars(ctx: Ctx, md: Model) {
     bracketArrowH(ctx, kind, ends[ref.from] + pad * 0.3, cy(ref.from), ends[ref.to] + pad * 0.3, cy(ref.to), xLine, label);
     xCol += arrowW[i];
   });
+
+  placePending(ctx, pending);
 }
