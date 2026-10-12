@@ -122,7 +122,7 @@
   #sheet th { background: var(--panel-2); position: sticky; top: 0; z-index: 2; }
   #sheet td.name, #sheet th.corner { position: sticky; left: 0; z-index: 1; background: var(--panel-2); }
   #sheet th.corner { z-index: 3; }
-  #sheet input { border: 0; border-radius: 0; width: 88px; padding: 6px 8px; background: transparent; outline: none; }
+  #sheet input { border: 0; border-radius: 0; width: 8ch; padding: 6px 8px; background: transparent; outline: none; }
   #sheet td input { text-align: right; font-family: var(--mono); font-size: 12.5px; }
   #sheet td.name input { text-align: left; font-family: var(--font); width: 150px; font-weight: 600; font-size: 13px; padding-left: 4px; }
   #sheet th input { font-weight: 600; text-align: center; }
@@ -574,7 +574,7 @@ function restore(s) {
   ({ deck, cur } = JSON.parse(s));
   histKey = null; invalid.clear();
   save(); markDirty();
-  renderTabs(); renderForm(); renderSheet(); schedule(); updateUndo();
+  renderTabs(); renderForm(); renderSheet(); schedule(); updateUndo(); autoSplit();
   if (at) moveTo(Math.min(at.r, chart().series.length - 1), Math.min(at.c, chart().categories.length - 1));
 }
 function undo() { if (hi > 0) restore(hist[--hi]); }
@@ -673,7 +673,7 @@ function cellInput(r, c, value, label, onInput) {
   inp.value = value; inp.dataset.r = String(r); inp.dataset.c = String(c);
   inp.autocomplete = 'off'; inp.spellcheck = false;
   inp.setAttribute('aria-label', label);
-  if (onInput) inp.oninput = () => onInput(inp);
+  if (onInput) inp.oninput = () => { onInput(inp); if (inp.value.length + 3 > parseFloat(inp.style.width)) fitColumns(); };
   return inp;
 }
 const seriesColor = (s, i) => (s.color ?? (deck.style?.palette ?? PALETTE)[i % (deck.style?.palette ?? PALETTE).length]).replace('#', '');
@@ -746,6 +746,7 @@ function renderSheet() {
   addRowBtn.onclick = () => $('addSer').click();
   addRowCell.append(addRowBtn); addRow.append(addRowCell);
   $('sheet').replaceChildren(head, ...rows, addRow);
+  fitColumns();
   markCellErrors();
   if (active) {
     const el = cellAt(Math.min(active.r, c.series.length - 1), Math.min(active.c, c.categories.length - 1));
@@ -754,7 +755,21 @@ function renderSheet() {
   paintSel();
 }
 
-function renderAll() { renderTabs(); renderForm(); renderSheet(); schedule(); }
+/** Size each datasheet column to its longest entry (header or value), within limits. */
+function fitColumns() {
+  const width = new Map();
+  for (const inp of $('sheet').querySelectorAll('input[data-r]')) {
+    const c = inp.dataset.c;
+    width.set(c, Math.max(width.get(c) ?? 0, inp.value.length));
+  }
+  for (const inp of $('sheet').querySelectorAll('input[data-r]')) {
+    const c = inp.dataset.c, n = width.get(c);
+    if (c === '-1') { if (inp.dataset.r !== '-1') inp.style.width = `${Math.min(30, Math.max(12, n + 3))}ch`; }
+    else inp.style.width = `${Math.min(24, Math.max(8, n + 3))}ch`;
+  }
+}
+
+function renderAll() { renderTabs(); renderForm(); renderSheet(); schedule(); autoSplit(); }
 
 // ---- Datasheet: cells, selection, keyboard, clipboard ------------------------------------------
 function cellAt(r, c) { return $('sheet').querySelector(`input[data-r="${r}"][data-c="${c}"]`); }
@@ -1185,7 +1200,7 @@ function changed(rebuild, key) {
   save();
   record(key);
   markDirty();
-  if (rebuild) { renderForm(); renderSheet(); }
+  if (rebuild) { renderForm(); renderSheet(); autoSplit(); }
   renderTabs();
   schedule();
 }
@@ -1515,10 +1530,17 @@ function setSplit(frac) {
   $('splitter').setAttribute('aria-valuenow', String(Math.round(frac * 100)));
   return frac;
 }
-let split = 0.58;
-try { split = Number(localStorage.getItem(SPLIT_KEY)) || (session ? 0.5 : 0.58); } catch {}
-setSplit(split);
-const saveSplit = () => { try { localStorage.setItem(SPLIT_KEY, String(split)); } catch {} };
+let split = 0.58, userSplit = false;
+try { split = Number(localStorage.getItem(SPLIT_KEY)) || 0; userSplit = split > 0; } catch {}
+/** Until the user drags the splitter, give the preview everything the datasheet does not need. */
+function autoSplit() {
+  if (userSplit || matchMedia('(max-width: 899px)').matches) return;
+  const h = $('work').clientHeight - 24;
+  const need = 120 + 33 * (chart().series.length + 2);
+  split = setSplit(Math.min(0.72, Math.max(0.45, 1 - need / h)));
+}
+if (userSplit) setSplit(split); else setSplit(0.58);
+const saveSplit = () => { userSplit = true; try { localStorage.setItem(SPLIT_KEY, String(split)); } catch {} };
 $('splitter').addEventListener('pointerdown', (e) => {
   e.preventDefault();
   const sp = $('splitter'); sp.setPointerCapture(e.pointerId);
