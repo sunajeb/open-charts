@@ -49,8 +49,8 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [x] `niceTicks`: 620m max picks a 0–800m axis (22% empty) — prefer tighter steps
 - [ ] MASTER-PLAN §7.1: kerning decision changed — writer and add-in now set kern so PowerPoint never kerns (it kerns when the attribute is missing)
 
-- [ ] Editor: "label hidden (no room)" notices dominate the issue list on the default chart — collapse into one low-severity line ("4 labels too small to show"); keep real problems prominent
-- [ ] Thin segments: place labels outside with a leader (reference behaviour) instead of hiding, where there is room
+- [x] Editor: "label hidden (no room)" notices dominate the issue list on the default chart — collapse into one low-severity line ("4 labels too small to show"); keep real problems prominent
+- [x] Thin segments: place labels outside with a leader (reference behaviour) instead of hiding, where there is room
 
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
