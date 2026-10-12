@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   checkScene, layoutChart,
-  type ChartSpec, type RectShape, type Scene, type TextShape,
+  type ChartSpec, type LineShape, type RectShape, type Scene, type TextShape,
 } from '../src/core/index.ts';
 import { createMeasurer } from '../src/fonts.ts';
 import { segmentHitsBox } from '../src/core/place.ts';
@@ -16,6 +16,7 @@ const F = CHART_FRAME;
 const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.roles![i]));
 const rectsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is RectShape => x.kind === 'rect');
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text');
+const lines = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is LineShape => x.kind === 'line');
 const roleOf = (s: Scene, sh: object) => s.roles![s.shapes.indexOf(sh as never)];
 const strict = (s: Scene) => checkScene(s, { strict: true, measurer: m });
 const close = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
@@ -57,9 +58,28 @@ test('combo: line labels read as their point\'s, segment labels stay inside, no 
   }
 });
 
+// ---- Mekko XY ----------------------------------------------------------------------------------------
+
+test('mekkoxy: a segment too thin for its label gets it outside, beside the last column, with a leader', () => {
+  const scene = layoutChart(slides('mekkoxy')[1].chart, F, m);
+  assert.deepEqual(scene.hidden, [], 'no label hidden');
+  const seg = rectsOf(scene, /^bar:s3:c4$/)[0]; // Services / Consumer, $120
+  const label = textsOf(scene, /^label:value:s3:c4$/)[0];
+  assert.equal(label.text, '$120');
+  assert.ok(label.x > seg.x + seg.w, 'outside, to the right');
+  const leader = lines(scene, /^leader:c4$/)[0];
+  assert.ok(close(leader.x1, seg.x + seg.w) && close(leader.y1, seg.y + seg.h / 2), 'leader starts at the segment');
+  assert.ok(leader.x2 <= label.x && label.x - leader.x2 < 2 && leader.y2 >= label.y && leader.y2 <= label.y + label.h, 'and ends at the label');
+  const name = textsOf(scene, /^label:series:s3$/)[0];
+  assert.ok(name.x >= label.x + label.w, 'series name further right');
+  // The value axis is drawn over the first column, not hidden behind it.
+  const axisIdx = scene.shapes.findIndex((sh, i) => scene.roles![i] === 'axis' && sh.kind === 'line' && sh.x1 === sh.x2);
+  assert.ok(axisIdx > scene.roles!.findLastIndex((r) => r.startsWith('bar:')));
+  assert.deepEqual(strict(scene), []);
+});
+
 // ---- Gantt -------------------------------------------------------------------------------------------
 
-const lines = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is import('../src/core/index.ts').LineShape => x.kind === 'line');
 
 test('gantt: rows share the frame height up to a comfortable maximum; the chart keeps its top edge', () => {
   const lh = m.lineHeight(12);
@@ -151,7 +171,7 @@ test('scatter: a crowded point gets its label further out with a leader line tha
   const grid = [...Array(9).keys()].map((i) => [5 + (i % 3) * 0.15, 5 + Math.floor(i / 3) * 0.375]);
   const pts = [[0, 0], [10, 10], ...grid];
   const scene = layoutChart({ type: 'scatter', categories: pts.map((_, i) => `Pt ${i}`), series: [{ name: 'S', values: pts }] }, F, m);
-  const leaders = byRole(scene, /^leader:c\d+$/).filter((x) => x.kind === 'line') as import('../src/core/index.ts').LineShape[];
+  const leaders = byRole(scene, /^leader:c\d+$/).filter((x) => x.kind === 'line') as LineShape[];
   assert.ok(leaders.length > 0, 'some labels moved out with a leader');
   assert.equal(textsOf(scene, /^label:value:/).length + scene.hidden.length, pts.length, 'labelled, or hidden and reported');
   assert.ok(scene.hidden.length <= 2, scene.hidden.join('; '));

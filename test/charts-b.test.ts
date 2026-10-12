@@ -39,7 +39,7 @@ test('example decks validate and every slide passes the strict gate', () => {
     for (const s of deck.slides) {
       const scene = layoutChart(s.chart, F, m);
       for (const r of scene.roles!) assert.match(r, ROLE, `${f}: ${r}`);
-      const issues = strict(scene).filter((i) => !/Services \/ Consumer: segment too small/.test(i.detail));
+      const issues = strict(scene);
       assert.deepEqual(issues, [], `${f}: ${s.title}`);
     }
   }
