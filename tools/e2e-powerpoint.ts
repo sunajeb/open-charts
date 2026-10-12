@@ -92,9 +92,9 @@ const abortIfFailed = (what: string) => {
 
 ppt('activate\nmake new presentation');
 let slideNo = 0;
-const newSlide = () => {
+const newSlide = (layout = 'blank') => {
   slideNo++;
-  ppt(`set s to make new slide at end of active presentation with properties {layout:slide layout blank}
+  ppt(`set s to make new slide at end of active presentation with properties {layout:slide layout ${layout}}
 go to slide view of document window 1 number ${slideNo}`);
   return slideNo;
 };
@@ -108,6 +108,12 @@ for (const id of items) {
   results.push(macro('Run', `chart_${id}`));
   timings.insert.push(Date.now() - t);
 }
+
+// 3b. On a title-and-content slide the chart takes the empty content placeholder's place.
+const placeholderSlide = newSlide('text slide');
+const placeholderBox = ppt(`get {left position, top, width, height} of shape 2 of slide ${placeholderSlide} of active presentation`)
+  .split(', ').map(Number);
+results.push(macro('Run', 'chart_waterfall'));
 
 abortIfFailed('Inserting charts');
 
@@ -219,6 +225,10 @@ for (const [id, w] of [['line', 864], ['clustered', 432]] as const) {
   if (!c?.frame || !c.bounds) continue;
   if (Math.abs(c.frame.w - w) > 2) failures.push(`${id}: after resizing, OC_FRAME width is ${c.frame.w}, expected ${w} (not re-laid out)`);
   if (Math.abs(c.bounds.w - c.frame.w) > 1 || Math.abs(c.bounds.h - c.frame.h) > 1) failures.push(`${id}: group bounds ${JSON.stringify(c.bounds)} differ from OC_FRAME ${JSON.stringify(c.frame)}`);
+}
+const ph = slides.find((x) => x.index === placeholderSlide)?.charts[0];
+if (!ph?.frame || [ph.frame.x, ph.frame.y, ph.frame.w, ph.frame.h].some((v, i) => Math.abs(v - placeholderBox[i]) > 1)) {
+  failures.push(`placeholder slide: chart frame ${JSON.stringify(ph?.frame)} is not the content placeholder ${placeholderBox.join(',')}`);
 }
 const st = slides.find((x) => x.index === slideOf.stacked)?.charts[0];
 if (st?.bounds && (Math.abs(st.bounds.x - 300) > 40 || st.bounds.w > 420)) failures.push(`stacked: not re-laid out in the moved frame (bounds ${JSON.stringify(st.bounds)})`);
