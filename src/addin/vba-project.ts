@@ -5,7 +5,12 @@
 import { writeCfb } from './cfb.ts';
 import { compress } from './ovba.ts';
 
-export interface VbaModule { name: string; source: string }
+export interface VbaModule {
+  name: string;
+  source: string;
+  /** "class" for a class module (e.g. one holding a WithEvents Application). Default: standard module. */
+  kind?: 'standard' | 'class';
+}
 
 export interface VbaProjectOptions {
   name: string;
@@ -69,7 +74,7 @@ export function dirStream(name: string, modules: VbaModule[]): Uint8Array {
     r.u32rec(0x0031, 0); // MODULEOFFSET: source starts at 0, no p-code
     r.u32rec(0x001e, 0); // MODULEHELPCONTEXT
     r.u16(0x002c).u32(2).u16(0xffff); // MODULECOOKIE
-    r.u16(0x0021).u32(0); // MODULETYPE: procedural
+    r.u16(m.kind === 'class' ? 0x0022 : 0x0021).u32(0); // MODULETYPE: procedural / document-or-class
     r.u16(0x002b).u32(0); // terminator
   }
   r.u16(0x0010).u32(0); // dir terminator
@@ -118,7 +123,7 @@ export function projectStream(opts: VbaProjectOptions): string {
   const seed = opts.seed ?? 0x5a;
   const lines = [
     `ID="${opts.id}"`,
-    ...opts.modules.map((m) => `Module=${m.name}`),
+    ...opts.modules.map((m) => (m.kind === 'class' ? `Class=${m.name}` : `Module=${m.name}`)),
     `Name="${opts.name}"`,
     'HelpContextID="0"',
     `CMG="${encryptData(opts.id, new Uint8Array(4), seed)}"`, // protection state: none
@@ -132,10 +137,21 @@ export function projectStream(opts: VbaProjectOptions): string {
   return lines.join('\r\n') + '\r\n';
 }
 
-/** Source as VBA stores it: CRLF line endings, `Attribute VB_Name` first. */
+const CLASS_ATTRIBUTES = [
+  'Attribute VB_Base = "0{FCFB3D2A-A0FA-1068-A738-08002B3371B5}"',
+  'Attribute VB_GlobalNameSpace = False',
+  'Attribute VB_Creatable = False',
+  'Attribute VB_PredeclaredId = False',
+  'Attribute VB_Exposed = False',
+  'Attribute VB_TemplateDerived = False',
+  'Attribute VB_Customizable = False',
+];
+
+/** Source as VBA stores it: CRLF line endings, `Attribute VB_Name` (and a class's attributes) first. */
 export function moduleSource(m: VbaModule): string {
-  const body = m.source.replace(/\r\n?/g, '\n').replace(/^Attribute VB_Name = .*\n/, '');
-  return `Attribute VB_Name = "${m.name}"\n${body}`.replace(/\n/g, '\r\n');
+  const body = m.source.replace(/\r\n?/g, '\n').replace(/^(Attribute VB_\w+ = .*\n)+/, '');
+  const head = [`Attribute VB_Name = "${m.name}"`, ...(m.kind === 'class' ? CLASS_ATTRIBUTES : [])].join('\n');
+  return `${head}\n${body}`.replace(/\n/g, '\r\n');
 }
 
 export function vbaProjectBin(opts: VbaProjectOptions): Uint8Array {

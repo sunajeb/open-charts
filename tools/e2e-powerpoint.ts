@@ -14,7 +14,7 @@ import { defaultStyle, layoutChart } from '../src/core/index.ts';
 import { chartContent } from '../src/deck.ts';
 import { writePptx } from '../src/render/pptx.ts';
 import { decodePng, diffImages, encodePng, type Image } from '../test/goldens/png.ts';
-import { addinHome } from '../src/addin/edit.ts';
+import { addinHome } from '../src/addin/server.ts';
 import { specKey } from '../src/addin/engine.ts';
 import { buildAddin } from '../src/addin/package.ts';
 import { galleryItems, insertableItems, sampleFor } from '../src/addin/registry.ts';
@@ -43,7 +43,7 @@ rmSync(OUT, { recursive: true, force: true });
 mkdirSync(PNG_DIR, { recursive: true });
 
 // 1. Install (engine copy, ppam, bridge script) and register + load in PowerPoint.
-addinMain(['install'], { register: true });
+await addinMain(["install"], { register: true });
 const { prefix } = buildAddin();
 const loaded = ppt('get loaded of add in "open-charts"');
 if (loaded !== 'true') {
@@ -54,7 +54,7 @@ if (loaded !== 'true') {
 // PowerPoint is still compiling the add-in's VBA and answers error -18, so the first call waits.
 const sleep = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 let ready = false;
-function macro(proc: string, ...args: string[]) {
+function macro(proc: string, ...args: string[]): string {
   const before = logLines().length;
   for (let attempt = 1; ; attempt++) {
     try {
@@ -66,14 +66,27 @@ function macro(proc: string, ...args: string[]) {
     }
   }
   ready = true;
-  return logLines().slice(before).join('\n');
+  const out = logLines().slice(before).join('\n');
+  if (/still updating a chart/.test(out)) { sleep(500); return macro(proc, ...args); }
+  return out;
+}
+
+/** Waits for the add-in's log to show a line matching `re` after line `from`. */
+function waitForLog(re: RegExp, from: number, ms = 20_000): string {
+  for (const end = Date.now() + ms; Date.now() < end; sleep(100)) {
+    const hit = logLines().slice(from).find((l) => re.test(l));
+    if (hit) return hit;
+  }
+  return '';
 }
 
 const results: string[] = [];
+const failures: string[] = [];
+const timings = { insert: [] as number[], update: [] as number[], resize: [] as number[], edit: 0, apply: 0 };
 const quitPowerPoint = () => { try { ppt('quit saving no', 60); } catch { /* already gone */ } };
 process.on('exit', (code) => { if (code !== 0) quitPowerPoint(); });
 const abortIfFailed = (what: string) => {
-  const bad = results.join('\n').split('\n').filter((l) => /RESULT/.test(l) && !/ OK$/.test(l) && !/not available/.test(l));
+  const bad = results.join('\n').split('\n').filter((l) => /RESULT/.test(l) && !/ OK \(\d+ ms\)$/.test(l) && !/not available/.test(l));
   if (bad.length) { console.error(`${what} failed:\n  ${bad.join('\n  ')}`); process.exit(1); }
 };
 
@@ -91,7 +104,9 @@ const items = insertableItems();
 const slideOf: Record<string, number> = {};
 for (const id of items) {
   slideOf[id] = newSlide();
+  const t = Date.now();
   results.push(macro('Run', `chart_${id}`));
+  timings.insert.push(Date.now() - t);
 }
 
 abortIfFailed('Inserting charts');
@@ -105,17 +120,48 @@ if (unsupported) {
   slideNo--;
 }
 
-// 5. Update with edited data: what the editor's save would leave behind for the waterfall chart.
+// 5. Edit data -> Apply in the editor -> the chart on the slide updates by itself. Apply is what
+// the editor POSTs to the session; the add-in's server then runs ApplyEdit in PowerPoint.
 const wf = sampleFor('waterfall');
 if ('spec' in wf && slideOf.waterfall) {
+  ppt(`go to slide view of document window 1 number ${slideOf.waterfall}`);
+  macro('SelectChart', '1');
+  let t = Date.now();
+  results.push(macro('Run', 'btnEditData'));
+  timings.edit = Date.now() - t;
+  const id = specKey(JSON.stringify(wf.spec));
+  const session = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => (r.ok ? r.json() : undefined), () => undefined);
+  if (!session) failures.push(`Edit data did not open session ${id} on the add-in server`);
   const edited = structuredClone(wf.spec);
   edited.categories.splice(5, 0, 'One-offs');
   edited.series[0].values.splice(5, 0, 6);
-  mkdirSync(join(addinHome(), 'edits'), { recursive: true });
-  writeFileSync(join(addinHome(), 'edits', `${specKey(JSON.stringify(wf.spec))}.json`), JSON.stringify(edited));
-  ppt(`go to slide view of document window 1 number ${slideOf.waterfall}`);
-  macro('SelectChart', '1');
-  results.push(macro('Run', 'btnUpdate'));
+  const before = logLines().length;
+  t = Date.now();
+  await fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: edited, state: 'applied' }) });
+  const applied = waitForLog(/APPLIED|APPLY .* failed/, before);
+  timings.apply = Date.now() - t;
+  results.push(applied || 'APPLIED: nothing happened within 20 s');
+  if (!/APPLIED \w+ OK/.test(applied)) {
+    failures.push(`Apply in the editor did not update the chart (${applied || 'timeout'}); falling back to Update chart`);
+    macro('SelectChart', '1');
+    results.push(macro('Run', 'btnUpdate'));
+  }
+}
+
+// 6. Resize without breaking: shrink a chart to half, then double it back; clicking elsewhere
+// (a selection change) re-lays it out at the new size.
+for (const [id, factors] of [['line', ['0.5', '2']], ['clustered', ['0.5']]] as const) {
+  if (!slideOf[id]) continue;
+  ppt(`go to slide view of document window 1 number ${slideOf[id]}`);
+  for (const f of factors) {
+    macro('ResizeChart', '1', f);
+    const before = logLines().length, t = Date.now();
+    macro('SelectChart', '1'); // a selection change, as when the user clicks
+    const done = waitForLog(/RELAYOUT/, before);
+    timings.resize.push(Date.now() - t);
+    results.push(done || `RELAYOUT ${id} x${f}: no automatic re-layout within 20 s`);
+    if (!/RELAYOUT OK/.test(done)) failures.push(`${id} resized x${f}: ${done || 'no automatic re-layout (selection-change event not delivered?)'}`);
+  }
 }
 
 // 6. Update after the user moved and shrank the chart: it re-lays out in the new place and size.
@@ -127,7 +173,9 @@ set width of g to 400
 set height of g to 300
 go to slide view of document window 1 number ${slideOf.stacked}`);
   macro('SelectChart', '1');
+  const t = Date.now();
   results.push(macro('Run', 'btnUpdate'));
+  timings.update.push(Date.now() - t);
 }
 
 abortIfFailed('Updating charts');
@@ -149,8 +197,7 @@ if (!readdirSync(PNG_DIR, { recursive: true }).some((f) => String(f).toLowerCase
 console.log(results.filter(Boolean).join('\n'));
 const slides = readCharts(new Uint8Array(readFileSync(DECK)));
 console.log(formatInspect(DECK, slides));
-const failures: string[] = [];
-const failedRuns = results.join('\n').split('\n').filter((l) => /RESULT/.test(l) && !/ OK$/.test(l) && !(unsupported && l.includes(`chart_${unsupported.id}`)));
+const failedRuns = results.join('\n').split('\n').filter((l) => /RESULT/.test(l) && !/ OK \(\d+ ms\)$/.test(l) && !(unsupported && l.includes(`chart_${unsupported.id}`)));
 failures.push(...failedRuns);
 if (unsupported && !results.join('\n').includes('not available')) failures.push(`no "not available" message for ${unsupported.id}`);
 for (const id of items) {
@@ -163,6 +210,12 @@ for (const id of items) {
 }
 const wfChart = slides.find((x) => x.index === slideOf.waterfall)?.charts[0];
 if (slideOf.waterfall && !wfChart?.spec?.includes('One-offs')) failures.push('waterfall: edited data was not applied by Update chart');
+for (const [id, w] of [['line', 864], ['clustered', 432]] as const) {
+  const c = slides.find((x) => x.index === slideOf[id])?.charts[0];
+  if (!c?.frame || !c.bounds) continue;
+  if (Math.abs(c.frame.w - w) > 2) failures.push(`${id}: after resizing, OC_FRAME width is ${c.frame.w}, expected ${w} (not re-laid out)`);
+  if (Math.abs(c.bounds.w - c.frame.w) > 1 || Math.abs(c.bounds.h - c.frame.h) > 1) failures.push(`${id}: group bounds ${JSON.stringify(c.bounds)} differ from OC_FRAME ${JSON.stringify(c.frame)}`);
+}
 const st = slides.find((x) => x.index === slideOf.stacked)?.charts[0];
 if (st?.bounds && (Math.abs(st.bounds.x - 300) > 40 || st.bounds.w > 420)) failures.push(`stacked: not re-laid out in the moved frame (bounds ${JSON.stringify(st.bounds)})`);
 // 9. Same charts written by the CLI's own .pptx writer (same spec, same frame), rendered by the
@@ -210,6 +263,15 @@ function beyondOnePixel(a: Image, b: Image): number {
   return n;
 }
 
+const ms = (v: number[]) => { const a = [...v].sort((x, y) => x - y); return a.length ? `median ${a[a.length >> 1]} ms, max ${a[a.length - 1]} ms (n=${a.length})` : 'n/a'; };
+const vbaMs = (re: RegExp) => results.join('\n').split('\n').filter((l) => re.test(l)).map((l) => Number(/\((\d+) ms\)/.exec(l)?.[1])).filter(Number.isFinite);
+console.log(`\nTimings (wall clock, AppleScript run VB macro included):
+  insert      ${ms(timings.insert.slice(1))} (first, cold: ${timings.insert[0]} ms)
+  insert VBA  ${ms(vbaMs(/RESULT chart_/).slice(1))}
+  update      ${ms(timings.update)}   VBA ${ms(vbaMs(/RESULT btnUpdate/))}
+  resize      ${ms(timings.resize)} (selection change incl. re-layout)
+  edit data   ${timings.edit} ms to session + editor launch
+  apply       ${timings.apply} ms from editor Apply to chart updated   VBA ${ms(vbaMs(/APPLIED/))}`);
 console.log(`PNGs: ${PNG_DIR} (CLI writer: ${CLI_PNG_DIR})`);
 if (failures.length) {
   console.error(`\nFAILED:\n  ${failures.join('\n  ')}`);

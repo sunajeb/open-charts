@@ -1,8 +1,8 @@
 Attribute VB_Name = "OpenCharts"
-' open-charts PowerPoint add-in: the one VBA module in open-charts.ppam.
+' open-charts PowerPoint add-in: the VBA in open-charts.ppam (plus the AppEvents class).
 '
 ' Like the reference product's stub, this holds no chart logic. Every ribbon callback goes to
-' Dispatch with the control id; Dispatch forwards the request to the engine (node, through the
+' Dispatch with the control id; Dispatch forwards a request to the engine (node, through the
 ' sandbox-approved AppleScriptTask bridge) and draws the native shapes the engine returns.
 ' The line format is documented in src/addin/format.ts, the request in src/addin/engine.ts.
 '
@@ -13,47 +13,138 @@ Option Explicit
 
 Private Const SCRIPT_FILE As String = "open-charts.scpt"
 Private Const SCRIPT_HANDLER As String = "engine"
+Private Const TITLE As String = "open-charts"
 
 Private gRibbon As Object
-' Set by the automation entry points: errors are logged instead of shown in a dialog.
+Private gEvents As AppEvents
+' True once PowerPoint has delivered a selection event: only then can the ribbon grey buttons out.
+Private gEventsOk As Boolean
+' Re-entrancy guard: drawing changes the selection, which raises the event again.
+Private gBusy As Boolean
+' Set by the automation entry points: messages are logged instead of shown in a dialog.
 Private gSilent As Boolean
 Private gLastMessage As String
+' The chart last opened with Edit data, so Apply in the editor can update it in place.
+Private gEditShape As Object
+Private gEditId As String
+' Filled by Draw from the engine's answer.
+Private gNothing As Boolean
+Private gSessionId As String
+
+' ---- Loading --------------------------------------------------------------------------------
+
+Public Sub Auto_Open()
+    StartEvents
+End Sub
+
+Private Sub StartEvents()
+    On Error Resume Next
+    If gEvents Is Nothing Then
+        Set gEvents = New AppEvents
+        Set gEvents.App = Application
+    End If
+End Sub
 
 ' ---- Ribbon callbacks (all route to Dispatch) ----------------------------------------------
 
 Public Sub OCPREFIX_onLoad(ByVal ribbon As Object)
     Set gRibbon = ribbon
+    StartEvents
 End Sub
 
 Public Sub OCPREFIX_onAction(ByVal control As Object)
     Dispatch control.Id
 End Sub
 
-Public Sub OCPREFIX_onGallery(ByVal control As Object, selectedId As String, selectedIndex As Integer)
-    Dispatch selectedId
+' Edit data and Update chart need a selected chart. Until PowerPoint has shown that it reports
+' selection changes, they stay enabled and explain themselves when nothing suitable is selected.
+Public Sub OCPREFIX_getEnabled(ByVal control As Object, ByRef enabled)
+    If Not gEventsOk Then
+        enabled = True
+    Else
+        enabled = Not (FindSelectedChart() Is Nothing)
+    End If
 End Sub
 
-' ---- Automation entry points (AppleScript "run VB macro", end-to-end tests) -----------------
+' Called by AppEvents on every selection change.
+Public Sub OnSelectionChange()
+    gEventsOk = True
+    If gBusy Then Exit Sub
+    gBusy = True
+    On Error Resume Next
+    CheckResized
+    If Not gRibbon Is Nothing Then
+        gRibbon.InvalidateControl "btnEditData"
+        gRibbon.InvalidateControl "btnUpdate"
+    End If
+    gBusy = False
+End Sub
+
+' ---- Automation entry points (AppleScript "run VB macro", the add-in server, tests) ---------
 
 ' Runs one control id without dialogs, e.g. "chart_stacked", "btnUpdate". The outcome is logged
 ' by the bridge script (~/Library/Application Support/open-charts/addin.log).
 Public Sub OCPREFIX_Run(ByVal controlId As String)
+    Dim t As Single
     gSilent = True
     gLastMessage = ""
+    t = Timer
     Dispatch controlId
-    Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage)
+    Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage) & " (" & Format$((Timer - t) * 1000, "0") & " ms)"
     gSilent = False
 End Sub
 
-' Selects the n-th open-charts chart on the active slide (1-based), for scripted updates.
+' The editor applied an edit session: lay that chart out again with the new data.
+Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
+    Dim target As Object, t As Single
+    t = Timer
+    On Error Resume Next
+    If sessionId = gEditId And Not gEditShape Is Nothing Then
+        If gEditShape.Name <> "" Then Set target = gEditShape
+    End If
+    On Error GoTo 0
+    If target Is Nothing Then Set target = FindSelectedChart()
+    If target Is Nothing Then
+        Report "APPLIED " & sessionId & " no chart"
+        Tell "The edited data is ready. Select the chart in PowerPoint and click Update chart."
+        Exit Sub
+    End If
+    gBusy = True
+    Set target = Relayout(target, True, sessionId)
+    gBusy = False
+    If Not target Is Nothing Then
+        Set gEditShape = target
+        gEditId = sessionId
+    End If
+    Report "APPLIED " & sessionId & " " & IIf(target Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)"
+End Sub
+
+' Selects the n-th open-charts chart on the active slide (1-based), for scripted tests.
 Public Sub OCPREFIX_SelectChart(ByVal n As String)
-    Dim sld As Object, shp As Object, k As Long
+    Dim shp As Object, k As Long
     On Error GoTo Failed
-    Set sld = ActiveWindow.View.Slide
-    For Each shp In sld.Shapes
+    For Each shp In ActiveWindow.View.Slide.Shapes
         If IsChart(shp) Then
             k = k + 1
             If k = CLng(Val(n)) Then shp.Select: Exit Sub
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.
+Public Sub OCPREFIX_ResizeChart(ByVal n As String, ByVal factor As String)
+    Dim shp As Object, k As Long
+    On Error GoTo Failed
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then
+                shp.LockAspectRatio = 0
+                shp.Width = shp.Width * Val(factor)
+                shp.Height = shp.Height * Val(factor)
+                Exit Sub
+            End If
         End If
     Next shp
 Failed:
@@ -86,7 +177,11 @@ End Sub
 ' ---- Dispatcher ------------------------------------------------------------------------------
 
 Private Sub Dispatch(ByVal id As String)
+    ' PowerPoint can deliver a click (or an AppleScript call) while an earlier chart is still being
+    ' laid out: the bridge is busy then, so say so instead of failing.
+    If gBusy Then Tell "open-charts is still updating a chart. Try again in a moment.": Exit Sub
     On Error GoTo Failed
+    gBusy = True
     If Left$(id, 6) = "chart_" Then
         InsertChart Mid$(id, 7)
     ElseIf id = "btnUpdate" Then
@@ -94,43 +189,39 @@ Private Sub Dispatch(ByVal id As String)
     ElseIf id = "btnEditData" Then
         EditData
     Else
-        Tell "Unknown command: " & id
+        Tell "This button is not known to this version of the add-in (" & id & ")."
     End If
+    gBusy = False
     Exit Sub
 Failed:
-    Tell "open-charts: " & Err.Description
+    gBusy = False
+    Tell "Something went wrong: " & Err.Description
 End Sub
 
 Private Sub InsertChart(ByVal itemId As String)
-    Dim sld As Object, frame As String, response As String
+    Dim sld As Object, frame As String, response As String, placeholder As Object, grp As Object
     Set sld = CurrentSlide()
     If sld Is Nothing Then Exit Sub
-    frame = DefaultFrame()
+    Set placeholder = EmptyPlaceholder(sld)
+    If placeholder Is Nothing Then
+        frame = DefaultFrame()
+    Else
+        frame = Fmt(placeholder.Left) & "," & Fmt(placeholder.Top) & "," & Fmt(placeholder.Width) & "," & Fmt(placeholder.Height)
+    End If
     response = Engine("insert" & vbLf & itemId & vbLf & frame & vbLf & "" & vbLf)
     If response = "" Then Exit Sub
-    Dim grp As Object
     Set grp = Draw(sld, response)
-    If Not grp Is Nothing Then grp.Select
+    If grp Is Nothing Then Exit Sub
+    If Not placeholder Is Nothing Then placeholder.Delete
+    grp.Select
 End Sub
 
 Private Sub UpdateChart()
-    Dim old As Object, sld As Object, response As String, bounds As String
-    Set old = SelectedChart()
-    If old Is Nothing Then Exit Sub
-    Set sld = old.Parent
-    bounds = Fmt(old.Left) & "," & Fmt(old.Top) & "," & Fmt(old.Width) & "," & Fmt(old.Height)
-    response = Engine("update" & vbLf & "" & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf & SpecOf(old))
-    If response = "" Then Exit Sub
-    Dim grp As Object, z As Long
-    Set grp = Draw(sld, response)
-    If grp Is Nothing Then Exit Sub
-    ' Same place in the stacking order, then the old chart goes.
-    z = old.ZOrderPosition
-    Do While grp.ZOrderPosition > z
-        grp.ZOrder 3 ' msoSendBackward
-    Loop
-    old.Delete
-    grp.Select
+    Dim chart As Object
+    Set chart = SelectedChart()
+    If chart Is Nothing Then Exit Sub
+    Set chart = Relayout(chart, True, "")
+    If Not chart Is Nothing Then chart.Select
 End Sub
 
 Private Sub EditData()
@@ -138,7 +229,56 @@ Private Sub EditData()
     Set chart = SelectedChart()
     If chart Is Nothing Then Exit Sub
     response = Engine("edit" & vbLf & "" & vbLf & TagValue(chart, "OC_FRAME") & vbLf & "" & vbLf & SpecOf(chart))
-    If response <> "" Then Draw Nothing, response
+    If response = "" Then Exit Sub
+    gSessionId = ""
+    Draw Nothing, response
+    If gSessionId <> "" Then
+        Set gEditShape = chart
+        gEditId = gSessionId
+    End If
+End Sub
+
+' Lays a chart out again where it now is (its group's bounds are its frame) and replaces it in
+' place, same stacking order. force=False is the automatic check: the engine answers "nothing to
+' do" when neither size nor data changed. Returns the new group (or the old one if unchanged).
+Private Function Relayout(ByVal old As Object, ByVal force As Boolean, ByVal sessionId As String) As Object
+    Dim response As String, bounds As String, grp As Object
+    bounds = Fmt(old.Left) & "," & Fmt(old.Top) & "," & Fmt(old.Width) & "," & Fmt(old.Height)
+    response = Engine(IIf(force, "update", "relayout") & vbLf & sessionId & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf & SpecOf(old))
+    If response = "" Then Exit Function
+    Set grp = Draw(old.Parent, response)
+    If gNothing Then Set Relayout = old: Exit Function
+    If grp Is Nothing Then Exit Function
+    Do While grp.ZOrderPosition > old.ZOrderPosition + 1
+        grp.ZOrder 3 ' msoSendBackward
+    Loop
+    old.Delete
+    Set Relayout = grp
+End Function
+
+' A chart whose group was resized on the slide is laid out again at its new size (text is never
+' stretched); a chart that was only moved just records its new position.
+Private Sub CheckResized()
+    Dim sld As Object, shp As Object, charts As Collection, f() As String
+    Set sld = ActiveWindow.View.Slide
+    If sld Is Nothing Then Exit Sub
+    Set charts = New Collection
+    For Each shp In sld.Shapes
+        If IsChart(shp) Then charts.Add shp
+    Next shp
+    Dim t As Single, result As Object
+    For Each shp In charts
+        f = Split(TagValue(shp, "OC_FRAME"), ",")
+        If UBound(f) = 3 Then
+            If Abs(shp.Width - Val(f(2))) > 0.5 Or Abs(shp.Height - Val(f(3))) > 0.5 Then
+                t = Timer
+                Set result = Relayout(shp, False, "")
+                Report "RELAYOUT " & IIf(result Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)"
+            ElseIf Abs(shp.Left - Val(f(0))) > 0.5 Or Abs(shp.Top - Val(f(1))) > 0.5 Then
+                shp.Tags.Add "OC_FRAME", Fmt(shp.Left) & "," & Fmt(shp.Top) & "," & f(2) & "," & f(3)
+            End If
+        End If
+    Next shp
 End Sub
 
 ' ---- Bridge to the engine -----------------------------------------------------------------
@@ -150,14 +290,14 @@ Private Function Engine(ByVal request As String) As String
     result = AppleScriptTask(SCRIPT_FILE, SCRIPT_HANDLER, request)
     On Error GoTo 0
     If Left$(result, 3) <> "OC" & vbTab Then
-        Tell "open-charts engine did not answer as expected:" & vbLf & Left$(result, 500)
+        Tell "The chart engine gave an unexpected answer:" & vbLf & Left$(result, 300)
         Exit Function
     End If
     Engine = result
     Exit Function
 NoBridge:
-    Tell "open-charts cannot reach its engine (" & Err.Description & ")." & vbLf & _
-        "Run 'open-charts addin install' in Terminal, then restart PowerPoint."
+    Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & _
+        "Open Terminal and run:  open-charts addin install" & vbLf & "then restart PowerPoint."
 End Function
 
 Private Sub Report(ByVal text As String)
@@ -169,7 +309,7 @@ End Sub
 Private Sub Tell(ByVal text As String)
     gLastMessage = text
     If gSilent Then Exit Sub
-    MsgBox text, vbOKOnly, "open-charts"
+    MsgBox text, vbOKOnly, TITLE
 End Sub
 
 ' ---- Drawing --------------------------------------------------------------------------------
@@ -180,8 +320,9 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
     Dim names() As Variant, finalNames() As String, roles() As String
     Dim tagKeys() As String, tagVals() As String, nTags As Long
     Dim groupName As String, alt As String, stamp As String, shp As Object
+    gNothing = False
     lines = Split(response, vbLf)
-    ReDim names(0 To UBound(lines)): ReDim finalNames(0 To UBound(lines)): ReDim roles(0 To UBound(lines))
+    ReDim names(0 To UBound(lines) + 1): ReDim finalNames(0 To UBound(lines) + 1): ReDim roles(0 To UBound(lines) + 1)
     ReDim tagKeys(0 To UBound(lines)): ReDim tagVals(0 To UBound(lines))
     stamp = "oc" & Format$(Timer * 100, "0") & "_"
 
@@ -192,25 +333,35 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
                 Case "E"
                     Tell Unescape(f(1))
                     GoTo Cleanup
+                Case "N"
+                    gNothing = True
+                    Exit Function
                 Case "M"
                     Tell Unescape(f(1))
+                Case "I"
+                    gSessionId = f(1)
                 Case "G"
                     groupName = Unescape(f(1)): alt = Unescape(f(2))
                 Case "T"
                     tagKeys(nTags) = Unescape(f(1)): tagVals(nTags) = Unescape(f(2)): nTags = nTags + 1
+                Case "F"
+                    ' Invisible frame rectangle: the group's bounds are the chart's frame.
+                    Set shp = DrawFrame(sld, f(1))
+                    names(n) = stamp & n: shp.Name = names(n)
+                    roles(n) = "frame": finalNames(n) = "Frame"
+                    n = n + 1
                 Case "S"
                     Set shp = DrawShape(sld, f)
-                    names(n) = stamp & n
-                    shp.Name = names(n)
+                    names(n) = stamp & n: shp.Name = names(n)
                     roles(n) = Unescape(f(20))
                     finalNames(n) = Unescape(f(21))
                     n = n + 1
             End Select
         End If
     Next i
-    If n = 0 Or sld Is Nothing Then Exit Function
+    If n = 0 Then Exit Function
 
-    Dim grp As Object, k As Long
+    Dim grp As Object, k As Long, idx As Long
     If n = 1 Then
         Set grp = sld.Shapes(names(0))
     Else
@@ -227,7 +378,6 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
     If n > 1 Then
         For k = 1 To grp.GroupItems.Count
             Set shp = grp.GroupItems(k)
-            Dim idx As Long
             idx = CLng(Mid$(shp.Name, Len(stamp) + 1))
             If roles(idx) <> "" Then shp.Tags.Add "OC_ROLE", roles(idx)
             shp.Name = finalNames(idx)
@@ -240,6 +390,17 @@ Cleanup:
     For k = 0 To n - 1
         sld.Shapes(names(k)).Delete
     Next k
+End Function
+
+Private Function DrawFrame(ByVal sld As Object, ByVal frame As String) As Object
+    Dim v() As String, s As Object
+    v = Split(frame, ",")
+    Set s = sld.Shapes.AddShape(1, Val(v(0)), Val(v(1)), Val(v(2)), Val(v(3)))
+    s.Fill.Visible = 0
+    s.Line.Visible = 0
+    On Error Resume Next
+    s.Shadow.Visible = 0
+    Set DrawFrame = s
 End Function
 
 ' Columns (src/addin/format.ts SHAPE_COLUMNS), f(0) = "S":
@@ -379,28 +540,27 @@ Private Function IsChart(ByVal shp As Object) As Boolean
     IsChart = (shp.Tags("OC_V") <> "")
 End Function
 
-' The open-charts group the user selected (or a shape inside it), else Nothing after telling them.
-Private Function SelectedChart() As Object
-    Dim shp As Object, parentGroup As Object
+' The open-charts group that is selected (or a shape inside it), else Nothing. Never shows a message.
+Private Function FindSelectedChart() As Object
+    Dim shp As Object, parentGroup As Object, sel As Object
     On Error Resume Next
-    If ActiveWindow.Selection.Type = 2 Then ' ppSelectionShapes
-        Set shp = ActiveWindow.Selection.ShapeRange(1)
-        If ActiveWindow.Selection.HasChildShapeRange Then Set shp = ActiveWindow.Selection.ChildShapeRange(1)
-        Set parentGroup = shp.ParentGroup
-        If Not parentGroup Is Nothing Then Set shp = parentGroup
-    ElseIf ActiveWindow.Selection.Type = 3 Then ' ppSelectionText: a label inside a chart
-        Set shp = ActiveWindow.Selection.ShapeRange(1)
+    Set sel = ActiveWindow.Selection
+    If sel.Type = 2 Or sel.Type = 3 Then ' ppSelectionShapes, ppSelectionText
+        Set shp = sel.ShapeRange(1)
+        If sel.HasChildShapeRange Then Set shp = sel.ChildShapeRange(1)
         Set parentGroup = shp.ParentGroup
         If Not parentGroup Is Nothing Then Set shp = parentGroup
     End If
     On Error GoTo 0
-    If shp Is Nothing Then
-        Tell "Select an open-charts chart first."
-    ElseIf Not IsChart(shp) Then
-        Tell "The selection is not an open-charts chart."
-    Else
-        Set SelectedChart = shp
+    If Not shp Is Nothing Then
+        If IsChart(shp) Then Set FindSelectedChart = shp
     End If
+End Function
+
+' The selected chart, or Nothing after telling the user what to select.
+Private Function SelectedChart() As Object
+    Set SelectedChart = FindSelectedChart()
+    If SelectedChart Is Nothing Then Tell "Select an open-charts chart first (click it once), then choose Edit data or Update chart."
 End Function
 
 Private Function TagValue(ByVal shp As Object, ByVal key As String) As String
@@ -421,22 +581,52 @@ Private Function SpecOf(ByVal shp As Object) As String
     SpecOf = s
 End Function
 
-' ---- Helpers --------------------------------------------------------------------------------
+' ---- Placement ------------------------------------------------------------------------------
 
 Private Function CurrentSlide() As Object
     On Error Resume Next
     Set CurrentSlide = ActiveWindow.View.Slide
     On Error GoTo 0
-    If CurrentSlide Is Nothing Then Tell "Open a slide in Normal view first."
+    If CurrentSlide Is Nothing Then Tell "Click a slide (Normal view) first, then insert the chart."
 End Function
 
-' The chart area of a generated slide, scaled to this presentation's slide size.
+' Where a new chart goes: a selected empty placeholder, else the slide's first empty content
+' placeholder (the chart takes its place), else Nothing (use the default chart area).
+Private Function EmptyPlaceholder(ByVal sld As Object) As Object
+    Dim shp As Object
+    On Error Resume Next
+    If ActiveWindow.Selection.Type = 2 Then
+        Set shp = ActiveWindow.Selection.ShapeRange(1)
+        If IsEmptyContentPlaceholder(shp) Then Set EmptyPlaceholder = shp: Exit Function
+    End If
+    For Each shp In sld.Shapes
+        If IsEmptyContentPlaceholder(shp) Then Set EmptyPlaceholder = shp: Exit Function
+    Next shp
+End Function
+
+Private Function IsEmptyContentPlaceholder(ByVal shp As Object) As Boolean
+    Dim kind As Long
+    On Error GoTo No
+    If shp.Type <> 14 Then Exit Function ' msoPlaceholder
+    kind = shp.PlaceholderFormat.Type
+    ' ppPlaceholderBody 2, Object 7, Chart 8, Table 12, VerticalObject 16, Picture 18
+    If kind <> 2 And kind <> 7 And kind <> 8 And kind <> 12 And kind <> 16 And kind <> 18 Then Exit Function
+    If shp.HasTextFrame Then
+        If shp.TextFrame.TextRange.Length > 0 Then Exit Function
+    End If
+    IsEmptyContentPlaceholder = True
+No:
+End Function
+
+' The chart area of a generated slide (src/deck.ts CHART_FRAME), scaled to this slide size.
 Private Function DefaultFrame() As String
     Dim sw As Single, sh As Single
     sw = ActivePresentation.PageSetup.SlideWidth
     sh = ActivePresentation.PageSetup.SlideHeight
     DefaultFrame = Fmt(sw * 0.05) & "," & Fmt(sh * 0.178) & "," & Fmt(sw * 0.9) & "," & Fmt(sh * 0.756)
 End Function
+
+' ---- Helpers --------------------------------------------------------------------------------
 
 ' Number with "." as decimal separator whatever the locale.
 Private Function Fmt(ByVal v As Double) As String

@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync } from 'node:fs';
 import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { DEFAULT_FRAME, handleRequest, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { fileEdits, editPage, editRoutes } from '../src/addin/edit.ts';
+import { editorPage } from '../src/addin/server.ts';
+import type { Session } from '../src/server.ts';
+import type { Sessions } from '../src/addin/engine.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
 import { galleryItems, insertableItems, sampleFor } from '../src/addin/registry.ts';
 import { unzip } from '../src/ooxml/unzip.ts';
@@ -18,7 +18,7 @@ import { layoutChart, type Shape } from '../src/core/index.ts';
 const m = createMeasurer();
 const req = (op: string, arg = '', frame = '', bounds = '', spec = '') => parseRequest([op, arg, frame, bounds, spec].join('\n'));
 
-test('field escaping round-trips tabs, newlines, CR and backslashes', () => {
+test('field escaping round-trips tabs, newlines, CR and backslashes', async () => {
   for (const s of ['plain', 'a\tb', 'two\nlines', 'cr\r\n', 'back\\slash', '\\t literal', '']) {
     const e = escapeField(s);
     assert.ok(!/[\t\n\r]/.test(e));
@@ -26,7 +26,7 @@ test('field escaping round-trips tabs, newlines, CR and backslashes', () => {
   }
 });
 
-test('shape records carry every property VBA needs', () => {
+test('shape records carry every property VBA needs', async () => {
   const rect = parseResponse(shapeRecord({ kind: 'rect', x: 1.234, y: 2, w: 3, h: 4, fill: '#1f3a5f', stroke: 'FFFFFF', strokeWidth: 0.5 }, 'Arial', 'bar:s0:c0', 'Bar s0 c0')).shapes[0];
   assert.deepEqual([rect.kind, rect.x, rect.fill, rect.lineColor, rect.lineWidth, rect.role, rect.name], ['rect', '1.23', '1F3A5F', 'FFFFFF', '0.5', 'bar:s0:c0', 'Bar s0 c0']);
   const ell = parseResponse(shapeRecord({ kind: 'rect', x: 0, y: 0, w: 4, h: 4, fill: '000000', ellipse: true }, 'Arial')).shapes[0];
@@ -42,7 +42,7 @@ test('shape records carry every property VBA needs', () => {
   assert.throws(() => shapeRecord({ kind: 'blob' } as unknown as Shape, 'Arial'), /cannot draw shape kind "blob"/);
 });
 
-test('path shapes flatten arcs into polygon points', () => {
+test('path shapes flatten arcs into polygon points', async () => {
   const cmds = [{ op: 'M', x: 100, y: 100 }, { op: 'A', cx: 100, cy: 100, r: 50, start: -90, sweep: 90 }, { op: 'Z' }] as const;
   const subs = flattenPath([...cmds] as never);
   assert.equal(subs.length, 1);
@@ -58,8 +58,8 @@ test('path shapes flatten arcs into polygon points', () => {
   assert.equal(ring.length, 2);
 });
 
-test('insert answers with group, tags and one shape per scene shape, roles and names', () => {
-  const r = parseResponse(handleRequest(req('insert', 'stacked', '48,96,864,408'), m));
+test('insert answers with group, tags and one shape per scene shape, roles and names', async () => {
+  const r = parseResponse(await handleRequest(req('insert', 'stacked', '48,96,864,408'), m));
   assert.deepEqual(r.errors, []);
   assert.equal(r.version, '1');
   assert.equal(r.group?.name, 'Stacked column chart');
@@ -76,20 +76,20 @@ test('insert answers with group, tags and one shape per scene shape, roles and n
   assert.equal(r.shapes[0].name, 'Bar s0 c0');
 });
 
-test('every insertable gallery item lays out; others explain themselves', () => {
+test('every insertable gallery item lays out; others explain themselves', async () => {
   const items = insertableItems();
   assert.ok(items.length >= 6);
-  for (const id of items) assert.deepEqual(parseResponse(handleRequest(req('insert', id, '0,0,600,400'), m)).errors, [], id);
+  for (const id of items) assert.deepEqual(parseResponse(await handleRequest(req('insert', id, '0,0,600,400'), m)).errors, [], id);
   const missing = galleryItems().find((g) => !items.includes(g.id));
-  if (missing) assert.match(parseResponse(handleRequest(req('insert', missing.id), m)).errors[0], /not available in this version/);
-  assert.match(parseResponse(handleRequest(req('insert', 'nope'), m)).errors[0], /not available/);
-  assert.match(parseResponse(handleRequest(req('bogus'), m)).errors[0], /Unknown request/);
+  if (missing) assert.match(parseResponse(await handleRequest(req('insert', missing.id), m)).errors[0], /not available in this version/);
+  assert.match(parseResponse(await handleRequest(req('insert', 'nope'), m)).errors[0], /not available/);
+  assert.match(parseResponse(await handleRequest(req('bogus'), m)).errors[0], /do not match/);
 });
 
-test('large specs are chunked into OC_SPEC_0..n + OC_SPEC_N', () => {
+test('large specs are chunked into OC_SPEC_0..n + OC_SPEC_N', async () => {
   const cats = Array.from({ length: 400 }, (_, i) => `Category with a fairly long name, padded so the spec passes the tag chunk size, number ${i}`);
   const spec = { specVersion: 1, type: 'line', categories: cats, series: [{ name: 'A', values: cats.map((_, i) => i) }] };
-  const r = parseResponse(handleRequest(req('update', '', '0,0,900,500', '', JSON.stringify(spec)), m));
+  const r = parseResponse(await handleRequest(req('update', '', '0,0,900,500', '', JSON.stringify(spec)), m));
   assert.deepEqual(r.errors, []);
   const tags = Object.fromEntries(r.tags);
   assert.ok(Number(tags.OC_SPEC_N) >= 1 && tags.OC_SPEC === undefined);
@@ -97,7 +97,7 @@ test('large specs are chunked into OC_SPEC_0..n + OC_SPEC_N', () => {
   assert.equal(JSON.parse(joined).categories.length, 400);
 });
 
-test('update re-lays out in the stored frame, or follows a move/resize', () => {
+test('update re-lays out in the stored frame, or follows a move/resize', async () => {
   const s = sampleFor('waterfall');
   assert.ok('spec' in s);
   const f0 = { x: 48, y: 96, w: 864, h: 408 };
@@ -108,47 +108,76 @@ test('update re-lays out in the stored frame, or follows a move/resize', () => {
   assert.ok(Math.abs(f1.w - f0.w / 2) < 1e-6 && Math.abs(f1.h - f0.h / 2) < 1e-6);
   const b1 = sceneBounds(layoutChart(s.spec, f1, m))!;
   assert.ok(Math.abs(b1.x - moved.x) < 20 && Math.abs(b1.y - moved.y) < 20, 'chart lands where the user put it');
-  const r = parseResponse(handleRequest(req('update', '', '48,96,864,408', '', JSON.stringify(s.spec)), m));
+  const r = parseResponse(await handleRequest(req('update', '', '48,96,864,408', '', JSON.stringify(s.spec)), m));
   assert.deepEqual(r.errors, []);
-  assert.match(parseResponse(handleRequest(req('update'), m)).errors[0], /Select an open-charts chart/);
-  assert.match(parseResponse(handleRequest(req('update', '', '', '', '{broken'), m)).errors[0], /damaged/);
-  assert.match(parseResponse(handleRequest(req('update', '', '', '', '{"type":"stacked","categories":[],"series":[]}'), m)).errors[0], /categor/i);
+  assert.match(parseResponse(await handleRequest(req('update'), m)).errors[0], /Select an open-charts chart/);
+  assert.match(parseResponse(await handleRequest(req('update', '', '', '', '{broken'), m)).errors[0], /damaged/);
+  assert.match(parseResponse(await handleRequest(req('update', '', '', '', '{"type":"stacked","categories":[],"series":[]}'), m)).errors[0], /categor/i);
   assert.equal(DEFAULT_FRAME.w, 864);
 });
 
-test('edit data: the edited spec is applied by the next update of that chart only', async () => {
-  const home = mkdtempSync(join(tmpdir(), 'oc-addin-'));
+/** In-memory stand-in for the add-in server's sessions. */
+function fakeSessions() {
+  const store = new Map<string, Session>();
   const opened: string[] = [];
-  const edits = fileEdits(home, (url) => opened.push(url));
+  const sessions: Sessions = {
+    async get(id) { return store.get(id); },
+    async open(id, chart, title) {
+      store.set(id, { id, rev: 1, state: 'open', chart, title, updatedAt: '' });
+      opened.push(id);
+    },
+  };
+  const apply = (id: string, chart: object) => store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'applied', chart });
+  return { sessions, opened, apply };
+}
+
+test('edit data opens a session; the applied chart is used by update of that chart', async () => {
+  const { sessions, opened, apply } = fakeSessions();
   const s = sampleFor('clustered');
   assert.ok('spec' in s);
   const json = JSON.stringify(s.spec);
-  const key = specKey(json);
-  const msg = parseResponse(handleRequest(req('edit', '', '', '', json), m, edits));
-  assert.match(msg.messages[0], /Update chart/);
-  assert.deepEqual(opened, [`http://localhost:4174/edit/${key}`]);
+  const id = specKey(json);
+  const r0 = await handleRequest(req('edit', '', '48,96,864,408', '', json), m, sessions);
+  assert.match(r0, new RegExp(`^I\t${id}$`, 'm'), 'answers the session id');
+  assert.deepEqual(opened, [id]);
 
-  // The editor page posts the deck back as the user edits.
-  const page = editPage(key, readFileSync(join(home, 'edits', `${key}.base.json`), 'utf8'));
-  assert.match(page, /\/api\/addin\/save\//);
-  assert.ok(page.indexOf('/api/addin/save/') < page.indexOf('<script', page.indexOf('/api/addin/save/')), 'boot script runs before the editor script');
-  const route = editRoutes(home);
-  const edited = { ...s.spec, categories: ['A', 'B', 'C', 'D'] };
-  const body = JSON.stringify({ slides: [{ chart: edited }] });
-  let status = 0;
-  const res = { writeHead(n: number) { status = n; return this; }, end() {} };
-  const reqStream = Object.assign((async function* () { yield Buffer.from(body); })(), { method: 'POST', url: `/api/addin/save/${key}` });
-  assert.equal(await route(reqStream as never, res as never), true);
-  assert.equal(status, 204);
+  // Before Apply: update keeps the chart's own data; relayout has nothing to do.
+  const r1 = parseResponse(await handleRequest(req('update', id, '48,96,864,408', '', json), m, sessions));
+  assert.equal(JSON.parse(Object.fromEntries(r1.tags).OC_SPEC).categories[0], 'North America');
+  assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, true);
 
-  const r = parseResponse(handleRequest(req('update', '', '48,96,864,408', '', json), m, edits));
-  assert.deepEqual(JSON.parse(Object.fromEntries(r.tags).OC_SPEC).categories, ['A', 'B', 'C', 'D']);
-  assert.equal(existsSync(join(home, 'edits', `${key}.json`)), false, 'an edit is applied once');
-  const again = parseResponse(handleRequest(req('update', '', '48,96,864,408', '', json), m, edits));
-  assert.equal(JSON.parse(Object.fromEntries(again.tags).OC_SPEC).categories[0], 'North America');
+  apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
+  for (const arg of [id, '']) { // by session id (ApplyEdit) and by the chart's own spec (Update chart)
+    const r = parseResponse(await handleRequest(req('update', arg, '48,96,864,408', '48,96,864,408', json), m, sessions));
+    assert.deepEqual(JSON.parse(Object.fromEntries(r.tags).OC_SPEC).categories, ['A', 'B', 'C', 'D']);
+  }
+  // The automatic check also picks up an applied edit.
+  assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, false);
 });
 
-test('ppam package: add-in content type, VBA and ribbon parts, one callback prefix', () => {
+test('relayout: nothing to do in place, a new frame after a resize', async () => {
+  const s = sampleFor('line');
+  assert.ok('spec' in s);
+  const json = JSON.stringify(s.spec);
+  const same = parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m));
+  assert.equal(same.nothing, true);
+  const half = parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,432,204', json), m));
+  assert.equal(half.nothing, false);
+  assert.equal(half.frame, '48,96,432,204', 'the group bounds are the frame (the add-in draws a frame rectangle)');
+  assert.equal(Object.fromEntries(half.tags).OC_FRAME, '48,96,432,204');
+});
+
+test('the editor page for a session: preloaded only for an editor without session support', () => {
+  const html = readFileSync(new URL('../src/web/editor.html', import.meta.url), 'utf8');
+  const page = editorPage('0123456789abcdef', { type: 'line', categories: ['a'], series: [{ name: 's', values: [1] }] });
+  if (html.includes('/api/session/')) assert.equal(page, undefined);
+  else {
+    assert.match(page!, /\/api\/session\/' \+ id/);
+    assert.ok(page!.indexOf('/api/session/') < page!.indexOf('<script', page!.indexOf('/api/session/')), 'boot script runs first');
+  }
+});
+
+test('ppam package: add-in content type, VBA and ribbon parts, one callback prefix', async () => {
   const built = buildAddin();
   const e = unzip(built.ppam);
   const ct = e.get('[Content_Types].xml')!.text();
@@ -160,7 +189,7 @@ test('ppam package: add-in content type, VBA and ribbon parts, one callback pref
 
   const ui = e.get('customUI/customUI14.xml')!.text();
   assert.ok(ui.includes(`xmlns="${UI_NS}"`));
-  const callbacks = [...ui.matchAll(/(?:onAction|onLoad)="([^"]+)"/g)].map((x) => x[1]);
+  const callbacks = [...ui.matchAll(/(?:onAction|onLoad|getEnabled)="([^"]+)"/g)].map((x) => x[1]);
   assert.ok(callbacks.length >= 4 && callbacks.every((c) => c.startsWith(`${built.prefix}_`)));
   for (const g of galleryItems()) assert.ok(ui.includes(`id="chart_${g.id}"`), g.id);
   assert.match(ui, /id="btnEditData"/);
@@ -170,22 +199,26 @@ test('ppam package: add-in content type, VBA and ribbon parts, one callback pref
   const source = new TextDecoder().decode(decompress(vba.VBA.OpenCharts));
   for (const c of new Set(callbacks)) assert.ok(source.includes(`Sub ${c}(`), `VBA defines ${c}`);
   assert.ok(!source.includes('OCPREFIX'));
-  assert.match(new TextDecoder().decode(vba.PROJECT), /Name="OpenChartsAddIn"/);
+  const project = new TextDecoder().decode(vba.PROJECT);
+  assert.match(project, /Name="OpenChartsAddIn"/);
+  assert.match(project, /Class=AppEvents/);
+  const cls = new TextDecoder().decode(decompress(vba.VBA.AppEvents));
+  assert.match(cls, /^Attribute VB_Name = "AppEvents"\r\nAttribute VB_Base = "0\{FCFB3D2A/);
+  assert.match(cls, /WithEvents App As Application/);
+  for (const g of galleryItems()) assert.ok(ui.includes(`title="${g.family}"`), `section ${g.family}`);
   assert.deepEqual(buildAddin().ppam, built.ppam, 'reproducible build');
 });
 
-test('VBA source is ASCII and every Sub/Function is closed', () => {
-  const src = readFileSync(new URL('../addin/vba/OpenCharts.bas', import.meta.url), 'utf8');
+test('VBA source is ASCII and every Sub/Function is closed', async () => {
+  const src = ['OpenCharts.bas', 'AppEvents.cls'].map((f) => readFileSync(new URL(`../addin/vba/${f}`, import.meta.url), 'utf8')).join('\n');
   assert.ok(/^[\x09\x0a\x0d\x20-\x7e]*$/.test(src));
   const opens = (src.match(/^\s*(Public |Private )?(Sub|Function) /gm) ?? []).length;
   const closes = (src.match(/^\s*End (Sub|Function)\b/gm) ?? []).length;
   assert.equal(opens, closes);
 });
 
-test('request parsing tolerates CRLF and missing fields', () => {
+test('request parsing tolerates CRLF and missing fields', async () => {
   const r = parseRequest('update\r\n\r\n1,2,3,4\r\n5,6,7,8\r\n{"a":1}\r\n');
   assert.deepEqual([r.op, r.arg, r.frame, r.bounds, r.spec], ['update', '', { x: 1, y: 2, w: 3, h: 4 }, { x: 5, y: 6, w: 7, h: 8 }, '{"a":1}']);
   assert.deepEqual(parseRequest(''), { op: '', arg: '', frame: undefined, bounds: undefined, spec: '' });
-  mkdirSync(join(tmpdir(), 'oc-unused'), { recursive: true });
-  writeFileSync(join(tmpdir(), 'oc-unused', 'x'), '');
 });

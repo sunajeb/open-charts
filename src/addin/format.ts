@@ -4,10 +4,14 @@
 //
 //   OC <tab> 1                         header + format version
 //   G  <tab> name <tab> altText        the chart group
+//   F  <tab> x,y,w,h                   the frame: VBA adds an invisible rectangle there, so the
+//                                      group's bounds are the frame and a resize is visible as such
 //   T  <tab> key <tab> value           a group tag (tag contract v1, OC_SPEC chunked)
 //   S  <tab> kind <tab> ...            a shape, columns below (SHAPE_COLUMNS)
 //   M  <tab> message                   tell the user something (no error)
 //   E  <tab> message                   error: nothing is drawn
+//   I  <tab> id                        the edit session opened for this chart (edit)
+//   N                                  nothing to do (relayout: the chart is already up to date)
 //
 // Shape kinds: rect | ellipse | roundRect | diamond | triangle | line | text | path.
 // Geometry: rect-like and text use x y w h; line uses x1 y1 x2 y2 in the same four columns; path
@@ -113,7 +117,7 @@ export function shapeRecord(s: Shape, font: string, role = '', name = ''): strin
 
 /** Parses a response back into records (tests, and the e2e script's sanity checks). */
 export function parseResponse(text: string) {
-  const out = { version: '', group: undefined as undefined | { name: string; alt: string }, tags: [] as [string, string][], shapes: [] as ShapeRecord[], messages: [] as string[], errors: [] as string[] };
+  const out = { version: '', frame: '', nothing: false, group: undefined as undefined | { name: string; alt: string }, tags: [] as [string, string][], shapes: [] as ShapeRecord[], messages: [] as string[], errors: [] as string[] };
   for (const line of text.split('\n')) {
     if (!line) continue;
     const f = line.split('\t').map(unescapeField);
@@ -123,6 +127,8 @@ export function parseResponse(text: string) {
     else if (f[0] === 'S') out.shapes.push(Object.fromEntries(SHAPE_COLUMNS.map((c, i) => [c, f[i + 1] ?? ''])) as ShapeRecord);
     else if (f[0] === 'M') out.messages.push(f[1]);
     else if (f[0] === 'E') out.errors.push(f[1]);
+    else if (f[0] === 'F') out.frame = f[1];
+    else if (f[0] === 'N') out.nothing = true;
   }
   return out;
 }

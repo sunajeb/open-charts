@@ -15,6 +15,7 @@ export const MODULE_NAME = 'OpenCharts';
 // Must differ from every module name, or VBA refuses to open the project.
 export const PROJECT_NAME = 'OpenChartsAddIn';
 export const BAS_FILE = new URL('../../addin/vba/OpenCharts.bas', import.meta.url);
+export const CLS_FILE = new URL('../../addin/vba/AppEvents.cls', import.meta.url);
 const PLACEHOLDER = /OCPREFIX/g;
 
 export const ADDIN_CT = 'application/vnd.ms-powerpoint.addin.macroEnabled.main+xml';
@@ -32,15 +33,19 @@ export function buildPrefix(...parts: string[]): string {
 
 export function ribbonXml(prefix: string, items: ChartTypeEntry[]): string {
   const cb = (name: string) => `${prefix}_${name}`;
-  const gallery = items.map((g) =>
-    `<item id="chart_${esc(g.id)}" label="${esc(g.label)}" imageMso="${esc(g.imageMso)}" screentip="${esc(g.label)}"/>`).join('');
+  const families = [...new Set(items.map((g) => g.family ?? 'More'))];
+  const menu = families.map((fam, i) => {
+    const buttons = items.filter((g) => (g.family ?? 'More') === fam).map((g) =>
+      `<button id="chart_${esc(g.id)}" label="${esc(g.label)}" imageMso="${esc(g.imageMso)}"${g.description ? ` description="${esc(g.description)}" supertip="${esc(g.description)}"` : ''} screentip="${esc(g.label)} chart" onAction="${cb('onAction')}"/>`).join('');
+    return `<menuSeparator id="sepFamily${i}" title="${esc(fam)}"/>${buttons}`;
+  }).join('');
   return `${XML}<customUI xmlns="${UI_NS}" onLoad="${cb('onLoad')}">
 <ribbon><tabs>
 <tab id="tabOpenCharts" label="open-charts" insertBeforeMso="TabHome">
 <group id="grpCharts" label="Charts" imageMso="ChartInsert">
-<gallery id="galCharts" label="Insert chart" imageMso="ChartInsert" size="large" columns="4" showItemLabel="true" showItemImage="true" screentip="Insert chart" supertip="Insert an open-charts chart on this slide with sample data. Select it and click Edit data to change the data." onAction="${cb('onGallery')}">${gallery}</gallery>
-<button id="btnEditData" label="Edit data" imageMso="ChartEditDataSource" size="large" screentip="Edit data" supertip="Open the selected chart's data in the open-charts editor. Click Update chart afterwards." onAction="${cb('onAction')}"/>
-<button id="btnUpdate" label="Update chart" imageMso="RefreshAll" size="large" screentip="Update chart" supertip="Lay the selected chart out again in its current position and size, with any edited data." onAction="${cb('onAction')}"/>
+<menu id="menuCharts" label="Insert chart" imageMso="ChartInsert" size="large" itemSize="large" screentip="Insert chart" supertip="Insert a chart on this slide with sample data. It goes into an empty content placeholder if there is one. Then click Edit data to type your numbers.">${menu}</menu>
+<button id="btnEditData" label="Edit data" imageMso="ChartEditDataSource" size="large" screentip="Edit data" supertip="Open the selected chart's datasheet. Apply there and the chart on the slide updates." onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>
+<button id="btnUpdate" label="Update chart" imageMso="RefreshAll" size="large" screentip="Update chart" supertip="Lay the selected chart out again at its current size and position, with any applied edits. Resized charts also update by themselves when you click elsewhere." onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>
 </group>
 </tab>
 </tabs></ribbon>
@@ -54,14 +59,14 @@ export function vbaSource(prefix: string, bas = readFileSync(BAS_FILE, 'utf8')):
 
 export interface BuiltAddin { ppam: Uint8Array; prefix: string; ribbon: string; source: string }
 
-export function buildAddin(bas = readFileSync(BAS_FILE, 'utf8')): BuiltAddin {
+export function buildAddin(bas = readFileSync(BAS_FILE, 'utf8'), cls = readFileSync(CLS_FILE, 'utf8')): BuiltAddin {
   const items = galleryItems();
-  const prefix = buildPrefix(ENGINE_VERSION, bas, JSON.stringify(items));
+  const prefix = buildPrefix(ENGINE_VERSION, bas, cls, JSON.stringify(items));
   const ribbon = ribbonXml(prefix, items);
   const source = vbaSource(prefix, bas);
   const hex = createHash('sha1').update(prefix).digest('hex').toUpperCase();
   const id = `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}}`;
-  const vba = vbaProjectBin({ name: PROJECT_NAME, id, modules: [{ name: MODULE_NAME, source }], seed: parseInt(hex.slice(0, 2), 16) });
+  const vba = vbaProjectBin({ name: PROJECT_NAME, id, modules: [{ name: MODULE_NAME, source }, { name: 'AppEvents', source: cls, kind: 'class' }], seed: parseInt(hex.slice(0, 2), 16) });
 
   // Start from an empty presentation (master, layout, theme, no slides) and make it an add-in.
   const base = unzip(writePptx([]));

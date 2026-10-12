@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMeasurer } from '../fonts.ts';
 import { handleRequest, parseRequest } from './engine.ts';
-import { addinHome, fileEdits, serveEdits, stopServer } from './edit.ts';
+import { addinHome, httpSessions, serveAddin, stopServer } from './server.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
 
@@ -30,17 +30,12 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
       // Always answers in the line format and exits 0: the VBA side shows E records to the user.
       let request = '';
       try { request = readFileSync(!arg || arg === '-' ? 0 : arg, 'utf8'); } catch { request = ''; }
-      let out: string;
-      try {
-        out = handleRequest(parseRequest(request), createMeasurer(), fileEdits());
-      } catch (err) {
-        out = `OC\t1\nE\t${(err as Error).message.replace(/[\t\n\r]/g, ' ')}\n`;
-      }
-      process.stdout.write(out);
-      return;
+      return handleRequest(parseRequest(request), createMeasurer(), httpSessions())
+        .catch((err: Error) => `OC\t1\nE\t${err.message.replace(/[\t\n\r]/g, ' ')}\n`)
+        .then((out) => { process.stdout.write(out); });
     }
     case 'serve':
-      serveEdits();
+      serveAddin();
       return;
     case 'types':
       for (const g of galleryItems()) {
@@ -79,6 +74,7 @@ function install(register: boolean) {
 
   // 2. The add-in, where PowerPoint's sandbox may read it (~/Library/Application Support/Microsoft).
   const built = buildAddin();
+  writeFileSync(join(home, 'addin.json'), `${JSON.stringify({ prefix: built.prefix, engine: engine }, null, 2)}\n`);
   mkdirSync(PPAM_DIR, { recursive: true });
   const ppam = join(PPAM_DIR, 'open-charts.ppam');
   writeFileSync(ppam, built.ppam);
