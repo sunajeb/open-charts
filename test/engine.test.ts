@@ -14,7 +14,7 @@ const m = createMeasurer();
 const F = CHART_FRAME;
 const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.roles![i]));
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text').map((t) => t.text);
-const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total)$/;
+const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+)$/;
 
 const base = (type: ChartSpec['type'], options: ChartSpec['options'] = {}): ChartSpec => ({
   type, categories: ['2021', '2022', '2023', '2024'],
@@ -49,7 +49,7 @@ test('every shape of every chart type has a role in the shared format', () => {
 });
 
 test('every example deck chart has roles for every shape', () => {
-  for (const file of ['examples/deck.json', 'examples/line.json', 'examples/mekko.json', 'examples/waterfall.json', 'examples/step.json', 'examples/area.json', 'examples/pie.json', 'examples/harvey.json']) {
+  for (const file of ['examples/deck.json', 'examples/line.json', 'examples/mekko.json', 'examples/waterfall.json', 'examples/step.json', 'examples/area.json', 'examples/pie.json', 'examples/harvey.json', 'examples/percent.json', 'examples/combo.json', 'examples/mekkoxy.json', 'examples/scatter.json', 'examples/table.json', 'examples/gantt.json']) {
     const deck: DeckSpec = JSON.parse(readFileSync(file, 'utf8'));
     for (const sl of deck.slides) {
       const scene = layoutChart(sl.chart, F, m);
@@ -208,8 +208,9 @@ test('B13: example decks pass the strict gate; declared stress slides list exact
     'examples/mekko.json#1': [/^(G&A \/ Asia Pacific|(Sales & marketing|R&D|G&A) \/ Latin America): segment too small$/],
     'examples/mekko.json#2': [/^(Other \/ (Asia Pacific \(excluding Japan\)|Europe, Middle East and Africa)|.* \/ Rest of world): segment too small$/],
     'examples/waterfall.json#2': [/^category labels shrunk to 11 pt to fit$/],
+    'examples/mekkoxy.json#1': [/^Services \/ Consumer: segment too small$/],
   };
-  for (const file of ['examples/deck.json', 'examples/line.json', 'examples/mekko.json', 'examples/waterfall.json', 'examples/step.json', 'examples/area.json', 'examples/pie.json', 'examples/harvey.json']) {
+  for (const file of ['examples/deck.json', 'examples/line.json', 'examples/mekko.json', 'examples/waterfall.json', 'examples/step.json', 'examples/area.json', 'examples/pie.json', 'examples/harvey.json', 'examples/percent.json', 'examples/combo.json', 'examples/mekkoxy.json', 'examples/scatter.json', 'examples/table.json', 'examples/gantt.json']) {
     const deck: DeckSpec = JSON.parse(readFileSync(file, 'utf8'));
     deck.slides.forEach((sl, i) => {
       const scene = layoutChart(sl.chart, F, m);

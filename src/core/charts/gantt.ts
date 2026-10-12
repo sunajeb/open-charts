@@ -114,8 +114,17 @@ export function layoutGantt(ctx: Ctx) {
       // Separator at the unit's start: solid for the upper tier (through rows and header), dashed for the lower.
       if (a > t0) {
         if (isFine && coarse && a === floorTo(coarse, a)) return; // drawn by the upper tier
-        const yTop = isFine ? y : frame.y;
-        ctx.add(`gridline:${grid++}`, { kind: 'line', x1: xOf(a), y1: yTop, x2: xOf(a), y2: bottom, color: isFine ? SEP_FINE : style.axis, width: isFine ? 0.5 : 0.75, dash: isFine });
+        if (isFine) {
+          ctx.add(`gridline:${grid++}`, { kind: 'line', x1: xOf(a), y1: y, x2: xOf(a), y2: bottom, color: SEP_FINE, width: 0.5, dash: true });
+        } else {
+          // Through its own tier and the rows; it skips the lower tier when it falls inside one of its cells (a week across two months).
+          const inside = coarse && floorTo(fine, a) !== a;
+          const color = style.axis;
+          if (inside) {
+            ctx.add(`gridline:${grid++}`, { kind: 'line', x1: xOf(a), y1: frame.y, x2: xOf(a), y2: frame.y + tierH, color, width: 0.75 });
+            ctx.add(`gridline:${grid++}`, { kind: 'line', x1: xOf(a), y1: top, x2: xOf(a), y2: bottom, color, width: 0.75 });
+          } else ctx.add(`gridline:${grid++}`, { kind: 'line', x1: xOf(a), y1: frame.y, x2: xOf(a), y2: bottom, color, width: 0.75 });
+        }
       }
     });
   }
