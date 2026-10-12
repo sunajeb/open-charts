@@ -98,4 +98,14 @@ export const samples: Partial<Record<ChartType, ChartSpec>> = {
     series: [{ name: 'Revenue 2025', values: [118, 60, 29, 14, 6] }],
     options: { unit: 'm', totals: true },
   },
+  harvey: {
+    specVersion: 1,
+    type: 'harvey',
+    categories: ['Price', 'Features', 'Support', 'Integrations'],
+    series: [
+      { name: 'Us', values: [3, 4, 2, 3] },
+      { name: 'Competitor A', values: [4, 2, 3, 1] },
+      { name: 'Competitor B', values: [2, 3, 1, 0] },
+    ],
+  },
 };
