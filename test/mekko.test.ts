@@ -129,3 +129,27 @@ test('totals that collide over narrow columns are staggered into a second row, n
   const accounted = totals.length + scene.hidden.filter((h) => h.includes('total label')).length;
   assert.equal(accounted, 5);
 });
+
+test('a total over a narrow column is centred on it when it fits; colliding totals move apart symmetrically', () => {
+  const colCentre = (scene: ReturnType<typeof layoutChart>, c: number) => {
+    const r = scene.shapes[scene.roles!.indexOf(`bar:s0:c${c}`)] as RectShape;
+    return r.x + r.w / 2;
+  };
+  const total = (scene: ReturnType<typeof layoutChart>, c: number) => scene.shapes[scene.roles!.indexOf(`label:total:c${c}`)] as TextShape;
+  // A 1% sliver after a wide column: room to centre.
+  const fits = layoutChart({
+    type: 'mekko', categories: ['A', 'B', 'C'],
+    series: [{ name: 'x', values: [500, 400, 4] }], options: { unit: 'm', seriesLabels: 'legend' },
+  }, CHART_FRAME, m);
+  const t = total(fits, 2);
+  assert.ok(Math.abs(t.x + t.w / 2 - colCentre(fits, 2)) < 0.01, 'centred over its sliver');
+  // Example mekko-3: "63.0m" and "4.0m" cannot both be centred; each gives way by the same amount.
+  const deck = JSON.parse(readFileSync(new URL('../examples/mekko.json', import.meta.url), 'utf8')) as DeckSpec;
+  const scene = layoutChart(deck.slides[2].chart, CHART_FRAME, m);
+  const [a, b] = [3, 4].map((c) => total(scene, c));
+  const left = colCentre(scene, 3) - (a.x + a.w / 2), right = b.x + b.w / 2 - colCentre(scene, 4);
+  assert.ok(left > 0 && Math.abs(left - right) < 0.01, `symmetric offsets ${left} / ${right}`);
+  assert.equal(Math.round(a.y), Math.round(b.y), 'same row');
+  assert.ok(b.x > a.x + a.w, 'no overlap');
+  assert.ok(b.x < colCentre(scene, 4) && b.x + b.w > colCentre(scene, 4), 'still over its column');
+});

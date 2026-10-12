@@ -75,6 +75,8 @@ export interface ChartOptions {
   brackets?: { from: string; to: string; label?: string }[];
   /** Gantt: a "today" line through every row at this date (it is never read from the clock). */
   today?: string;
+  /** Pie and doughnut: what the slice labels show — shares (default), absolute values, or both ("118 (52%)"). */
+  labelContent?: 'percent' | 'value' | 'both';
 }
 
 export interface ChartSpec {

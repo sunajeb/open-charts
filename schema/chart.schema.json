@@ -136,7 +136,8 @@
           }
         },
         "today": { "type": "string", "description": "Gantt: date of a \"today\" line through every row." },
-        "sizeLegend": { "type": ["boolean", "string"], "description": "Bubble: size legend; a string adds a caption." }
+        "sizeLegend": { "type": ["boolean", "string"], "description": "Bubble: size legend; a string adds a caption." },
+        "labelContent": { "enum": ["percent", "value", "both"], "description": "Pie and doughnut: slice labels show shares (default), absolute values, or both." }
       }
     }
   }
