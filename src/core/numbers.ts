@@ -15,7 +15,8 @@ export function niceTicks(min: number, max: number, count = 5): number[] {
       const n = Math.round((hi - lo) / step) + 1;
       if (n < 3 || n > 9) continue;
       const waste = (hi - lo - span) / (hi - lo);
-      const score = waste * 2 + Math.abs(n - count) * 0.15 + (q === 2.5 ? 0.1 : 0);
+      // Empty axis range costs more than an extra tick: 620 → 0–700 (8 ticks), not 0–800.
+      const score = waste * 3 + Math.abs(n - count) * 0.08 + (q === 2.5 ? 0.1 : 0);
       if (!best || score < best.score) best = { lo, step, n, score };
     }
   }
@@ -253,11 +254,16 @@ export function roundToTotal(values: number[], decimals = 0): number[] {
 
 /** Black or white text, whichever reads better on the given fill (WCAG relative luminance). */
 export function textOn(fill: string, dark = '222222', light = 'FFFFFF'): string {
-  const hex = fill.replace('#', '');
-  const [r, g, b] = [0, 2, 4].map((i) => {
-    const c = parseInt(hex.slice(i, i + 2), 16) / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  });
-  const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-  return lum > 0.4 ? dark : light;
+  // Pick whichever text colour has the higher WCAG contrast against the fill.
+  const lum = (c: string) => {
+    const hex = c.replace('#', '');
+    const [r, g, b] = [0, 2, 4].map((i) => {
+      const v = parseInt(hex.slice(i, i + 2), 16) / 255;
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const f = lum(fill);
+  const contrast = (t: string) => { const l = lum(t); return (Math.max(l, f) + 0.05) / (Math.min(l, f) + 0.05); };
+  return contrast(dark) >= contrast(light) ? dark : light;
 }

@@ -5,9 +5,15 @@ import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 
 /**
  * Combination chart: stacked (default) or clustered columns, plus every series marked `as: 'line'`
- * drawn as a line with markers over the same value axis. Column labels that a line or marker would
- * cross move within their segment or are hidden; line labels go above, below or beside their point,
- * never over another series' column, label or marker (hidden and reported when nothing is free).
+ * drawn as a line with markers over the same value axis.
+ *
+ * - Segment labels stay inside their segment: centred, else moved within it clear of the line, else
+ *   hidden and reported.
+ * - A total sits on its column and is raised in small steps only when the line runs through it.
+ * - A line label sits directly above or below its point (nudged just clear of a column edge); beside
+ *   the point only when neither is free. It may sit on a column when it fits wholly inside one segment
+ *   (in a contrasting colour), never across an edge. Totals and line labels of a category are placed
+ *   together, keeping a small clearance from every other label; what finds no spot is hidden and reported.
  */
 export function layoutCombo(ctx: Ctx) {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
@@ -74,13 +80,18 @@ export function layoutCombo(ctx: Ctx) {
     }
   }
   const crossed = (b: Box) => segs.some((l) => segmentHitsBox(l.x1, l.y1, l.x2, l.y2, b)) || markers.some((mk) => overlaps(mk, b, 0));
+  // The line's white halo counts as part of the line; labels keep a small clearance from each other.
+  const lineHits = (b: Box) => crossed(grow(b, 1));
+  const gapL = pad * 0.25;
+  const placed: Box[] = [];
+  const clear = (b: Box, extra: Box[] = []) => ![...placed, ...extra].some((p) => overlaps(grow(p, gapL), b, 0));
 
   // Columns.
-  const bars: Box[] = [];
-  const placed: Box[] = [];
+  const bars: (Box & { fill: string })[] = [];
   const consistent = !clustered && !o.format;
   const rounded = cats.map((c) => (consistent ? roundToTotal(colS.map((s) => val(s, c) / ctx.scale.div), ctx.decimals) : null));
   const lastSegs: { s: number; y: number }[] = [];
+  const tops = cats.map(() => 0);
   for (const c of cats) {
     if (clustered) {
       const barW = colW / Math.max(1, colS.length);
@@ -90,13 +101,13 @@ export function layoutCombo(ctx: Ctx) {
         const x = cx(c) - colW / 2 + k * barW;
         const y1 = yOf(Math.max(0, v)), y2 = yOf(Math.min(0, v));
         const box = { x, y: y1, w: barW, h: Math.max(0.01, y2 - y1) };
-        bars.push(box);
+        bars.push({ ...box, fill: ctx.color(s) });
         ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', ...box, fill: ctx.color(s), stroke: style.background, strokeWidth: 0.5 });
         const label = ctx.fmt(v);
         const tw = m.width(label, fs) + 2;
         const lb = { x: x + barW / 2 - tw / 2, y: v >= 0 ? y1 - lh - pad * 0.15 : y2 + pad * 0.15, w: tw, h: lh };
         if (tw > barW + pad * 0.4) ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label too wide`);
-        else if (crossed(lb)) ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label covered by a line`);
+        else if (lineHits(lb)) ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label covered by a line`);
         else { placed.push(lb); text(ctx, `label:value:s${s}:c${c}`, { ...lb, text: label, role: 'value' }); }
       });
       continue;
@@ -111,28 +122,25 @@ export function layoutCombo(ctx: Ctx) {
       const y1 = yOf(b), h = yOf(a) - y1;
       const fill = ctx.color(s);
       const box = { x, y: y1, w: colW, h };
-      bars.push(box);
+      bars.push({ ...box, fill });
       ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', ...box, fill, stroke: style.background, strokeWidth: 0.75 });
       if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
       const label = rounded[c] ? ctx.fmt(rounded[c]![k], { scaled: true }) : ctx.fmt(v);
       const tw = m.width(label, fs) + 2;
       if (tw > colW || lh * 0.9 > h) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`); return; }
-      // Centred, else as high or as low as the segment allows, whichever the line leaves free.
-      const slack = Math.max(0, (h - lh) / 2);
-      const spot = [0, -slack, slack].map((dy) => ({ x: cx(c) - tw / 2, y: y1 + h / 2 - lh / 2 + dy, w: tw, h: lh })).find((b2) => !crossed(b2));
+      // Centred, else moved up or down within the segment (never to its edge) until the line leaves it free.
+      // When a line point sits in the segment, the label moves away from it to leave the point's label room.
+      const slack = Math.max(0, (h - lh) / 2 - pad * 0.5);
+      const pts = markers.filter((mk) => mk.c === c && mk.y + r >= y1 && mk.y + r <= y1 + h).map((mk) => mk.y + r);
+      const dist = (b2: Box) => Math.min(Infinity, ...pts.map((yp) => Math.abs(b2.y + lh / 2 - yp)));
+      const cands = [0, -0.5, 0.5, -1, 1].map((k2) => ({ x: cx(c) - tw / 2, y: y1 + h / 2 - lh / 2 + k2 * slack, w: tw, h: lh }));
+      if (pts.length && dist(cands[0]) < lh * 1.6) cands.sort((p, q) => dist(q) - dist(p));
+      const spot = cands.find((b2) => !lineHits(b2));
       if (!spot) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label covered by a line`); return; }
       placed.push(spot);
       text(ctx, `label:value:s${s}:c${c}`, { ...spot, text: label, color: textOn(fill), role: 'value' });
     });
-    if (showTotals) {
-      const label = ctx.fmt(pos[c] + neg[c]);
-      const tw = m.width(label, fs, true) + 2;
-      // On top of the column; raised in small steps when a line crosses that spot.
-      const tb = [0, 1, 2, 3, 4].map((k) => ({ x: cx(c) - tw / 2, y: yOf(up) - lh - pad * 0.2 - k * lh * 0.5, w: tw, h: lh }))
-        .find((b2) => b2.y >= frame.y + legendH && !crossed(b2));
-      if (!tb) ctx.hidden.push(`${spec.categories[c]}: total covered by a line`);
-      else { placed.push(tb); text(ctx, `label:total:c${c}`, { ...tb, text: label, bold: true, role: 'total' }); }
-    }
+    tops[c] = up;
   }
 
   ctx.add('axis', { kind: 'line', x1: px, y1: yOf(0), x2: px + pw, y2: yOf(0), color: style.axis, width: 0.75 });
@@ -148,30 +156,70 @@ export function layoutCombo(ctx: Ctx) {
     ctx.add(`marker:s${mk.s}:c${mk.c}`, { kind: 'rect', x: mk.x, y: mk.y, w: mk.w, h: mk.h, fill: color(mk.s), stroke: style.background, strokeWidth: 1, geom: 'ellipse' });
   }
 
-  // Line labels: above, below, then beside the point; every candidate must be clear of everything.
+  // Totals and line labels, one category at a time.
   const namesRight = o.seriesLabels === 'right';
-  const free = (b: Box) =>
-    b.y >= frame.y + legendH && b.y + b.h <= bottom && b.x >= frame.x && b.x + b.w <= px + pw + (namesRight ? 0 : rightW) &&
-    !placed.some((p) => overlaps(p, b)) && !bars.some((p) => overlaps(p, b, 0)) && !crossed(b);
-  const lastBoxes: Box[] = [];
+  const inBounds = (b: Box) =>
+    b.y >= frame.y + legendH && b.y + b.h <= bottom && b.x >= frame.x && b.x + b.w <= px + pw + (namesRight ? 0 : rightW);
+  /** The fill under a label box: '' over free space, a segment's fill when wholly inside it, null across an edge. */
+  const under = (b: Box): string | null => {
+    const hit = bars.filter((p) => overlaps(p, b, 0));
+    if (!hit.length) return '';
+    const [h0] = hit;
+    const inside = hit.length === 1 && b.x >= h0.x + 1 && b.x + b.w <= h0.x + h0.w - 1 && b.y >= h0.y + 1 && b.y + b.h <= h0.y + h0.h - 1;
+    return inside ? h0.fill : null;
+  };
+  // On a segment, keep well apart from the segment's own label so the two read as separate numbers.
+  const free = (b: Box, extra: Box[]) => {
+    const u = inBounds(b) && !lineHits(b) ? under(b) : null;
+    return u !== null && clear(u ? grow(b, lh * 0.4) : b, extra);
+  };
+  const lineSpots = (mk: Box & { s: number; c: number }, preferBelow: boolean): Box[] => {
+    const w = m.width(ctx.fmt(raw(mk.s, mk.c)!), fs) + 2;
+    const xc = mk.x + r, yc = mk.y + r, g = pad * 0.3;
+    const vertical = (dir: 1 | -1) => [0, 0.15, 0.3, 0.45, 0.6, 0.8].map((k) => ({ x: xc - w / 2, y: dir < 0 ? yc - r - g - lh - k * lh : yc + r + g + k * lh, w, h: lh }));
+    const side = (dir: 1 | -1, above: boolean) => ({ x: xc + dir * (r + g) - (dir < 0 ? w : 0), y: above ? yc - g - lh : yc + g, w, h: lh });
+    const sides = namesRight && mk.c === nCat - 1 ? [side(-1, true), side(-1, false)] : [side(1, true), side(-1, true), side(1, false), side(-1, false)];
+    return [...(preferBelow ? [...vertical(1), ...vertical(-1)] : [...vertical(-1), ...vertical(1)]), ...sides];
+  };
   const labelAll = nCat * lineS.length <= 24;
-  for (const mk of markers) {
-    const { s, c } = mk;
-    if (!labelAll && c !== nCat - 1) continue;
-    const label = ctx.fmt(raw(s, c)!);
-    const w = m.width(label, fs) + 2;
-    const yc = mk.y + r;
-    const vertical = [{ x: cx(c) - w / 2, y: yc - r - pad * 0.3 - lh, w, h: lh }, { x: cx(c) - w / 2, y: yc + r + pad * 0.3, w, h: lh }];
-    const side = (dir: 1 | -1, dy: number) => ({ x: cx(c) + dir * (r + pad * 0.4) - (dir < 0 ? w : 0), y: yc - lh / 2 + dy, w, h: lh });
-    const sides = namesRight && c === nCat - 1 ? [side(-1, -lh / 2), side(-1, lh / 2)] : [side(1, -lh / 2), side(-1, -lh / 2), side(1, lh / 2), side(-1, lh / 2)];
-    // In the gap beside the column, above or below the line, when the point sits on a column.
-    const gap = (dir: 1 | -1, dy: number) => ({ x: dir > 0 ? cx(c) + colW / 2 + pad * 0.3 : cx(c) - colW / 2 - pad * 0.3 - w, y: yc + dy, w, h: lh });
-    const gaps = namesRight && c === nCat - 1 ? [gap(-1, -lh - pad * 0.3), gap(-1, pad * 0.3)] : [gap(1, -lh - pad * 0.3), gap(-1, -lh - pad * 0.3), gap(1, pad * 0.3), gap(-1, pad * 0.3)];
-    const spot = [...vertical, ...sides, ...gaps].find(free);
-    if (!spot) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: no room for label`); continue; }
-    placed.push(spot);
-    if (c === nCat - 1) lastBoxes.push(spot);
-    text(ctx, `label:value:s${s}:c${c}`, { ...spot, text: label, role: 'value' });
+  const lastBoxes: Box[] = [];
+  for (const c of cats) {
+    // Top line first; a lower line at the same category prefers the spot below its point.
+    const mks = labelAll || c === nCat - 1 ? markers.filter((mk) => mk.c === c).sort((a, b) => a.y - b.y) : [];
+    const totalLabel = showTotals ? ctx.fmt(pos[c] + neg[c]) : null;
+    const tw = totalLabel ? m.width(totalLabel, fs, true) + 2 : 0;
+    const totals: (Box | null)[] = totalLabel
+      ? [0, 1, 2, 3, 4, 5, 6].map((k) => ({ x: cx(c) - tw / 2, y: yOf(tops[c]) - lh - pad * 0.2 - k * lh * 0.5, w: tw, h: lh }))
+        .filter((b) => b.y >= frame.y + legendH && !lineHits(b) && clear(b))
+      : [null];
+    // Cheapest combination: every label placed, the total low, line labels in their first-choice spots
+    // and off the columns (a label on a segment shares it with the segment's own label).
+    let best: { tb: Box | null; spots: (Box | null)[]; cost: number } | null = null;
+    totals.forEach((tb, k) => {
+      const taken: Box[] = tb ? [tb] : [];
+      let cost = k * 3;
+      const spots = mks.map((mk, i) => {
+        const cands = lineSpots(mk, i > 0);
+        const j = cands.findIndex((b) => free(b, taken));
+        if (j < 0) { cost += 1000; return null; }
+        cost += j + (under(cands[j]) ? 20 : 0);
+        taken.push(cands[j]);
+        return cands[j];
+      });
+      if (!best || cost < best.cost) best = { tb, spots, cost };
+    });
+    if (totalLabel) {
+      if (!best?.tb) ctx.hidden.push(`${spec.categories[c]}: total covered by a line`);
+      else { placed.push(best.tb); text(ctx, `label:total:c${c}`, { ...best.tb, text: totalLabel, bold: true, role: 'total' }); }
+    }
+    mks.forEach((mk, i) => {
+      const spot = best?.spots[i];
+      if (!spot) { ctx.hidden.push(`${spec.series[mk.s].name} / ${spec.categories[c]}: no room for label`); return; }
+      placed.push(spot);
+      if (c === nCat - 1) lastBoxes.push(spot);
+      const fill = under(spot);
+      text(ctx, `label:value:s${mk.s}:c${c}`, { ...spot, text: ctx.fmt(raw(mk.s, c)!), role: 'value', ...(fill ? { color: textOn(fill) } : {}) });
+    });
   }
 
   if (namesRight) {
@@ -184,3 +232,5 @@ export function layoutCombo(ctx: Ctx) {
     seriesLabelsRight(ctx, items, edge, frame.y + legendH, bottom);
   }
 }
+
+const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 * d, h: b.h + 2 * d });

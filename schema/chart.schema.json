@@ -125,6 +125,18 @@
             "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string" } }
           }
         },
+        "brackets": {
+          "type": "array",
+          "description": "Gantt: brackets labelling periods of time (phases), under the rows.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string" } }
+          }
+        },
+        "today": { "type": "string", "description": "Gantt: date of a \"today\" line through every row." },
+        "sizeLegend": { "type": ["boolean", "string"], "description": "Bubble: size legend; a string adds a caption." },
         "labelContent": { "enum": ["percent", "value", "both"], "description": "Pie and doughnut: slice labels show shares (default), absolute values, or both." }
       }
     }

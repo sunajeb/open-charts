@@ -2,6 +2,7 @@ import type { Ctx } from '../common.ts';
 import { fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
 import { formatValue, inferDecimals, niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { placeRow, type RowItem } from './mekko.ts';
+import { spread } from '../place.ts';
 
 /**
  * Mekko XY (Mekko with units, bar-Mekko, cost curve): width and height are set independently. The
@@ -11,6 +12,7 @@ import { placeRow, type RowItem } from './mekko.ts';
  * - `options.sort`: sheet order (default), reverse, ascending or descending by column height.
  * - One height series: its value sits above each column. Several: segment labels inside and a bold
  *   total on top. Labels over narrow columns borrow room from neighbours or are hidden and reported.
+ *   A segment of the last column too small for its label gets it outside, with a leader.
  * - Under each column: its name and, unless the baseline is a value axis, its width.
  * - `valueAxis`: a value axis for heights on the left and the baseline becomes a value axis for the
  *   cumulative widths (both with nice ticks).
@@ -57,36 +59,49 @@ export function layoutMekkoXY(ctx: Ctx) {
   // Axis titles from the series names: the height series (when there is one) above the plot, the width series under it.
   const yTitleH = hs.length === 1 ? lh + pad * 0.3 : 0;
   const topH = lh + pad * 0.3;
-  const rightW = seriesLabelWidth(ctx, 0);
-  const px = frame.x + axisW;
-  const pw = frame.w - axisW - rightW;
-  const colW = cats.map((c) => (pw * width(c)) / xMax);
-  const x0 = new Array<number>(nCat);
-  let acc = px;
-  for (const c of order) { x0[c] = acc; acc += colW[c]; }
-  const cx = (c: number) => x0[c] + colW[c] / 2;
-
-  const minLabelW = Math.min(fs * 6, pw / nCat);
-  const fit = fitCategories(ctx, cats.map((c) => Math.max(colW[c], minLabelW)));
-  if (fit.size < fs) ctx.hidden.push(`category labels shrunk to ${fit.size} pt to fit`);
   const axisH = xTicks ? lh + pad * 0.8 : 0;
   const widthLine = !xTicks;
-  const catH = axisH + Math.max(...fit.lines.map((l) => l.length)) * fit.lh + (widthLine ? lh : 0) + pad * 0.6 + lh;
   const belowH = dmin < 0 ? topH : 0;
   const py = frame.y + legendH + yTitleH + topH;
-  const ph = frame.y + frame.h - catH - belowH - py;
+  const geometry = (outW: number) => {
+    const rightW = seriesLabelWidth(ctx, 0) + outW;
+    const px = frame.x + axisW;
+    const pw = frame.w - axisW - rightW;
+    const colW = cats.map((c) => (pw * width(c)) / xMax);
+    const x0 = new Array<number>(nCat);
+    let acc = px;
+    for (const c of order) { x0[c] = acc; acc += colW[c]; }
+    const minLabelW = Math.min(fs * 6, pw / nCat);
+    const fit = fitCategories(ctx, cats.map((c) => Math.max(colW[c], minLabelW)));
+    const catH = axisH + Math.max(...fit.lines.map((l) => l.length)) * fit.lh + (widthLine ? lh : 0) + pad * 0.6 + lh;
+    const ph = frame.y + frame.h - catH - belowH - py;
+    return { px, pw, colW, x0, fit, ph, yOf: (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph };
+  };
+  // Segment labels that do not fit their segment go outside it with a leader, as the manual's rule for
+  // small segments says. Beside the last column that space is free (the series names move right to
+  // make room); elsewhere it is the neighbouring column, so those labels are hidden and reported.
+  const last = order[nCat - 1];
+  const segLabel = (s: number, c: number, rounded: number[] | null, k: number) => (rounded ? ctx.fmt(rounded[k], { scaled: true, decimals: hDecimals }) : fmtH(h(s, c)));
+  const roundedOf = (c: number) => (o.format ? null : roundToTotal(hs.map((s) => h(s, c) / ctx.scale.div), hDecimals));
+  const fitsIn = (label: string, w: number, hh: number) => m.width(label, fs) + 2 <= w && lh * 0.9 <= hh;
+  let g = geometry(0);
+  const outside = (gg: typeof g) => (hs.length > 1 ? hs.filter((s, k) => h(s, last) > 0 &&
+    !fitsIn(segLabel(s, last, roundedOf(last), k), gg.colW[last], gg.yOf(0) - gg.yOf(h(s, last)))) : []);
+  const outW0 = Math.max(0, ...outside(g).map((s) => m.width(segLabel(s, last, roundedOf(last), hs.indexOf(s)), fs) + 2 + pad * 1.2));
+  if (outW0) g = geometry(outW0);
+  const outW = outW0 ? Math.max(0, ...outside(g).map((s) => m.width(segLabel(s, last, roundedOf(last), hs.indexOf(s)), fs) + 2 + pad * 1.2)) : 0;
+  const { px, pw, colW, x0, fit, ph, yOf } = g;
+  const cx = (c: number) => x0[c] + colW[c] / 2;
+  if (fit.size < fs) ctx.hidden.push(`category labels shrunk to ${fit.size} pt to fit`);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
-  const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
-
-  if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, yFmt);
 
   const lastSegs: { s: number; y: number }[] = [];
-  const last = order[nCat - 1];
+  const outs: { s: number; y: number; label: string; w: number }[] = [];
   const tops: (RowItem & { y: number; label: string })[] = [];
   for (const c of order) {
     if (!colW[c]) { ctx.hidden.push(`${spec.categories[c]}: zero width, no column`); continue; }
     let u = 0, d = 0;
-    const rounded = o.format ? null : roundToTotal(hs.map((s) => h(s, c) / ctx.scale.div), hDecimals);
+    const rounded = roundedOf(c);
     hs.forEach((s, k) => {
       const v = h(s, c);
       if (!v) return;
@@ -97,11 +112,12 @@ export function layoutMekkoXY(ctx: Ctx) {
       ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', x: x0[c], y: y1, w: colW[c], h: hh, fill, stroke: style.background, strokeWidth: 0.75 });
       if (c === last) lastSegs.push({ s, y: y1 + hh / 2 });
       if (hs.length === 1) return;
-      const label = rounded ? ctx.fmt(rounded[k], { scaled: true, decimals: hDecimals }) : fmtH(v);
+      const label = segLabel(s, c, rounded, k);
       const tw = m.width(label, fs);
-      if (tw + 2 <= colW[c] && lh * 0.9 <= hh) {
+      if (fitsIn(label, colW[c], hh)) {
         text(ctx, `label:value:s${s}:c${c}`, { x: cx(c) - tw / 2 - 1, y: y1 + hh / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
-      } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
+      } else if (c === last && v > 0 && outW) outs.push({ s, y: y1 + hh / 2, label, w: tw + 2 });
+      else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
     });
     const label = fmtH(total[c]);
     const neg = total[c] < 0;
@@ -122,6 +138,8 @@ export function layoutMekkoXY(ctx: Ctx) {
     }
   }
 
+  // The value axis over the first column's edge, not hidden behind it.
+  if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, yFmt);
   const base = yOf(0);
   ctx.add('axis', { kind: 'line', x1: px, y1: base, x2: px + pw, y2: base, color: style.axis, width: 0.75 });
   const bottom = Math.max(base, yOf(dmin)) + belowH;
@@ -160,7 +178,15 @@ export function layoutMekkoXY(ctx: Ctx) {
     if (widthLine) text(ctx, `label:category:c${c}`, { x: p.x, y: sy, w: p.w, h: lh, text: wText[c], color: style.muted, valign: 'top', role: 'decoration' });
   }
 
-  if (o.seriesLabels === 'right') seriesLabelsRight(ctx, lastSegs.reverse(), px + pw, py, base);
+  // Outside labels of the last column: beside it, spread apart, each with a leader to its segment.
+  const edge = x0[last] + colW[last];
+  const ys = spread(outs.map((it) => it.y), outs.map(() => lh), py, base, 0);
+  outs.forEach((it, k) => {
+    const lx = edge + pad * 0.6;
+    ctx.add(`leader:c${last}`, { kind: 'line', x1: edge, y1: it.y, x2: lx - 1, y2: ys[k], color: style.muted, width: 0.5 });
+    text(ctx, `label:value:s${it.s}:c${last}`, { x: lx, y: ys[k] - lh / 2, w: it.w, h: lh, text: it.label, align: 'left', role: 'value' });
+  });
+  if (o.seriesLabels === 'right') seriesLabelsRight(ctx, lastSegs.reverse(), px + pw + outW, py, base);
 
   const title = (name: string, x: number, y: number, align: 'left' | 'right') => {
     const w = Math.min(m.width(name, fs) + 2, frame.w);

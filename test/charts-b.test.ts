@@ -16,7 +16,7 @@ const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.rol
 const rectsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is RectShape => x.kind === 'rect');
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text');
 const strict = (s: Scene) => checkScene(s, { strict: true, measurer: m });
-const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|shade:\d+)$/;
+const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|shade:\d+|leader:c\d+|legend:size|bracket:\d+|today)$/;
 const NEW = ['combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt'] as const;
 const close = (a: number, b: number, eps = 1e-6) => Math.abs(a - b) < eps;
 
@@ -39,7 +39,7 @@ test('example decks validate and every slide passes the strict gate', () => {
     for (const s of deck.slides) {
       const scene = layoutChart(s.chart, F, m);
       for (const r of scene.roles!) assert.match(r, ROLE, `${f}: ${r}`);
-      const issues = strict(scene).filter((i) => !/Services \/ Consumer: segment too small/.test(i.detail));
+      const issues = strict(scene);
       assert.deepEqual(issues, [], `${f}: ${s.title}`);
     }
   }
@@ -138,7 +138,7 @@ test('mekkoxy: value axes on both edges; stacked heights; zero width reported', 
     options: { valueAxis: true },
   }, F, m);
   const ticks = textsOf(scene, /^axis:tick:/).map((t) => t.text);
-  assert.deepEqual(ticks.slice(-4), ['0', '25', '50', '75'], 'x ticks inside the total width (90)');
+  assert.deepEqual(ticks.slice(-4), ['20', '40', '60', '80'], 'x ticks inside the total width (90)');
   assert.deepEqual(textsOf(scene, /^label:total:/).map((t) => t.text), ['15', '14', '9']);
   assert.ok(scene.hidden.some((h) => /C: zero width/.test(h)));
   assert.deepEqual(validateSpec({ type: 'mekkoxy', categories: ['a'], series: [{ name: 'w', values: [-1] }] }).map((e) => e.path), ['/series/0/values/0', '/series']);

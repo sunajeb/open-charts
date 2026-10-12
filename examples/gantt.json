@@ -11,7 +11,11 @@
           { "name": "Milestone", "values": ["2026-02-02", null, "2026-05-04", "2026-03-16", null, "2026-11-30", null] },
           { "name": "Decision", "values": [null, null, null, "2026-07-06", null, null, null] }
         ],
-        "options": { "shades": [{ "from": "2026-07-27", "to": "2026-08-17", "label": "Summer break" }] }
+        "options": {
+          "shades": [{ "from": "2026-07-27", "to": "2026-08-17", "label": "Summer break" }],
+          "brackets": [{ "from": "2026-01-05", "to": "2026-05-04", "label": "Design" }, { "from": "2026-05-04", "to": "2026-12-21", "label": "Roll-out" }],
+          "today": "2026-04-13"
+        }
       }
     },
     {

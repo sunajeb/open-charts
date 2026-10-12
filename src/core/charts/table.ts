@@ -92,6 +92,10 @@ export function layoutTable(ctx: Ctx) {
   const xs = [frame.x + first];
   for (const c of cols) xs.push(xs[c] + colW[c]);
   const right = xs[nCol];
+  // Sized to the frame, as a reference table dragged to the slide's height: spare height is shared by the
+  // rows (each grows by at most two lines, content centred); the top edge stays put and a short table ends early.
+  const spare = frame.h - headH - rows.reduce((a, s) => a + rowH[s], 0);
+  const grow = spare > 0 ? Math.min(lh * 2, spare / Math.max(1, rows.length)) : 0;
 
   // Header: categories, bold, bottom-aligned, right-aligned like the numbers beneath them.
   let y = frame.y;
@@ -107,10 +111,11 @@ export function layoutTable(ctx: Ctx) {
 
   let k = 0;
   for (const s of rows) {
+    const dy = grow / 2;
     if (y + rowH[s] > frame.y + frame.h + 0.01) { ctx.hidden.push(`${spec.series[s].name}: table row does not fit`); continue; }
     const lines = rowLines[s];
     text(ctx, `label:series:s${s}`, {
-      x: frame.x + padX, y: y + padY, w: first - 2 * padX, h: lines.length * lh,
+      x: frame.x + padX, y: y + padY + dy, w: first - 2 * padX, h: lines.length * lh,
       text: lines.join('\n'), align: 'left', valign: 'top', size, role: 'series',
     });
     for (const c of cols) {
@@ -118,10 +123,10 @@ export function layoutTable(ctx: Ctx) {
       if (!t) continue;
       if (m.width(t, size) > colW[c] - 2 * padX + 0.01) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: cell too wide`); continue; }
       text(ctx, `label:value:s${s}:c${c}`, {
-        x: xs[c] + padX, y: y + padY, w: colW[c] - 2 * padX, h: lh, text: t, align: align[c], valign: 'top', size, role: 'value',
+        x: xs[c] + padX, y: y + padY + dy, w: colW[c] - 2 * padX, h: lh, text: t, align: align[c], valign: 'top', size, role: 'value',
       });
     }
-    y += rowH[s];
+    y += rowH[s] + grow;
     const last = s === rows[rows.length - 1];
     ctx.add(last ? 'axis' : `gridline:${k++}`, { kind: 'line', x1: frame.x, y1: y, x2: right, y2: y, color: last ? style.text : style.palette[style.palette.length - 1] ?? style.axis, width: last ? 0.75 : 0.5 });
   }
