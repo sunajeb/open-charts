@@ -1,15 +1,25 @@
 import type { ChartSpec, Frame, Scene, Style } from './types.ts';
 import type { Measurer } from './text.ts';
 import { makeCtx } from './common.ts';
+import { prepareSpec } from './spec.ts';
 import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
 import { layoutMekko } from './charts/mekko.ts';
 import { layoutLine } from './charts/line.ts';
 
 export * from './types.ts';
-export { createMeasurer } from './text.ts';
+export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
 export type { Measurer } from './text.ts';
 export { checkScene } from './quality.ts';
+export type { Issue, CheckOptions } from './quality.ts';
+export {
+  SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError,
+  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, CHART_TYPES,
+} from './spec.ts';
+export type { SpecError } from './spec.ts';
+export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
+export type { NumberStyle, Locale } from './numbers.ts';
+export { parseCategoryDate, years360, cagrYears } from './dates.ts';
 
 export const defaultStyle: Style = {
   font: 'Arial',
@@ -33,21 +43,14 @@ const layouts: Record<ChartSpec['type'], Layout> = {
   line: layoutLine,
 };
 
+/**
+ * Lay out one chart. The spec is migrated to the current version and validated first; an invalid
+ * spec throws InvalidSpecError whose message lists every "/path: problem" (also on `.errors`).
+ */
 export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle): Scene {
-  validate(spec);
-  const layout = layouts[spec.type];
-  if (!layout) throw new Error(`Unknown chart type "${spec.type}"`);
-  const ctx = makeCtx(spec, style, frame, m);
-  layout(ctx);
-  return { frame, shapes: ctx.shapes, hidden: ctx.hidden };
-}
-
-function validate(spec: ChartSpec) {
-  if (!spec.categories?.length) throw new Error('Chart needs at least one category');
-  if (!spec.series?.length) throw new Error('Chart needs at least one series');
-  for (const s of spec.series) {
-    if (s.values.length !== spec.categories.length) {
-      throw new Error(`Series "${s.name}" has ${s.values.length} values but there are ${spec.categories.length} categories`);
-    }
-  }
+  const s = prepareSpec(spec);
+  const ctx = makeCtx(s, style, frame, m);
+  layouts[s.type](ctx);
+  if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
+  return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden };
 }

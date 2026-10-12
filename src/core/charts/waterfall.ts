@@ -1,6 +1,6 @@
 import type { Ctx } from '../common.ts';
-import { categoryHeight, categoryLabels, legend, text, valueAxis } from '../common.ts';
-import { formatNumber, inferDecimals, niceTicks, textOn } from '../numbers.ts';
+import { axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis } from '../common.ts';
+import { niceTicks, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 
 /**
@@ -24,8 +24,10 @@ export function layoutWaterfall(ctx: Ctx) {
   const nSer = spec.series.length;
   const cats = [...Array(nCat).keys()];
   const sers = [...Array(nSer).keys()];
-  const raw = (s: number, c: number) => spec.series[s].values[c] ?? 0;
-  const totals = new Set((o.totalsAt ?? (nCat > 1 ? [0, nCat - 1] : [0])).filter((i) => i >= 0 && i < nCat));
+  const raw = (s: number, c: number) => num(spec.series[s].values[c]) ?? 0;
+  // A cell "e" (as in the datasheet convention) marks its category as a computed total.
+  const eCats = cats.filter((c) => sers.some((s) => spec.series[s].values[c] === 'e'));
+  const totals = new Set((o.totalsAt ?? (eCats.length ? [0, ...eCats] : nCat > 1 ? [0, nCat - 1] : [0])).filter((i) => i >= 0 && i < nCat));
   if (nSer > 1 && o.seriesLabels === 'right') ctx.o.seriesLabels = 'legend';
 
   // Running sum: entry/exit level and the stacked segments of every column.
@@ -58,13 +60,15 @@ export function layoutWaterfall(ctx: Ctx) {
   if (dmax === dmin) dmax = dmin + 1;
   const ticks = o.valueAxis ? niceTicks(dmin, dmax) : null;
   if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
-  const axisDecimals = ticks ? inferDecimals(ticks) : 0;
-  const axisFmt = (v: number) => formatNumber(v, axisDecimals, o.unit ?? '');
+  const axisFmt = axisFormatter(ctx, ticks);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
 
   // Reserve space: legend on top, a label row above the highest bar, a label row below the lowest
   // bar when something dips below the baseline, categories at the bottom.
-  const legendH = legend(ctx);
+  const serColor = (s: number) =>
+    (spec.series[s].color ?? (nSer > 1 ? style.palette[(s + 1) % style.palette.length] : '')).replace('#', '');
+  // Legend swatches use the same colours as the delta bars (palette[0] is reserved for totals).
+  const legendH = legend(ctx, 'box', (s) => serColor(s) || ctx.color(s));
   const labelH = lh + pad * 0.3;
   const belowH = dmin < 0 ? labelH : 0;
   const slot = (frame.w - axisW) / nCat;
@@ -80,8 +84,6 @@ export function layoutWaterfall(ctx: Ctx) {
   const xl = (c: number) => cx(c) - colW / 2;
   const plotBottom = yOf(dmin) + belowH;
 
-  const serColor = (s: number) =>
-    (spec.series[s].color ?? (nSer > 1 ? style.palette[(s + 1) % style.palette.length] : '')).replace('#', '');
   const segColor = (col: typeof cols[number], g: Seg) =>
     col.total ? style.palette[0].replace('#', '') : serColor(g.s) || (g.v >= 0 ? style.positive : style.negative).replace('#', '');
 
@@ -94,18 +96,18 @@ export function layoutWaterfall(ctx: Ctx) {
       const y = yOf(g.hi), h = Math.max(0.01, yOf(g.lo) - y);
       const box = { x: xl(col.c), y, w: colW, h };
       bars.push(box);
-      ctx.shapes.push({ kind: 'rect', ...box, fill: segColor(col, g), stroke: style.background, strokeWidth: 0.75 });
+      ctx.add(`bar:s${g.s}:c${col.c}`, { kind: 'rect', ...box, fill: segColor(col, g), stroke: style.background, strokeWidth: 0.75 });
     }
   }
 
   // Connectors: thin horizontal line from the exit level of one column to the start of the next.
   for (let c = 0; c + 1 < nCat; c++) {
     const y = yOf(cols[c].exit);
-    ctx.shapes.push({ kind: 'line', x1: xl(c) + colW, y1: y, x2: xl(c + 1), y2: y, color: style.axis, width: 0.5 });
+    ctx.add(`connector:c${c}`, { kind: 'line', x1: xl(c) + colW, y1: y, x2: xl(c + 1), y2: y, color: style.axis, width: 0.5 });
   }
 
   // Baseline over the bars so columns crossing zero still show it.
-  ctx.shapes.push({ kind: 'line', x1: px, y1: yOf(0), x2: px + pw, y2: yOf(0), color: style.axis, width: 0.75 });
+  ctx.add('axis', { kind: 'line', x1: px, y1: yOf(0), x2: px + pw, y2: yOf(0), color: style.axis, width: 0.75 });
   categoryLabels(ctx, cats.map(cx), slot, plotBottom);
 
   // Labels: inside the segment when it fits, otherwise outside the column, never over a bar or another label.
@@ -120,15 +122,16 @@ export function layoutWaterfall(ctx: Ctx) {
     const reach = (g: Seg) => (g.v >= 0 ? g.hi - col.entry : col.entry - g.lo);
     const order = [...col.segs].sort((a, b) => reach(b) - reach(a));
     for (const g of order) {
-      const label = col.total ? ctx.fmt(g.v) : ctx.fmt(g.v, o.unit, true);
+      const label = col.total ? ctx.fmt(g.v) : ctx.fmt(g.v, { signed: true });
       const bold = col.total;
+      const role = bold ? `label:total:c${c}` : `label:value:s${g.s}:c${c}`;
       const tw = m.width(label, fs, bold) + 2;
       const y1 = yOf(g.hi), h = yOf(g.lo) - y1;
       const fill = segColor(col, g);
       const inside = { x: cx(c) - tw / 2, y: y1 + h / 2 - lh / 2, w: tw, h: lh };
       if (!bold && tw <= colW && lh * 0.9 <= h && !placed.some((p) => overlaps(p, inside))) {
         placed.push(inside);
-        text(ctx, { ...inside, text: label, color: textOn(fill), role: 'value' });
+        text(ctx, role, { ...inside, text: label, color: textOn(fill), role: 'value' });
         continue;
       }
       const up = { x: cx(c) - tw / 2, y: above - lh, w: tw, h: lh };
@@ -137,7 +140,7 @@ export function layoutWaterfall(ctx: Ctx) {
       if (!spot) { ctx.hidden.push(`${spec.categories[c]}: no room for label "${label}"`); continue; }
       placed.push(spot);
       if (spot === up) above = spot.y - pad * 0.15; else below = spot.y + lh + pad * 0.15;
-      text(ctx, { ...spot, text: label, bold, role: bold ? 'total' : 'value' });
+      text(ctx, role, { ...spot, text: label, bold, role: bold ? 'total' : 'value' });
     }
   }
 }

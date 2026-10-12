@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-charts.dev/schema/chart/1.json",
+  "title": "open-charts chart spec, version 1",
+  "description": "One chart. Unversioned specs (v0) have the same shape and are upgraded by migrate(). Semantic rules the schema cannot express (values per series = number of categories, unique series names, cagr.from < cagr.to, horizontal only for column types) are enforced by validateSpec().",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "categories", "series"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "specVersion": { "const": 1 },
+    "type": { "enum": ["stacked", "clustered", "percent", "waterfall", "mekko", "line"] },
+    "categories": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "Category labels. Years (\"2024\", \"FY24\", \"2025E\"), quarters (\"Q1 2023\"), halves (\"H1 2023\"), months (\"Jan 2023\", \"2023-01\") and ISO dates are read as dates for CAGR."
+    },
+    "series": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/series" }
+    },
+    "options": { "$ref": "#/$defs/options" }
+  },
+  "$defs": {
+    "hexColor": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+    "categoryIndex": { "type": "integer", "minimum": 0 },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "from": { "$ref": "#/$defs/categoryIndex" },
+        "to": { "$ref": "#/$defs/categoryIndex" }
+      }
+    },
+    "series": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "values"],
+      "properties": {
+        "name": { "type": "string" },
+        "values": {
+          "type": "array",
+          "items": {
+            "anyOf": [
+              { "type": "number" },
+              { "type": "null" },
+              { "const": "e", "description": "Waterfall only: this category is a computed total." }
+            ]
+          }
+        },
+        "color": { "$ref": "#/$defs/hexColor" }
+      }
+    },
+    "unit": {
+      "anyOf": [
+        { "type": "string", "description": "Suffix without a space, e.g. \"m\" or \"%\"." },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["text"],
+          "properties": {
+            "text": { "type": "string" },
+            "position": { "enum": ["prefix", "suffix"], "default": "suffix" },
+            "space": { "type": "boolean", "default": false }
+          }
+        }
+      ]
+    },
+    "options": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "totals": { "type": "boolean" },
+        "cagr": {
+          "anyOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["from", "to"],
+              "properties": {
+                "from": { "$ref": "#/$defs/categoryIndex" },
+                "to": { "$ref": "#/$defs/categoryIndex" },
+                "years": { "type": "number", "exclusiveMinimum": 0 }
+              }
+            }
+          ]
+        },
+        "difference": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/range" }] },
+        "valueAxis": { "type": "boolean" },
+        "zeroBased": { "type": "boolean" },
+        "decimals": { "type": "integer", "minimum": 0, "maximum": 10 },
+        "unit": { "$ref": "#/$defs/unit" },
+        "format": { "type": "string", "pattern": "[0#?]", "description": "Excel number format, e.g. \"#,##0.0\", \"$#,##0\", \"0%\", \"#,##0;(#,##0)\"." },
+        "locale": { "type": "string", "examples": ["en-US", "en-GB", "en-IN", "de-DE", "fr-FR"] },
+        "scale": { "enum": ["none", "auto", "k", "m", "bn"] },
+        "orientation": { "enum": ["vertical", "horizontal"] },
+        "mekko": { "enum": ["percent", "unit"] },
+        "gap": { "type": "number", "minimum": 0, "maximum": 10 },
+        "seriesLabels": { "enum": ["right", "legend", "none"] },
+        "totalsAt": { "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } }
+      }
+    }
+  }
+}

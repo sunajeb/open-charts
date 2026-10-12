@@ -6,6 +6,9 @@ import { chartTags } from './render/tags.ts';
 import { sceneToSvg } from './render/svg.ts';
 
 export interface DeckSpec {
+  /** Spec format version (see migrateDeck / validateDeck in src/core). */
+  specVersion?: 1;
+  $schema?: string;
   style?: Partial<Style>;
   slides: { title?: string; chart: ChartSpec }[];
 }
@@ -28,7 +31,7 @@ export function buildDeck(deck: DeckSpec, m: Measurer): { pptx: Uint8Array; slid
   const style = { ...defaultStyle, ...deck.style };
   const slides = deck.slides.map((s) => {
     const scene = layoutChart(s.chart, CHART_FRAME, m, style);
-    const issues = [...checkScene(scene).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`)];
+    const issues = [...checkScene(scene, { measurer: m }).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`)];
     return { title: s.title, scene, svg: sceneToSvg([scene], SLIDE, s.title, style.font), issues };
   });
   const pptx = writePptx(

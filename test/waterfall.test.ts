@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { ChartSpec, LineShape, RectShape, TextShape } from '../src/core/index.ts';
-import { checkScene, createMeasurer, layoutChart } from '../src/core/index.ts';
+import { checkScene, layoutChart } from '../src/core/index.ts';
+import { createMeasurer } from '../src/fonts.ts';
 import { buildDeck, CHART_FRAME, type DeckSpec } from '../src/deck.ts';
 
 const m = createMeasurer();
@@ -100,7 +101,10 @@ test('waterfall example deck lays out with no issues', () => {
   const { pptx, slides } = buildDeck(deck, m);
   assert.equal(String.fromCharCode(pptx[0], pptx[1]), 'PK');
   assert.equal(slides.length, 3);
-  for (const s of slides) assert.deepEqual(s.issues, [], s.title);
+  // The stress slide's long driver names need four lines at 12 pt; the engine shrinks the whole
+  // category row one step instead of letting the last line overflow (B8), and says so.
+  const expected = [[], [], ['hidden: category labels shrunk to 11 pt to fit']];
+  slides.forEach((s, i) => assert.deepEqual(s.issues, expected[i], s.title));
 });
 
 test('waterfall: a zero delta is labelled "0" and the chain continues', () => {
