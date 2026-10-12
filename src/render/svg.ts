@@ -15,7 +15,7 @@ function shape(s: Shape, font: string): string {
     return `<line x1="${n(s.x1)}" y1="${n(s.y1)}" x2="${n(s.x2)}" y2="${n(s.y2)}" stroke="${c(s.color)}" stroke-width="${s.width}"${s.dash ? ' stroke-dasharray="4 3"' : ''}${s.arrowEnd ? ' marker-end="url(#arrow)"' : ''}/>`;
   }
   const lines = s.text.split('\n');
-  const lh = s.size * 1.149;
+  const lh = s.lineHeight ?? s.size * 1.149;
   const block = lines.length * lh;
   const top = s.valign === 'top' ? s.y : s.valign === 'bottom' ? s.y + s.h - block : s.y + (s.h - block) / 2;
   const x = s.align === 'left' ? s.x : s.align === 'right' ? s.x + s.w : s.x + s.w / 2;

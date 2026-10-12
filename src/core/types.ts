@@ -1,17 +1,27 @@
 // All geometry is in points (1/72 inch). Origin is the slide's top-left corner.
+import type { Scale, Unit } from './numbers.ts';
+export type { Scale, Unit } from './numbers.ts';
 
 export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line';
 
+/** A cell: a number, empty (null), or "e" in a waterfall = this category is a computed total. */
+export type Value = number | null | 'e';
+
 export interface Series {
   name: string;
-  values: (number | null)[];
+  values: Value[];
+  /** Hex colour, "RRGGBB" or "#RRGGBB". */
   color?: string;
 }
 
 export interface ChartOptions {
   /** Total label above each stacked column. Default: on for stacked, off otherwise. */
   totals?: boolean;
-  /** Compound annual growth arrow between two category indices (uses column totals). */
+  /**
+   * Compound annual growth arrow between two category indices (uses column totals). The number of
+   * years comes from `years`, else from dates read from the category labels (30/360), else from
+   * the index distance.
+   */
   cagr?: { from: number; to: number; years?: number } | null;
   /** Difference arrow between the totals of two categories. */
   difference?: { from: number; to: number } | null;
@@ -21,8 +31,16 @@ export interface ChartOptions {
   zeroBased?: boolean;
   /** Fixed number of decimals. Default: inferred from the data. */
   decimals?: number;
-  /** Suffix appended to every value label, e.g. "m" or "k". */
-  unit?: string;
+  /** Unit on every value label: a suffix string ("m", "%"), or {text, position, space} for "$42" / "42 €". */
+  unit?: string | Unit;
+  /** Excel-style number format for value labels, e.g. "#,##0.0" or "#,##0;(#,##0)". Overrides `decimals`. */
+  format?: string;
+  /** Locale for decimal mark, grouping and percent spacing: en-US (default), en-GB, en-IN, de-DE, fr-FR. */
+  locale?: string;
+  /** Magnitude scaling shared by the whole chart: "auto" picks k / m / bn from the data. Default "none". */
+  scale?: Scale;
+  /** Stacked, clustered and 100% charts: "horizontal" draws bars from the left. Default "vertical". */
+  orientation?: 'vertical' | 'horizontal';
   /** Mekko: stack every column to 100% (default) or keep absolute segment heights. Widths always encode totals. */
   mekko?: 'percent' | 'unit';
   /** Gap between columns as a fraction of the column width. Default 0.5. */
@@ -34,6 +52,9 @@ export interface ChartOptions {
 }
 
 export interface ChartSpec {
+  /** Spec format version. Unversioned input is v0 and is upgraded by `migrate()`. */
+  specVersion?: 1;
+  $schema?: string;
   type: ChartType;
   categories: string[];
   series: Series[];
@@ -82,11 +103,13 @@ export interface TextShape {
   bold?: boolean;
   align: 'left' | 'center' | 'right';
   valign: 'top' | 'middle' | 'bottom';
+  /** Distance between baselines of consecutive lines, from the measured font (B7). */
+  lineHeight?: number;
   /** Optional box behind the text (e.g. CAGR bubble). */
   fill?: string;
   stroke?: string;
   rounded?: boolean;
-  /** Role used by quality checks (labels must not overlap each other). */
+  /** Coarse label kind (kept for compatibility; `Scene.roles` is the precise role). */
   role?: 'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration' | 'title';
 }
 
@@ -95,6 +118,13 @@ export type Shape = RectShape | LineShape | TextShape;
 export interface Scene {
   frame: Frame;
   shapes: Shape[];
-  /** Labels the engine chose to hide because they did not fit. */
+  /**
+   * Role of each shape, parallel to `shapes`, assigned by the engine only: `bar:s<i>:c<j>`,
+   * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
+   * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
+   * `marker:s<i>:c<j>`, `line:s<i>`. Always set by `layoutChart`.
+   */
+  roles?: string[];
+  /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */
   hidden: string[];
 }

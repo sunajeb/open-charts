@@ -1,8 +1,7 @@
 import type { Ctx } from '../common.ts';
-import { legend, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
-import { formatNumber, inferDecimals, niceTicks, roundToTotal, textOn } from '../numbers.ts';
+import { axisFormatter, fitCategories, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
+import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, spread } from '../place.ts';
-import { wrap } from '../text.ts';
 
 /**
  * Mekko (Marimekko) chart: a stacked column chart whose column widths are proportional to the
@@ -23,8 +22,8 @@ export function layoutMekko(ctx: Ctx) {
   const nCat = spec.categories.length;
   const cats = [...Array(nCat).keys()];
   const sers = spec.series.map((_, i) => i);
-  const raw = (s: number, c: number) => Math.max(0, spec.series[s].values[c] ?? 0);
-  if (spec.series.some((s) => s.values.some((v) => v != null && v < 0))) ctx.hidden.push('negative values ignored in Mekko chart');
+  const raw = (s: number, c: number) => Math.max(0, num(spec.series[s].values[c]) ?? 0);
+  if (spec.series.some((s) => s.values.some((v) => (num(v) ?? 0) < 0))) ctx.hidden.push('negative values ignored in Mekko chart');
 
   const totals = cats.map((c) => sers.reduce((a, s) => a + raw(s, c), 0));
   const grand = totals.reduce((a, v) => a + v, 0);
@@ -32,14 +31,14 @@ export function layoutMekko(ctx: Ctx) {
   const pctDecimals = o.decimals ?? 0;
   const shares = cats.map((c) => (totals[c] ? roundToTotal(sers.map((s) => (raw(s, c) / totals[c]) * 100), pctDecimals) : sers.map(() => 0)));
   const colShares = roundToTotal(totals.map((t) => (t / grand) * 100), 0);
-  const totalFmt = (v: number) => formatNumber(v, o.decimals ?? inferDecimals(totals), o.unit ?? '');
+  // Unit Mekko: segment labels are rounded together so they add up to the total on top.
+  const rounded = cats.map((c) => (o.format ? null : roundToTotal(sers.map((s) => raw(s, c) / ctx.scale.div), ctx.decimals)));
 
   // Value domain: 0–100% or 0–max total.
   let dmax = percent ? 100 : Math.max(...totals);
   const ticks = o.valueAxis ? niceTicks(0, dmax) : null;
   if (ticks) dmax = ticks[ticks.length - 1];
-  const axisDecimals = ticks ? inferDecimals(ticks) : 0;
-  const axisFmt = (v: number) => formatNumber(v, axisDecimals, percent ? '%' : o.unit ?? '');
+  const axisFmt = axisFormatter(ctx, ticks, percent);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;
 
   // Reserve space: legend and totals on top, axis left, series labels right, categories + shares below.
@@ -55,9 +54,11 @@ export function layoutMekko(ctx: Ctx) {
 
   // Category labels wrap inside their column; narrow columns wrap to a minimum width and borrow room.
   const minLabelW = Math.min(fs * 6, pw / nCat);
-  const catLines = cats.map((c) => wrap(spec.categories[c], Math.max(colW[c], minLabelW) - 2, fs, m));
-  const shareText = cats.map((c) => formatNumber(colShares[c], 0, '%'));
-  const catH = Math.max(...catLines.map((l) => l.length)) * lh + lh + pad * 0.6;
+  const fit = fitCategories(ctx, cats.map((c) => Math.max(colW[c], minLabelW)));
+  if (fit.size < fs) ctx.hidden.push(`category labels shrunk to ${fit.size} pt to fit`);
+  const catLines = fit.lines;
+  const shareText = cats.map((c) => ctx.pct(colShares[c], 0));
+  const catH = Math.max(...catLines.map((l) => l.length)) * fit.lh + lh + pad * 0.6;
 
   const py = frame.y + legendH + totalsH;
   const ph = frame.y + frame.h - catH - py;
@@ -66,7 +67,7 @@ export function layoutMekko(ctx: Ctx) {
 
   if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
 
-  const lastSegs: { name: string; y: number }[] = [];
+  const lastSegs: { s: number; y: number }[] = [];
   const totalItems: (RowItem & { y: number; label: string })[] = [];
 
   for (const c of cats) {
@@ -79,16 +80,16 @@ export function layoutMekko(ctx: Ctx) {
       const y1 = yOf(up + hv), y2 = yOf(up), h = y2 - y1;
       up += hv;
       const fill = ctx.color(s);
-      ctx.shapes.push({ kind: 'rect', x: x0[c], y: y1, w: colW[c], h, fill, stroke: style.background, strokeWidth: 0.75 });
-      const label = percent ? formatNumber(shares[c][s], pctDecimals, '%') : ctx.fmt(v);
+      ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', x: x0[c], y: y1, w: colW[c], h, fill, stroke: style.background, strokeWidth: 0.75 });
+      const label = percent ? ctx.pct(shares[c][s], pctDecimals) : rounded[c] ? ctx.fmt(rounded[c]![s], { scaled: true }) : ctx.fmt(v);
       const tw = m.width(label, fs);
       if (tw + 2 <= colW[c] && lh * 0.9 <= h) {
-        text(ctx, { x: cx(c) - tw / 2 - 1, y: y1 + h / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
+        text(ctx, `label:value:s${s}:c${c}`, { x: cx(c) - tw / 2 - 1, y: y1 + h / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
       } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
-      if (c === nCat - 1) lastSegs.push({ name: spec.series[s].name, y: y1 + h / 2 });
+      if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
     }
     if (showTotals) {
-      const label = totalFmt(totals[c]);
+      const label = ctx.fmt(totals[c]);
       totalItems.push({ c, cx: cx(c), w: m.width(label, fs, true) + 2, y: yOf(up) - lh - pad * 0.2, label });
     }
   }
@@ -97,18 +98,18 @@ export function layoutMekko(ctx: Ctx) {
   const totalPos = placeRow(totalItems, colW, px, frame.x + frame.w, pad * 0.5);
   for (const it of totalItems) {
     const p = totalPos.get(it.c);
-    if (p) text(ctx, { x: p.x, y: it.y, w: it.w, h: lh, text: it.label, bold: true, role: 'total' });
+    if (p) text(ctx, `label:total:c${it.c}`, { x: p.x, y: it.y, w: it.w, h: lh, text: it.label, bold: true, role: 'total' });
     else ctx.hidden.push(`${spec.categories[it.c]}: total label too wide for column`);
   }
 
   // Baseline.
   const bottom = yOf(0);
-  ctx.shapes.push({ kind: 'line', x1: px, y1: bottom, x2: px + pw, y2: bottom, color: style.axis, width: 0.75 });
+  ctx.add('axis', { kind: 'line', x1: px, y1: bottom, x2: px + pw, y2: bottom, color: style.axis, width: 0.75 });
 
   // Category name with the column's share of the grand total beneath; falls back to the share alone.
   const catItems = cats.map((c) => ({
     c, cx: cx(c),
-    w: Math.max(m.width(catLines[c].join('\n'), fs), m.width(shareText[c], fs)) + 2,
+    w: fit.hidden.has(c) ? m.width(shareText[c], fs) + 2 : Math.max(m.width(catLines[c].join('\n'), fit.size), m.width(shareText[c], fs)) + 2,
     alt: m.width(shareText[c], fs) + 2,
   }));
   const catPos = placeRow(catItems, colW, px, frame.x + frame.w, pad);
@@ -117,13 +118,13 @@ export function layoutMekko(ctx: Ctx) {
     const y = bottom + pad * 0.4;
     if (!p) { ctx.hidden.push(`${spec.categories[c]}: category label too wide for column`); continue; }
     let sy = y;
-    if (p.narrowed) ctx.hidden.push(`${spec.categories[c]}: category label too wide for column`);
+    if (p.narrowed || fit.hidden.has(c)) ctx.hidden.push(`${spec.categories[c]}: category label too wide for column`);
     else {
-      const h = catLines[c].length * lh;
-      text(ctx, { x: p.x, y, w: p.w, h, text: catLines[c].join('\n'), valign: 'top', role: 'category' });
+      const h = catLines[c].length * fit.lh;
+      text(ctx, `label:category:c${c}`, { x: p.x, y, w: p.w, h, text: catLines[c].join('\n'), valign: 'top', role: 'category', size: fit.size });
       sy += h;
     }
-    text(ctx, { x: p.x, y: sy, w: p.w, h: lh, text: shareText[c], color: style.muted, valign: 'top', role: 'decoration' });
+    text(ctx, `label:category:c${c}`, { x: p.x, y: sy, w: p.w, h: lh, text: shareText[c], color: style.muted, valign: 'top', role: 'decoration' });
   }
 
   if (o.seriesLabels === 'right') seriesLabelsRight(ctx, lastSegs.reverse(), px + pw, py, bottom);
