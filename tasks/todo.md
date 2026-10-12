@@ -44,6 +44,14 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [ ] Resize without breaking: resizing a chart re-lays it out at the new size (no stretched text); every type is clean from small to large frames; below a minimum it shows a clear "too small" message
 - [ ] Fast and seamless: insert < 1.5 s, update < 1 s in real PowerPoint; layout p95 < 20 ms per chart; 100-slide deck < 2 s
 
+## Follow-ups queued (after polish-b + resize-perf merge, to avoid golden churn)
+- [x] `textOn` contrast: switch to dark text near luminance 0.21 (white on #7FA3CC / #A6A6A6 is ~2.5:1)
+- [x] `niceTicks`: 620m max picks a 0–800m axis (22% empty) — prefer tighter steps
+- [ ] MASTER-PLAN §7.1: kerning decision changed — writer and add-in now set kern so PowerPoint never kerns (it kerns when the attribute is missing)
+
+- [ ] Editor: "label hidden (no room)" notices dominate the issue list on the default chart — collapse into one low-severity line ("4 labels too small to show"); keep real problems prominent
+- [ ] Thin segments: place labels outside with a leader (reference behaviour) instead of hiding, where there is room
+
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
 - [ ] CI runs unit + E2E + goldens on PRs

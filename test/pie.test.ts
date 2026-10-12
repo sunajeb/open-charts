@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { ChartSpec, PathShape, Scene, TextShape } from '../src/core/index.ts';
-import { checkScene, layoutChart } from '../src/core/index.ts';
+import { readFileSync } from 'node:fs';
+import type { ChartSpec, LineShape, PathShape, Scene, TextShape } from '../src/core/index.ts';
+import { checkScene, layoutChart, validateSpec } from '../src/core/index.ts';
+import { segmentHitsBox } from '../src/core/place.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { samples } from '../src/core/samples.ts';
 import { createMeasurer } from '../src/fonts.ts';
@@ -36,23 +38,77 @@ test('pie: slices start at 12 o\'clock, run clockwise and their sweeps are propo
   assert.ok(Math.abs(angle - 270) < 1e-9, 'full circle');
 });
 
-test('pie: shares add up to exactly 100 (largest remainder) and small slices are labelled outside with a leader', () => {
+test('pie: shares add up to exactly 100 (largest remainder); names outside, shares inside, even for a sliver', () => {
   const scene = layoutChart(spec, CHART_FRAME, m);
-  const shares = [0, 1, 2, 3, 4].map((c) => {
-    const inside = scene.roles!.includes(`label:value:s0:c${c}`) ? (at(scene, `label:value:s0:c${c}`) as TextShape).text : null;
-    const outside = (at(scene, `label:category:c${c}`) as TextShape).text;
-    return parseFloat(inside ?? outside.split(' ').pop()!);
-  });
+  const shares = [0, 1, 2, 3, 4].map((c) => parseFloat((at(scene, `label:value:s0:c${c}`) as TextShape).text));
   assert.equal(shares.reduce((a, b) => a + b, 0), 100);
   assert.deepEqual(shares, [28, 28, 28, 14, 2]);
-  // 2% does not fit in its sliver: it moves outside after the name, with a leader line.
-  assert.equal(scene.roles!.includes('label:value:s0:c4'), false);
-  assert.equal((at(scene, 'label:category:c4') as TextShape).text, 'Islands 2%');
-  assert.ok(scene.roles!.includes('leader:c4'));
+  // One label style throughout (manual: a label larger than its slice sits on a rectangle in the
+  // slice colour): every outside label is the bare name, every share is on the pie.
+  assert.deepEqual(textsOf(scene, 'label:category').map((t) => t.text).sort(), [...spec.categories].sort());
+  const sliver = at(scene, 'label:value:s0:c4') as TextShape;
+  assert.ok(sliver.fill, 'the 2% sits on a filled rectangle');
+  assert.equal((at(scene, 'wedge:s0:c4') as PathShape).fill, sliver.fill);
+  const disc = arcs(at(scene, 'wedge:s0:c0') as PathShape)[0];
+  for (const [x, y] of [[sliver.x, sliver.y], [sliver.x + sliver.w, sliver.y + sliver.h]]) assert.ok(Math.hypot(x - disc.cx, y - disc.cy) < disc.r);
   // Names on the right of the pie are left-aligned, those on the left right-aligned.
   assert.equal((at(scene, 'label:category:c0') as TextShape).align, 'left');
   assert.equal((at(scene, 'label:category:c2') as TextShape).align, 'right');
   assert.deepEqual(checkScene(scene, { measurer: m }), []);
+  assertLeaders(scene);
+});
+
+/** Leaders start on the rim, never enter the pie, never cross each other or another label. */
+function assertLeaders(scene: Scene) {
+  const items = scene.shapes.map((s, i) => ({ s, role: scene.roles![i] }));
+  const disc = arcs(items.find((x) => x.role.startsWith('wedge:'))!.s as PathShape)[0];
+  const leaders = items.filter((x) => x.role.startsWith('leader:')) as { s: LineShape; role: string }[];
+  const texts = items.filter((x) => x.s.kind === 'text') as { s: TextShape; role: string }[];
+  for (const { s, role } of leaders) {
+    assert.ok(Math.abs(Math.hypot(s.x1 - disc.cx, s.y1 - disc.cy) - disc.r) < 0.5, `${role} starts on the rim`);
+    for (let t = 0.02; t <= 1; t += 0.02) {
+      const d = Math.hypot(s.x1 + (s.x2 - s.x1) * t - disc.cx, s.y1 + (s.y2 - s.y1) * t - disc.cy);
+      assert.ok(d >= disc.r - 0.5, `${role} enters the pie`);
+    }
+    const c = role.slice('leader:'.length);
+    for (const t of texts) {
+      if (t.role.endsWith(c) && t.s.align !== 'center') continue; // its own outside label
+      assert.ok(!segmentHitsBox(s.x1, s.y1, s.x2, s.y2, t.s), `${role} crosses "${t.s.text}"`);
+    }
+  }
+  const side = (px: number, py: number, qx: number, qy: number, rx: number, ry: number) => Math.sign((qx - px) * (ry - py) - (qy - py) * (rx - px));
+  const cross = (a: LineShape, b: LineShape) =>
+    side(a.x1, a.y1, a.x2, a.y2, b.x1, b.y1) * side(a.x1, a.y1, a.x2, a.y2, b.x2, b.y2) < 0
+    && side(b.x1, b.y1, b.x2, b.y2, a.x1, a.y1) * side(b.x1, b.y1, b.x2, b.y2, a.x2, a.y2) < 0;
+  leaders.forEach((a, i) => leaders.slice(i + 1).forEach((b) => assert.ok(!cross(a.s, b.s), `${a.role} crosses ${b.role}`)));
+}
+
+test('pie: small slices\' shares stack in a column outside, spaced apart, with clean leaders (example deck)', () => {
+  const deck = JSON.parse(readFileSync(new URL('../examples/pie.json', import.meta.url), 'utf8'));
+  for (const slide of deck.slides) {
+    const scene = layoutChart(slide.chart, CHART_FRAME, m);
+    assert.deepEqual(checkScene(scene, { measurer: m, strict: true }), [], slide.title);
+    assertLeaders(scene);
+  }
+  // Survey (legend): 2.6%, 1.3% and 0.8% do not fit inside and stack outside, one line apart, in a
+  // column (shared right edge), in slice order from the bottom up, each joined to its slice by a leader.
+  const scene = layoutChart(deck.slides[2].chart, CHART_FRAME, m);
+  const out = [4, 5, 6].map((c) => at(scene, `label:value:s0:c${c}`) as TextShape);
+  assert.deepEqual(out.map((t) => t.text), ['2.6%', '1.3%', '0.8%']);
+  for (const c of [4, 5, 6]) assert.ok(scene.roles!.includes(`leader:c${c}`));
+  out.forEach((t) => assert.equal(t.align, 'right'));
+  assert.ok(out.every((t) => Math.abs(t.x + t.w - (out[0].x + out[0].w)) < 0.01), 'one column');
+  for (let k = 1; k < out.length; k++) assert.ok(out[k - 1].y >= out[k].y + out[k].h - 0.01, 'spread apart, smaller slice higher');
+});
+
+test('pie: label content shows values, or values and shares', () => {
+  const vals = layoutChart({ ...spec, options: { labelContent: 'value', unit: 'm' } }, CHART_FRAME, m);
+  assert.equal((at(vals, 'label:value:s0:c0') as TextShape).text, '1.00m');
+  const both = layoutChart({ ...spec, series: [{ name: 'S', values: [118, 60, 29, 14, 6] }], options: { labelContent: 'both' } }, CHART_FRAME, m);
+  assert.equal((at(both, 'label:value:s0:c0') as TextShape).text, '118 (52%)');
+  assert.deepEqual(checkScene(both, { measurer: m }), []);
+  assertLeaders(both);
+  assert.deepEqual(validateSpec({ ...spec, options: { labelContent: 'share' } } as unknown as ChartSpec).map((e) => e.path), ['/options/labelContent']);
 });
 
 test('pie: inside labels sit within their slice', () => {

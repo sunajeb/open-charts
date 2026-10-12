@@ -69,6 +69,14 @@ export interface ChartOptions {
   axisTitles?: { x?: string; y?: string };
   /** Gantt: shaded periods (holidays, phases) across every row, with an optional label. */
   shades?: { from: string; to: string; label?: string }[];
+  /** Bubble: size legend (one bubble of a round size, top right); a string adds a caption, e.g. "Revenue ($m)". */
+  sizeLegend?: boolean | string;
+  /** Gantt: brackets labelling periods of time (phases), drawn under the rows. */
+  brackets?: { from: string; to: string; label?: string }[];
+  /** Gantt: a "today" line through every row at this date (it is never read from the clock). */
+  today?: string;
+  /** Pie and doughnut: what the slice labels show — shares (default), absolute values, or both ("118 (52%)"). */
+  labelContent?: 'percent' | 'value' | 'both';
 }
 
 export interface ChartSpec {
@@ -166,7 +174,8 @@ export interface Scene {
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
    * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
    * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
-   * `shade:<k>` (Gantt shaded period). Always set by `layoutChart`.
+   * `shade:<k>` (Gantt shaded period), `bracket:<k>` (Gantt bracket), `today` (Gantt today line),
+   * `legend:size` (bubble size legend); `leader:c<j>` also links a scatter label to its point. Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

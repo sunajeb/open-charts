@@ -24,6 +24,8 @@ export const OPTION_KEYS = [
   'scale', 'orientation', 'mekko', 'gap', 'seriesLabels', 'totalsAt',
   'step',
   'percentData', 'combo', 'sort', 'shades', 'axisTitles',
+  'sizeLegend', 'brackets', 'today',
+  'labelContent',
 ] as const;
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart'] as const;
@@ -186,6 +188,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   enumOf('orientation', ['vertical', 'horizontal']);
   enumOf('mekko', ['percent', 'unit']);
   enumOf('seriesLabels', ['right', 'legend', 'none']);
+  enumOf('labelContent', ['percent', 'value', 'both']);
   if (o.orientation === 'horizontal' && !['stacked', 'clustered', 'percent'].includes(type)) {
     e.add(p('orientation'), `horizontal orientation is available for stacked, clustered and percent charts, not ${type}`);
   }
@@ -200,7 +203,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   if (o.percentData !== undefined && typeof o.percentData !== 'boolean') e.add(p('percentData'), `must be true or false, got ${describe(o.percentData)}`);
   enumOf('combo', ['stacked', 'clustered']);
   enumOf('sort', ['sheet', 'reverse', 'ascending', 'descending']);
-  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['shades', ['gantt']], ['axisTitles', ['scatter', 'bubble']]] as const) {
+  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['shades', ['gantt']], ['axisTitles', ['scatter', 'bubble']], ['sizeLegend', ['bubble']], ['brackets', ['gantt']], ['today', ['gantt']]] as const) {
     if (o[k] !== undefined && !(types as readonly string[]).includes(type)) e.add(p(k), `applies to ${types.join(', ')} charts, not ${type}`);
   }
   if (o.axisTitles !== undefined) {
@@ -210,16 +213,20 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
       for (const k of ['x', 'y']) if (o.axisTitles[k] !== undefined && typeof o.axisTitles[k] !== 'string') e.add(p('axisTitles', k), 'must be a string');
     }
   }
-  if (o.shades !== undefined) {
-    if (!Array.isArray(o.shades)) e.add(p('shades'), 'must be an array of {from, to, label}');
-    else o.shades.forEach((sh, i) => {
-      if (!isObj(sh)) { e.add(p('shades', i), 'must be {from, to, label}'); return; }
-      e.unknown(sh, ['from', 'to', 'label'], p('shades', i));
-      for (const k of ['from', 'to'] as const) if (!isDate(sh[k])) e.add(p('shades', i, k), `must be a date like "2026-03-15", got ${describe(sh[k])}`);
-      if (isDate(sh.from) && isDate(sh.to) && dayOf(sh.to) <= dayOf(sh.from)) e.add(p('shades', i, 'to'), '"to" must come after "from"');
-      if (sh.label !== undefined && typeof sh.label !== 'string') e.add(p('shades', i, 'label'), 'must be a string');
+  for (const key of ['shades', 'brackets'] as const) {
+    const list = o[key];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) e.add(p(key), 'must be an array of {from, to, label}');
+    else list.forEach((sh, i) => {
+      if (!isObj(sh)) { e.add(p(key, i), 'must be {from, to, label}'); return; }
+      e.unknown(sh, ['from', 'to', 'label'], p(key, i));
+      for (const k of ['from', 'to'] as const) if (!isDate(sh[k])) e.add(p(key, i, k), `must be a date like "2026-03-15", got ${describe(sh[k])}`);
+      if (isDate(sh.from) && isDate(sh.to) && dayOf(sh.to) <= dayOf(sh.from)) e.add(p(key, i, 'to'), '"to" must come after "from"');
+      if (sh.label !== undefined && typeof sh.label !== 'string') e.add(p(key, i, 'label'), 'must be a string');
     });
   }
+  if (o.today !== undefined && !isDate(o.today)) e.add(p('today'), `must be a date like "2026-03-15", got ${describe(o.today)}`);
+  if (o.sizeLegend !== undefined && typeof o.sizeLegend !== 'boolean' && typeof o.sizeLegend !== 'string') e.add(p('sizeLegend'), `must be true, false or a caption, got ${describe(o.sizeLegend)}`);
 }
 
 const isDate = (v: unknown): v is string => typeof v === 'string' && parseCategoryDate(v) !== null;

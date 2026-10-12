@@ -5,7 +5,9 @@ The editor is two products in one file: the standalone web editor (a deck of cha
 The owner's bar for the add-in case: editing a chart's data must be easy and fast — open straight into
 the datasheet, the common edits one action away, Apply in one click.
 
-Screenshots: `docs/ux-shots/before-*.png` (as found) and `docs/ux-shots/after-*.png`.
+Screenshots: `docs/ux-shots/before-*.png` (as found) and `docs/ux-shots/after-*.png` — 1280×800,
+1024×700, 900×700, 2000×1100, gallery, context menu, colour picker, invalid cell, issue markers, dark,
+add-in session (editing and applied).
 
 ## Problems found → change → why
 
