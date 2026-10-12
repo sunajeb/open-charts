@@ -29,6 +29,9 @@ const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: Math.ma
 /** "bar:s1:c2" / "label:value:s1:c2" → "s1:c2"; "line:s1" → "s1". */
 const owner = (role: string) => role.match(/s\d+(:c\d+)?$/)?.[0] ?? null;
 
+/** "label:value:s1:c2" / "bar:s0:c2" → "c2". */
+const column = (role: string) => role.match(/:(c\d+)$/)?.[1] ?? null;
+
 function ownedBy(textRole: string, markRole: string): boolean {
   const t = owner(textRole), mk = owner(markRole);
   if (!t || !mk) return false;
@@ -77,6 +80,8 @@ export function checkScene(scene: Scene, options: number | CheckOptions = {}): I
     const lineLabel = lineOwners.has(owner(t.role)?.split(':')[0] ?? null);
     for (const mk of marks) {
       if (lineLabel && mk.role.startsWith('bar:') && within(t.s, bounds(mk.s))) continue;
+      // A boxed segment label (drawn on a rectangle of its segment's colour) may overlap its own column.
+      if (t.s.fill && t.role.startsWith('label:value:') && mk.role.startsWith('bar:') && column(t.role) === column(mk.role)) continue;
       if (!ownedBy(t.role, mk.role) && overlaps(t.s, bounds(mk.s), tol)) {
         issues.push({ kind: 'text-mark', detail: `"${t.s.text}" × ${mk.role}` });
       }
