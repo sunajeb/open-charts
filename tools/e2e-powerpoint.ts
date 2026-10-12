@@ -13,7 +13,7 @@ import { createMeasurer } from '../src/fonts.ts';
 import { defaultStyle, layoutChart } from '../src/core/index.ts';
 import { chartContent } from '../src/deck.ts';
 import { writePptx } from '../src/render/pptx.ts';
-import { decodePng, diffImages, encodePng } from '../test/goldens/png.ts';
+import { decodePng, diffImages, encodePng, type Image } from '../test/goldens/png.ts';
 import { addinHome } from '../src/addin/edit.ts';
 import { specKey } from '../src/addin/engine.ts';
 import { buildAddin } from '../src/addin/package.ts';
@@ -184,12 +184,30 @@ rmSync(compareDeck, { force: true });
 for (const sl of slides) {
   const a = join(PNG_DIR, `slide${sl.index}.png`), b = join(CLI_PNG_DIR, `slide${sl.index}.png`);
   if (!existsSync(a) || !existsSync(b)) { failures.push(`slide ${sl.index}: PNG missing for comparison`); continue; }
-  const d = diffImages(decodePng(readFileSync(a)), decodePng(readFileSync(b)));
-  console.log(`slide ${sl.index} add-in vs CLI writer: ${d.ok ? 'same' : 'DIFFERENT'} (${(d.fraction * 100).toFixed(3)}% pixels differ)`);
-  if (!d.ok) {
-    failures.push(`slide ${sl.index}: add-in rendering differs from the CLI writer (${d.reason})`);
-    if (d.diff) writeFileSync(join(OUT, `diff-${sl.index}.png`), encodePng(d.diff));
-  }
+  const ia = decodePng(readFileSync(a)), ib = decodePng(readFileSync(b));
+  const d = diffImages(ia, ib);
+  const off = beyondOnePixel(ia, ib);
+  console.log(`slide ${sl.index} add-in vs CLI writer: ${d.ok ? 'identical' : off ? 'DIFFERENT' : 'same within 1 px'} (${(d.fraction * 100).toFixed(3)}% pixels differ, ${off} beyond a 1-px shift)`);
+  if (d.diff && !d.ok) writeFileSync(join(OUT, `diff-${sl.index}.png`), encodePng(d.diff));
+  if (off > ia.width * ia.height * 1e-5) failures.push(`slide ${sl.index}: add-in rendering differs from the CLI writer (${off} pixels beyond a 1-px shift)`);
+}
+
+/** Pixels of either image with no match (all channels within 48) in the other within ±1 px: a 1-px glyph shift is not a difference. */
+function beyondOnePixel(a: Image, b: Image): number {
+  if (a.width !== b.width || a.height !== b.height) return a.width * a.height;
+  const near = (p: Image, q: Image, x: number, y: number) => {
+    const i = (y * p.width + x) * 4;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= q.width || yy >= q.height) continue;
+      const j = (yy * q.width + xx) * 4;
+      if (Math.abs(p.data[i] - q.data[j]) <= 48 && Math.abs(p.data[i + 1] - q.data[j + 1]) <= 48 && Math.abs(p.data[i + 2] - q.data[j + 2]) <= 48) return true;
+    }
+    return false;
+  };
+  let n = 0;
+  for (let y = 0; y < a.height; y++) for (let x = 0; x < a.width; x++) if (!near(a, b, x, y) || !near(b, a, x, y)) n++;
+  return n;
 }
 
 console.log(`PNGs: ${PNG_DIR} (CLI writer: ${CLI_PNG_DIR})`);

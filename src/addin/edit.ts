@@ -8,7 +8,9 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { serve } from '../server.ts';
-import type { PendingEdits } from './engine.ts';
+import { handleRequest, parseRequest, type PendingEdits } from './engine.ts';
+import { createMeasurer } from '../fonts.ts';
+import type { Measurer } from '../core/index.ts';
 
 export const EDIT_PORT = 4174;
 const EDITOR = new URL('../web/editor.html', import.meta.url);
@@ -93,6 +95,19 @@ export function editRoutes(home = addinHome()) {
       res.writeHead(200).end('open-charts');
       return true;
     }
+    if (req.method === 'POST' && url === '/api/addin/run') {
+      // The warm engine: same request and answer as `open-charts addin run`, without node's start-up.
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(handleRequest(parseRequest(Buffer.concat(chunks).toString('utf8')), measurer(), fileEdits(home)));
+      return true;
+    }
+    if (req.method === 'POST' && url === '/api/addin/quit') {
+      res.writeHead(204).end();
+      setImmediate(() => process.exit(0));
+      return true;
+    }
     let m = /^\/edit\/([0-9a-f]+)$/.exec(url);
     if (req.method === 'GET' && m && keyOk(m[1])) {
       const base = join(editsDir(home), `${m[1]}.base.json`);
@@ -120,6 +135,20 @@ export function editRoutes(home = addinHome()) {
   };
 }
 
+let cachedMeasurer: Measurer | undefined;
+const measurer = () => (cachedMeasurer ??= createMeasurer());
+
+/** The add-in's local server: warm engine, edit sessions and the editor. Exits after an idle hour. */
 export function serveEdits(port = EDIT_PORT) {
-  return serve(port, {}, editRoutes());
+  const routes = editRoutes();
+  let timer: NodeJS.Timeout | undefined;
+  const idle = () => { clearTimeout(timer); timer = setTimeout(() => process.exit(0), 60 * 60 * 1000); timer.unref(); };
+  idle();
+  measurer();
+  return serve(port, {}, (req, res) => { idle(); return routes(req, res); });
+}
+
+/** Stops a running add-in server (after an install, so the next call loads the new engine). */
+export async function stopServer(port = EDIT_PORT) {
+  try { await fetch(`http://127.0.0.1:${port}/api/addin/quit`, { method: 'POST', signal: AbortSignal.timeout(1000) }); } catch { /* not running */ }
 }

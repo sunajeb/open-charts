@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMeasurer } from '../fonts.ts';
 import { handleRequest, parseRequest } from './engine.ts';
-import { addinHome, fileEdits, serveEdits } from './edit.ts';
+import { addinHome, fileEdits, serveEdits, stopServer } from './edit.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
 
@@ -23,7 +23,7 @@ export const PPAM_DIR = join(homedir(), 'Library', 'Application Support', 'Micro
 export const SCRIPTS_DIR = join(homedir(), 'Library', 'Application Scripts', 'com.microsoft.Powerpoint');
 export const ADDIN_NAME = 'open-charts';
 
-export function addinMain(args: string[], opts: { out?: string; register?: boolean }): void {
+export function addinMain(args: string[], opts: { out?: string; register?: boolean }): void | Promise<void> {
   const [sub, arg] = args;
   switch (sub) {
     case 'run': {
@@ -57,8 +57,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
       return;
     }
     case 'install':
-      install(opts.register !== false);
-      return;
+      return stopServer().then(() => install(opts.register !== false));
     case 'uninstall':
       uninstall();
       return;

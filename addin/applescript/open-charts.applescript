@@ -10,10 +10,17 @@ property homeDir : "__HOME__"
 
 -- One request in, the engine's line-format response out (src/addin/engine.ts, format.ts).
 on engine(request)
+	set requestText to quoted form of request
+	-- 1. The warm engine: the add-in's local server, if it is running (fast path, no node start-up).
 	try
-		-- The request goes in on stdin (no temp file: file I/O from this context fails with -50).
-		set command to "printf '%s' " & quoted form of request & " | " & quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin run -"
-		return do shell script command without altering line endings
+		return do shell script "printf '%s' " & requestText & " | /usr/bin/curl -sf --connect-timeout 0.3 --max-time 30 --data-binary @- http://127.0.0.1:4174/api/addin/run" without altering line endings
+	end try
+	-- 2. Cold: answer with a one-off node process and start the server for the next call.
+	try
+		set nodeBin to quoted form of my findNode()
+		set engineArgs to " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin "
+		do shell script "nohup " & nodeBin & engineArgs & "serve > /dev/null 2>&1 &"
+		return do shell script "printf '%s' " & requestText & " | " & nodeBin & engineArgs & "run -" without altering line endings
 	on error message
 		return "OC" & tab & "1" & linefeed & "E" & tab & "The open-charts engine failed: " & my oneLine(message) & linefeed
 	end try

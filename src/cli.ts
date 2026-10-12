@@ -46,7 +46,7 @@ if (values.help) {
   console.log(USAGE);
 } else if (command === 'addin') {
   try {
-    addinMain(positionals.slice(1), { out: values.out, register: !values['no-register'] });
+    await addinMain(positionals.slice(1), { out: values.out, register: !values['no-register'] });
   } catch (err) {
     fail((err as Error).message);
   }
