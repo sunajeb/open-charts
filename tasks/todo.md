@@ -56,9 +56,9 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [ ] Later: user drag pins a label (needs a fixed-position field in the placer + add-in support)
 
 ## Wave 3 — verification
-- [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
-- [ ] CI runs unit + E2E + goldens on PRs
-- [ ] Review section below
+- [x] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye
+- [x] CI runs unit + editor E2E on push/PR; goldens nightly (Linux fonts differ from the Mac baselines)
+- [x] Review section below
 
 ## Open decisions (owner)
 - [x] Provenance: "clean-room" claim dropped (2026-10-13)
@@ -69,3 +69,10 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 ## Questions for the owner (collected overnight, 2026-10-13)
 - Optional: grant Accessibility permission to the terminal app (System Settings → Privacy & Security → Accessibility) so live PowerPoint tests can click their own "Enable Macros"/"OK" dialogs.
 - Old test entries vA–vD may still be listed in PowerPoint → Tools → PowerPoint Add-ins (files deleted); remove them with "−".
+
+### Final review (2026-10-13, open-charts 0.2.0)
+- **Scope delivered (lean first build):** all 17 chart types from the owner's list (+ step line, % axis variant) inserted into PowerPoint for Mac through a .ppam add-in built like the reference (ribbon + one thin VBA module + AppleScriptTask bridge to the engine, native shapes, OC_* tags); Edit data → datasheet editor → Apply updates the slide in place; resize re-lays out; CLI + web editor.
+- **Tests on master:** 253 unit, 67 editor E2E (every button), 35 LibreOffice goldens (each reviewed by eye), 3,172-layout resize matrix, perf budgets, docs examples validated; live PowerPoint E2E passed (19 gallery items, update, resize, edit→apply, export; add-in output matches the CLI writer within a few px). Acceptance report: docs/ACCEPTANCE.md.
+- **Timings (live):** insert median 0.86 s (VBA 0.50 s), first insert 1.3 s, update ~1 s, resize ~1 s, edit-data open 0.95 s, apply 1.9 s end to end.
+- **Not built (planned, by owner decision for the first build):** AI (P2 AI), data inputs / template fill / SDKs (P2), Office.js and native Windows add-ins (P3/P4), Excel links, agenda (P5), user label dragging. Gantt and tables are built at first-build depth.
+- **Known minor:** a few labels render 1–3 px differently between add-in and CLI decks in PowerPoint; at very small frames some labels are hidden (and reported) rather than overflowing.
