@@ -20,7 +20,7 @@ exported decks and PNGs). The images below are copied into `docs/acceptance/`.
 | 4 | Resize: small, wide, tall, below minimum, grow back | **Pass** |
 | 5 | Persistence: save, quit, reopen, Edit data, Update; ungroup | **Pass** (ungroup: no longer an open-charts chart, as expected) |
 | 6 | Interop: CLI decks open in PowerPoint; add-in deck imports | **Pass** |
-| 7 | Timings vs targets | Insert **pass** (cold 1.8 s is over 1.5 s); update **pass** in VBA, about 1 s by wall clock including AppleScript |
+| 7 | Timings vs targets | Insert **pass** (cold 1.8 s → 1.3 s after O5); update **pass** in VBA, about 1 s by wall clock including AppleScript |
 | 8 | Every ribbon control incl. nothing selected | **Pass** |
 
 Bugs fixed on this branch: 3 (see [Bugs](#bugs)). Open items: see [Open](#open-items).
@@ -93,7 +93,7 @@ access to documents and data in "Microsoft PowerPoint", and to perform actions w
 (Allow / Don't Allow). While it is unanswered, Apply does nothing to the slide: the server's
 `run VB macro` call times out after 60 s (`APPLY … failed: … AppleEvent timed out`) and the editor
 still says "Applied to slide". README and user guide now quote the real dialog and say **Allow**
-(7a006fa). See open item O1 for the editor message.
+(7a006fa). The editor now says so instead (O1, fixed).
 
 ## 4. Resize
 
@@ -147,7 +147,7 @@ Wall clock includes AppleScript `run VB macro` (about 0.3–0.4 s that a real ri
 | Operation | Wall clock | VBA (engine + draw) | Target | Verdict |
 |---|---|---|---|---|
 | PowerPoint start + new presentation | 5.2 s | — | — | — |
-| Cold first insert (server stopped, first macro after start) | 1.81 s (e2e 1.81 s) | 1.33 s (engine 0.83 s) | < 1.5 s | Over by ~0.3 s wall; VBA under |
+| Cold first insert (server stopped, first macro after start) | 1.81 s (e2e 1.81 s); after O5 1.23–1.36 s (e2e 1.31 s) | 1.33 s (engine 0.83 s); after O5 0.71–0.96 s (engine 0.22–0.37 s) | < 1.5 s | Pass after O5 (see below) |
 | Warm insert | median 0.88 s, max 1.16 s (e2e, n=18) | median 0.49 s | < 1.5 s | Pass |
 | Update chart | 0.77–1.06 s (n=4) | 0.41–0.63 s | < 1 s | Pass in VBA; ~1 s wall |
 | Edit data → session open | 0.93–1.11 s | 0.36 s | ~1 s | Pass |
@@ -185,17 +185,45 @@ Fixed on this branch:
 
 ## Open items
 
-- **O1 — Apply while macOS permission is unanswered or denied:** the editor says "Applied to slide"
-  although nothing happened (the server's AppleScript call times out after 60 s). A fix: the editor
-  waits for the add-in to report the session as drawn (the engine now sets it back to `open`) and,
-  after a few seconds, shows "Waiting for PowerPoint — if macOS asks whether PowerPoint may control
-  PowerPoint, click Allow", then "PowerPoint did not update the chart" on timeout. Not done here: it
-  changes the session contract and the editor's E2E tests, because the plain `open-charts serve` host never reports a session as drawn.
+- **O1 — Apply while macOS permission is unanswered or denied — fixed.** Was: the editor said "Applied
+  to slide" although nothing happened (the server's AppleScript call timed out after 60 s). Now the
+  session records the outcome: `applied` → `drawn` once `run VB macro` has returned with the chart
+  redrawn, or `error` with a message. The server's call has a 20 s timeout and never starts
+  PowerPoint. The add-in's server answers sessions with `confirms: true`; the editor then shows
+  "Updating the slide…", after 2.5 s "Waiting for PowerPoint… If macOS asks whether PowerPoint may
+  control PowerPoint, click Allow", and finally **Updated on slide** or, in a bar under the toolbar,
+  e.g. "PowerPoint did not respond. If macOS is asking whether PowerPoint may control PowerPoint, click
+  Allow in that dialog, then Apply again." / "macOS does not allow PowerPoint to be controlled (Don't
+  Allow was chosen). Turn it on in System Settings › Privacy & Security › Automation › Microsoft
+  PowerPoint, then Apply again." / "PowerPoint isn't running. Open the presentation, click the chart
+  once, then Apply again." / "PowerPoint could not find the chart…". Plain hosts (`open-charts serve`)
+  keep "Applied to slide". ApplyEdit no longer shows a dialog (it would block the server's call).
+  Contract in `docs/ux-editor.md`. Tests: unit (each outcome and message, rev races), editor E2E
+  against a host that confirms through `onSession` (drawn, permission timeout, not running), and live
+  `e2e:powerpoint`: Apply → session `drawn` (`APPLIED … OK (629 ms)`, 2.25 s from Apply to `drawn`
+  including osascript); Apply after quitting PowerPoint → `error: PowerPoint isn't running…`, and
+  PowerPoint stays closed. The permission prompt was already allowed on this Mac, so the timeout path
+  is covered by the simulated host, not live.
 - **O2 — Cosmetic layout:** combo line labels inside bars; pie "3%" box wider than its slice; boxed
   segment labels wider than narrow columns (section 2).
-- **O3 — Ungrouped chart message:** says "Select an open-charts chart first", which is confusing when
-  the user has a piece of a former chart selected.
+- **O3 — Ungrouped chart message — fixed.** A selected shape that carries `OC_ROLE` with no group
+  carrying `OC_SPEC` (ungrouped, or regrouped) now gets "This chart was ungrouped, so it can't be
+  edited as a chart. Undo (⌘Z) the ungroup or insert it again." from Edit data and Update chart; the
+  buttons stay enabled for such a selection so the click can explain. Live `e2e:powerpoint` ungroups a
+  chart, selects a piece and checks the message (`RESULT btnEditData This chart was ungrouped…`).
 - **O4 — Example content:** `examples/deck.json` (and the editor's sample deck) titles "Revenue grew
   2.4x in four years" over data that grows 2.2x. Changing the text needs a golden re-baseline.
-- **O5 — Cold insert** is 1.8 s wall clock (1.3 s in VBA) against the 1.5 s target, because the
-  server is started on the first call.
+- **O5 — Cold insert — fixed.** Was 1.8 s wall clock (1.3 s in VBA), because the first call ran a
+  one-off node while starting the server. Profile of that call: engine 0.73–1.16 s in VBA, of which
+  node + layout is only ~0.25 s (`addin run` from a shell; a fresh server answers its first request in
+  14 ms and is up 0.27 s after spawn); the rest is the first AppleScriptTask (loading the bridge
+  script, `findNode`, the parallel server spawn). Font metrics were already cached and node's compile
+  cache gave nothing measurable. Fix: the ribbon's onLoad calls a new bridge handler `startServer`
+  that spawns the warm server in the background if it is not up (returns in ~0.1 s), so the first
+  insert takes the curl fast path and the bridge script is already loaded. Not from Auto_Open: an
+  AppleScriptTask while PowerPoint is launching made `register add in` fail (-43) during
+  `addin install`. Live, first insert right after starting PowerPoint (n=3 each, same machine):
+  before 1.72–2.41 s wall, VBA 1.24–1.80 s (engine 0.73–1.16 s); after 1.23–1.36 s wall (one
+  2.27 s outlier inside AppleScript's `run VB macro`, which a ribbon click does not pay), VBA
+  0.71–0.96 s (engine 0.22–0.37 s). `e2e:powerpoint`: first insert 1.31 s (was 1.81 s), warm median
+  0.89 s.
