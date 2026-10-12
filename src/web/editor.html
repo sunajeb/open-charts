@@ -6,182 +6,353 @@
 <title>open-charts editor</title>
 <style>
   :root {
-    --bg: #f3f4f1; --panel: #ffffff; --ink: #1c2330; --muted: #5f6877; --rule: #dde0da;
-    --accent: #1f3a5f; --accent-soft: #e6edf6; --warn: #b4541c; --warn-soft: #fbeee4;
+    --bg: #eef0ec; --panel: #ffffff; --panel-2: #f7f8f5; --ink: #1c2330; --muted: #5f6877; --faint: #8a919c;
+    --rule: #dcdfd8; --rule-strong: #c3c8bf; --accent: #1f3a5f; --accent-ink: #ffffff; --accent-soft: #e4ecf6;
+    --sel: #d6e3f3; --warn: #a8461a; --warn-soft: #fbece2; --ok: #2f6b45; --ok-soft: #e5f2e9;
+    --err: #b42318; --err-soft: #fdecea; --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 4px 16px rgba(20, 28, 40, .06);
+    --pop-shadow: 0 8px 28px rgba(20, 28, 40, .18), 0 1px 3px rgba(20, 28, 40, .12);
     --font: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --mono: ui-monospace, Menlo, Consolas, monospace;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --side: clamp(272px, 24vw, 340px);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181d; --panel: #1d2128; --panel-2: #242931; --ink: #e7e9ec; --muted: #a2a9b4; --faint: #7d8592;
+      --rule: #333a44; --rule-strong: #46505c; --accent: #7fa3cc; --accent-ink: #0e1724; --accent-soft: #24344a;
+      --sel: #2b405c; --warn: #f0a070; --warn-soft: #3a2a20; --ok: #8fd1a5; --ok-soft: #1f3327;
+      --err: #ff8a80; --err-soft: #3d2222; --shadow: none; --pop-shadow: 0 8px 28px rgba(0, 0, 0, .5);
+      color-scheme: dark;
+    }
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
-  body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); }
-  header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
-  header h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .01em; }
-  .tabs { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
-  .tab { border: 1px solid var(--rule); background: var(--panel); padding: 5px 10px; border-radius: 6px; cursor: pointer; font: inherit; color: var(--muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tab[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
-  button { font: inherit; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-  button:hover:not(:disabled) { border-color: var(--muted); }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 13px/1.45 var(--font); display: flex; flex-direction: column; min-width: 0; }
+  button, input, select { font: inherit; color: inherit; }
+  button { border: 1px solid var(--rule-strong); background: var(--panel); padding: 5px 10px; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; line-height: 1.3; }
+  button:hover:not(:disabled) { border-color: var(--muted); background: var(--panel-2); }
   button:disabled { opacity: .45; cursor: default; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-  main { display: grid; grid-template-columns: minmax(360px, 460px) 1fr; gap: 16px; padding: 16px; align-items: start; }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  section { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0; }
-  label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-  input, select { font: inherit; color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; background: #fff; min-width: 0; }
-  .grid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-  .checks { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
-  .check { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
-  .range { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  button.primary:hover:not(:disabled) { background: var(--accent); filter: brightness(1.12); }
+  button.ghost { border-color: transparent; background: transparent; }
+  button.ghost:hover:not(:disabled) { border-color: var(--rule); }
+  button.icon { padding: 5px 7px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  input, select { border: 1px solid var(--rule-strong); border-radius: 6px; padding: 5px 8px; background: var(--panel); min-width: 0; width: 100%; }
+  input[type="checkbox"] { width: auto; accent-color: var(--accent); margin: 0; }
+  svg.ico { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  kbd { font: 11px var(--mono); border: 1px solid var(--rule-strong); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--muted); }
+
+  /* ---- Top bar ---- */
+  .topbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--rule); min-width: 0; flex: none; }
+  .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 14px; letter-spacing: .01em; white-space: nowrap; }
+  .brand svg { width: 20px; height: 20px; }
+  .slides { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+  .tabs { display: flex; gap: 4px; overflow-x: auto; min-width: 0; scrollbar-width: thin; padding: 2px; }
+  .tab { border: 1px solid var(--rule); background: var(--panel); padding: 4px 10px; border-radius: 6px; color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; display: block; flex: none; }
+  .tab[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); font-weight: 600; }
+  .session-title { flex: 1; min-width: 0; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session-title b { color: var(--ink); }
+  .actions { display: flex; gap: 6px; align-items: center; flex: none; }
+  .status { font-size: 12px; color: var(--muted); white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; }
+  .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+  .status[data-state="dirty"] .dot { background: var(--warn); }
+  .status[data-state="applied"] .dot { background: var(--ok); }
+
+  /* ---- App shell: work area (preview over datasheet) + options sidebar ---- */
+  .app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--side); }
+  .work { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(180px, var(--split, 52%)) 10px minmax(150px, 1fr); padding: 12px 0 12px 12px; }
+  .side { min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .panel { background: var(--panel); border: 1px solid var(--rule); border-radius: 10px; box-shadow: var(--shadow); min-width: 0; min-height: 0; }
+  .work > .panel { display: flex; flex-direction: column; overflow: hidden; }
+  .panel-head { display: flex; align-items: center; gap: 8px; padding: 5px 8px 5px 14px; border-bottom: 1px solid var(--rule); min-width: 0; flex-wrap: wrap; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0; font-weight: 700; }
+  .grow { flex: 1; }
+  .splitter { cursor: row-resize; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+  .splitter::before { content: ""; width: 44px; height: 4px; border-radius: 2px; background: var(--rule-strong); }
+  .splitter:hover::before, .splitter:focus-visible::before { background: var(--accent); }
+  @media (max-width: 899px) {
+    body { height: auto; }
+    .app { display: block; }
+    .work { display: flex; flex-direction: column; gap: 12px; padding: 12px; }
+    .work > .preview-panel { height: 60vh; min-height: 300px; }
+    .work > .sheet-panel { max-height: 70vh; }
+    .splitter { display: none; }
+    .side { overflow: visible; }
+  }
+
+  /* ---- Preview ---- */
+  .zoom { display: flex; align-items: center; gap: 2px; }
+  .zoom output { min-width: 64px; text-align: center; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .stage { position: relative; flex: 1; min-height: 0; overflow: hidden; display: grid; place-items: center; padding: 8px; background: var(--panel-2); }
+  .stage.zoomed { overflow: auto; place-items: start; }
+  .canvas { position: relative; box-shadow: 0 1px 3px rgba(0, 0, 0, .18), 0 6px 24px rgba(0, 0, 0, .08); background: #fff; transition: opacity .15s; }
+  .preview svg { width: 100%; height: 100%; display: block; }
+  #marks { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+  #marks .box { fill: none; stroke: #d92d20; stroke-width: 1.2; stroke-dasharray: 3 2; }
+  #marks .badge circle { fill: #d92d20; }
+  #marks .badge text { fill: #fff; font: 700 9px var(--font); text-anchor: middle; dominant-baseline: central; }
+  #marks .pulse .box { stroke-width: 2.5; stroke-dasharray: none; animation: pulse 0.5s ease-in-out 3 alternate; }
+  @keyframes pulse { from { stroke-opacity: 1; } to { stroke-opacity: .2; } }
+  .stale .canvas { opacity: .45; }
+  .banner { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: var(--err-soft); color: var(--err); border: 1px solid currentColor; border-radius: 6px; padding: 4px 10px; font-size: 12px; font-weight: 600; z-index: 2; white-space: nowrap; }
+  .loading { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); gap: 10px; align-content: center; background: var(--panel); z-index: 3; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 2.5px solid var(--rule); border-top-color: var(--accent); animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .issues { margin: 0; padding: 6px 10px; list-style: none; display: flex; flex-direction: column; gap: 3px; font-size: 12px; max-height: 72px; overflow-y: auto; border-top: 1px solid var(--rule); flex: none; }
+  .issues:empty { display: none; }
+  .issues li { background: var(--warn-soft); color: var(--warn); padding: 2px 8px; border-radius: 5px; display: flex; gap: 8px; align-items: baseline; }
+  .issues li[data-n]::before { content: attr(data-n); flex: none; background: #d92d20; color: #fff; border-radius: 9px; min-width: 17px; height: 17px; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; }
+  .issues li[tabindex] { cursor: pointer; }
+  .issues li[tabindex]:hover { filter: brightness(.97); text-decoration: underline; }
+  .issues li.ok { background: var(--ok-soft); color: var(--ok); }
+  .issues li.info { background: var(--panel-2); color: var(--muted); }
+  .issues li.error { background: var(--err-soft); color: var(--err); font-weight: 600; white-space: pre-line; }
+
+  /* ---- Datasheet ---- */
+  .sheet-tools { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; padding: 6px 10px; border-bottom: 1px solid var(--rule); background: var(--panel-2); }
+  .sheet-tools .sep { width: 1px; align-self: stretch; background: var(--rule); margin: 2px 4px; }
+  .sheet-tools button { padding: 4px 8px; font-size: 12px; }
+  .hint { font-size: 12px; color: var(--muted); margin: 0; min-width: 0; }
+  .help { width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--rule-strong); display: inline-grid; place-items: center; font-size: 11px; color: var(--muted); cursor: help; flex: none; }
+  .sheet-wrap { overflow: auto; flex: 1; min-height: 0; }
+  table#sheet { border-collapse: separate; border-spacing: 0; font-variant-numeric: tabular-nums; }
+  #sheet td, #sheet th { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 0; background: var(--panel); position: relative; }
+  #sheet th { background: var(--panel-2); position: sticky; top: 0; z-index: 2; }
+  #sheet td.name, #sheet th.corner { position: sticky; left: 0; z-index: 1; background: var(--panel-2); }
+  #sheet th.corner { z-index: 3; }
+  #sheet input { border: 0; border-radius: 0; width: 8ch; padding: 6px 8px; background: transparent; outline: none; }
+  #sheet td input { text-align: right; font-family: var(--mono); font-size: 12.5px; }
+  #sheet td.name input { text-align: left; font-family: var(--font); width: 150px; font-weight: 600; font-size: 13px; padding-left: 4px; }
+  #sheet th input { font-weight: 600; text-align: center; }
+  #sheet th.corner input { width: 180px; font-size: 11px; font-weight: 400; text-align: left; color: var(--faint); cursor: default; }
+  #sheet .name-cell { display: flex; align-items: center; padding-left: 6px; }
+  #sheet .swatch { width: 14px; height: 14px; padding: 0; border-radius: 3px; border: 1px solid rgba(0, 0, 0, .25); flex: none; }
+  #sheet .swatch:hover { transform: scale(1.15); }
+  #sheet .sel { background: var(--sel); }
+  #sheet td:focus-within, #sheet th:focus-within { box-shadow: inset 0 0 0 2px var(--accent); z-index: 4; }
+  #sheet input[aria-invalid="true"] { background: var(--err-soft); color: var(--err); }
+  #sheet td:has(input[aria-invalid="true"])::after { content: ""; position: absolute; top: 0; right: 0; border: 4px solid var(--err); border-left-color: transparent; border-bottom-color: transparent; }
+  #sheet .add-col, #sheet .add-row { background: transparent; border: 0; }
+  #sheet .add-col button, #sheet .add-row button { border: 1px dashed var(--rule-strong); color: var(--muted); background: transparent; font-size: 12px; padding: 3px 8px; margin: 3px 6px; }
+  #sheet .add-row td { border: 0; background: transparent; position: sticky; left: 0; }
+  #sheet th.add-col { background: var(--panel); border-bottom: 0; }
+  #sheet td.add-col { border-bottom: 0; }
+
+  /* ---- Options sidebar ---- */
+  .side .panel { padding: 0; flex: none; }
+  .side summary, .side .sec-head { list-style: none; display: flex; align-items: center; gap: 6px; padding: 10px 14px; cursor: pointer; user-select: none; }
+  .side .sec-head { cursor: default; }
+  .side summary::-webkit-details-marker { display: none; }
+  .side summary::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+  .side details:not([open]) summary::after { transform: rotate(-45deg); }
+  .sec-body { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); min-width: 0; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .check { display: flex; flex-direction: row; align-items: center; gap: 8px; color: var(--ink); font-size: 13px; cursor: pointer; }
+  .range { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .range > span { grid-column: 1 / -1; font-size: 12px; color: var(--muted); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px 12px; }
   .chips .check { font-size: 12px; }
-  .sheet-wrap { overflow: auto; border: 1px solid var(--rule); border-radius: 8px; max-height: 420px; }
-  table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
-  td, th { border: 1px solid var(--rule); padding: 0; }
-  th { background: #f7f8f5; }
-  td input, th input { border: 0; border-radius: 0; width: 84px; padding: 6px 8px; background: transparent; }
-  td input { text-align: right; font-family: var(--mono); font-size: 13px; }
-  td.name input { text-align: left; font-family: var(--font); width: 140px; font-weight: 600; }
-  th input { font-weight: 600; text-align: center; }
-  th.corner input { width: 140px; font-size: 11px; font-weight: 400; text-align: left; color: var(--muted); }
-  #sheet input[aria-invalid="true"] { background: var(--warn-soft); color: var(--warn); }
-  #sheet input:focus { background: var(--accent-soft); outline: none; }
-  .row { display: flex; gap: 6px; flex-wrap: wrap; }
-  .hint { font-size: 12px; color: var(--muted); margin: 0; }
-  .preview { background: #fff; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
-  .preview.stale { opacity: .4; }
-  .preview svg { width: 100%; height: auto; display: block; }
-  .issues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
-  .issues li { background: var(--warn-soft); color: var(--warn); padding: 4px 8px; border-radius: 4px; }
-  .issues li.ok { background: var(--accent-soft); color: var(--accent); }
-  .issues li.info { background: #f1f2ef; color: var(--muted); }
-  .issues li.error { font-weight: 600; white-space: pre-line; }
+  .type-btn { width: 100%; justify-content: flex-start; padding: 6px 10px; gap: 10px; }
+  .type-btn .gal-ico { width: 40px; height: 28px; }
+  .type-btn .t { font-weight: 600; }
+  .type-btn::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg) translateY(-2px); }
+
+  /* ---- Popovers: gallery, colour, context menu, tooltip, toast ---- */
+  .pop { position: fixed; z-index: 50; background: var(--panel); border: 1px solid var(--rule-strong); border-radius: 10px; box-shadow: var(--pop-shadow); }
+  #gallery { padding: 12px; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px 14px; }
+  #gallery h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+  #gallery .group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 4px; }
+  .gal-item { flex-direction: column; gap: 4px; padding: 6px 4px; font-size: 11px; border-color: transparent; background: transparent; white-space: normal; text-align: center; }
+  .gal-item[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+  .gal-ico { width: 48px; height: 32px; display: block; }
+  .gal-ico .i1 { fill: #1F3A5F; } .gal-ico .i2 { fill: #3E6A9E; } .gal-ico .i3 { fill: #7FA3CC; } .gal-ico .i4 { fill: #B9CDE5; }
+  .gal-ico .ln { fill: none; stroke: #1F3A5F; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .gal-ico .ln2 { fill: none; stroke: #7FA3CC; stroke-width: 2; stroke-linejoin: round; }
+  .gal-ico .ax { stroke: #8a919c; stroke-width: 1; }
+  .gal-ico .bg { fill: #eef1f5; }
+  #colorPop { padding: 10px; width: 216px; display: flex; flex-direction: column; gap: 8px; }
+  #colorPop .swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  #colorPop .swatches button { width: 24px; height: 24px; padding: 0; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .2); }
+  #colorPop .swatches button[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 2px; }
+  #colorPop .hexrow { display: flex; gap: 6px; }
+  #colorPop .hexrow input { font-family: var(--mono); }
+  #colorPop .lbl { font-size: 11px; color: var(--muted); }
+  #ctxMenu { padding: 4px; min-width: 220px; display: flex; flex-direction: column; }
+  #ctxMenu button { border: 0; background: transparent; justify-content: flex-start; border-radius: 5px; padding: 6px 10px; width: 100%; }
+  #ctxMenu button:hover:not(:disabled), #ctxMenu button:focus-visible { background: var(--accent-soft); outline: none; }
+  #ctxMenu hr { border: 0; border-top: 1px solid var(--rule); margin: 4px 2px; }
+  #tip { position: fixed; z-index: 60; max-width: 280px; background: #1c2330; color: #fff; font-size: 12px; padding: 5px 8px; border-radius: 6px; pointer-events: none; box-shadow: var(--pop-shadow); }
+  #cellTip { position: fixed; z-index: 55; max-width: 320px; background: var(--err); color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 5px; pointer-events: none; }
+  #toast { position: fixed; z-index: 70; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ok); color: #fff; padding: 8px 16px; border-radius: 8px; font-weight: 600; box-shadow: var(--pop-shadow); display: flex; gap: 8px; align-items: center; }
+  #toast.warn { background: var(--err); }
+  .fatal { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; background: var(--bg); padding: 24px; }
+  .fatal .card { max-width: 440px; background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 24px; box-shadow: var(--pop-shadow); }
+  .fatal h2 { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--ink); margin-bottom: 8px; }
+  .fatal p { color: var(--muted); margin: 0; }
 </style>
 </head>
 <body>
-<header>
-  <h1>open-charts</h1>
-  <div class="tabs" id="tabs" role="tablist" aria-label="Slides"></div>
-  <button id="addSlide" type="button" title="Duplicate this slide after the current one">+ Slide</button>
-  <button id="delSlide" type="button">Delete slide</button>
-  <button id="importBtn" type="button">Import JSON</button>
-  <input id="importFile" type="file" accept=".json,application/json" hidden>
-  <button id="exportBtn" type="button">Export JSON</button>
-  <button id="downloadBtn" class="primary" type="button">Download .pptx</button>
+<header class="topbar">
+  <div class="brand"><svg viewBox="0 0 20 20" aria-hidden="true"><rect x="2" y="9" width="4" height="9" fill="#7FA3CC"/><rect x="8" y="5" width="4" height="13" fill="#3E6A9E"/><rect x="14" y="2" width="4" height="16" fill="#1F3A5F"/></svg>open-charts</div>
+  <div class="slides" data-mode="deck">
+    <div class="tabs" id="tabs" role="tablist" aria-label="Slides"></div>
+    <button id="addSlide" class="ghost icon" type="button" aria-label="Add slide" data-tip="Duplicate this slide after the current one"><svg class="ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
+    <button id="delSlide" class="ghost icon" type="button" aria-label="Delete slide" data-tip="Delete this slide"><svg class="ico" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
+  </div>
+  <div class="session-title" data-mode="session" id="sessionTitle">Chart data from PowerPoint</div>
+  <div class="actions">
+    <span class="status" id="status" role="status" aria-live="polite" data-mode="session"><span class="dot"></span><span id="statusText">Loading…</span></span>
+    <button id="importBtn" type="button" data-mode="deck" data-tip="Open a deck or chart JSON file">Import JSON</button>
+    <input id="importFile" type="file" accept=".json,application/json" hidden>
+    <button id="exportBtn" type="button" data-mode="deck" data-tip="Save the deck as JSON (the source of truth for every chart)">Export JSON</button>
+    <button id="downloadBtn" class="primary" type="button" data-mode="deck"><svg class="ico" viewBox="0 0 16 16"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Download .pptx</button>
+    <button id="cancelBtn" type="button" data-mode="session" data-tip="Close without changing the slide (Esc twice)">Cancel</button>
+    <button id="applyBtn" class="primary" type="button" data-mode="session" aria-keyshortcuts="Meta+Enter Control+Enter">Apply to slide <kbd style="color:inherit;border-color:currentColor;opacity:.8">⌘↵</kbd></button>
+  </div>
 </header>
 
-<main>
-  <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
-    <section>
-      <h2>Slide</h2>
-      <label>Title<input id="title" type="text"></label>
-      <div class="grid2">
-        <label>Chart type
-          <select id="type">
-            <option value="stacked">Stacked</option>
-            <option value="percent">100%</option>
-            <option value="clustered">Clustered</option>
-            <option value="line">Line</option>
-            <option value="waterfall">Waterfall</option>
-            <option value="mekko">Mekko</option>
-            <option value="area">Stacked area</option>
-            <option value="area100">100% area</option>
-            <option value="pie">Pie</option>
-            <option value="doughnut">Doughnut</option>
-            <option value="harvey">Harvey balls</option>
-            <option value="combo">Combination</option>
-            <option value="mekkoxy">Mekko XY</option>
-            <option value="scatter">Scatter</option>
-            <option value="bubble">Bubble</option>
-            <option value="table">Table</option>
-            <option value="gantt">Gantt</option>
-          </select>
-        </label>
-        <label data-hide="pie harvey gantt">Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
-        <label data-hide="harvey gantt">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
-        <label data-for="stacked percent clustered line waterfall mekko area area100 pie doughnut combo mekkoxy scatter bubble gantt">Series labels
-          <select id="seriesLabels">
-            <option value="">Auto</option>
-            <option value="right">Right of chart</option>
-            <option value="legend">Legend</option>
-            <option value="none">None</option>
-          </select>
-        </label>
-        <label data-for="stacked percent clustered waterfall combo">Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
-        <label data-for="line scatter bubble">Axis start
-          <select id="zeroBased">
-            <option value="">Auto</option>
-            <option value="true">Zero</option>
-            <option value="false">Fit data</option>
-          </select>
-        </label>
-        <label data-for="mekko">Mekko heights
-          <select id="mekko">
-            <option value="percent">100% (share)</option>
-            <option value="unit">Absolute</option>
-          </select>
-        </label>
-        <label data-for="combo">Columns
-          <select id="combo">
-            <option value="stacked">Stacked</option>
-            <option value="clustered">Clustered</option>
-          </select>
-        </label>
-        <label data-for="mekkoxy">Order
-          <select id="sort">
-            <option value="sheet">Sheet order</option>
-            <option value="reverse">Reverse</option>
-            <option value="ascending">Ascending height</option>
-            <option value="descending">Descending height</option>
-          </select>
-        </label>
-        <label data-for="scatter bubble">X axis title<input id="xTitle" type="text"></label>
-        <label data-for="scatter bubble">Y axis title<input id="yTitle" type="text"></label>
-        <div class="checks">
-          <label class="check" data-for="stacked percent mekko area doughnut combo mekkoxy"><input id="totals" type="checkbox"> Totals</label>
-          <label class="check" data-hide="pie doughnut harvey scatter bubble table gantt"><input id="valueAxis" type="checkbox"> Value axis</label>
-          <label class="check" data-for="line"><input id="step" type="checkbox"> Step line</label>
-          <label class="check" data-for="percent" title="The datasheet holds percentages: columns keep their own totals"><input id="percentData" type="checkbox"> Values are %</label>
+<div class="app">
+  <main class="work" id="work">
+    <section class="panel preview-panel" id="previewPanel" aria-label="Preview">
+      <div class="panel-head">
+        <h2>Preview</h2>
+        <span class="grow"></span>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button id="zoomOut" class="ghost icon" type="button" aria-label="Zoom out"><svg class="ico" viewBox="0 0 16 16"><path d="M3.5 8h9"/></svg></button>
+          <output id="zoomLabel" aria-live="polite">Fit</output>
+          <button id="zoomIn" class="ghost icon" type="button" aria-label="Zoom in"><svg class="ico" viewBox="0 0 16 16"><path d="M8 3.5v9M3.5 8h9"/></svg></button>
+          <button id="zoomFit" class="ghost" type="button" data-tip="Fit the slide to the preview">Fit</button>
+          <button id="zoom100" class="ghost" type="button" data-tip="Show the slide at 100% (960 × 540 pt)">100%</button>
         </div>
       </div>
-      <div class="range" data-for="stacked percent"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select></div>
-      <div class="range" data-for="stacked percent"><span>Difference arrow</span><select id="diffFrom" aria-label="Difference from"></select><select id="diffTo" aria-label="Difference to"></select></div>
-      <div data-for="waterfall" style="display:flex;flex-direction:column;gap:4px">
-        <span class="hint">Total columns (drawn from the baseline)</span>
-        <div class="chips" id="totalsAt"></div>
+      <div class="stage" id="stage">
+        <div class="banner" id="staleBanner" hidden>Preview out of date — fix the error below</div>
+        <div class="canvas" id="canvas"><div class="preview" id="preview"></div><svg id="marks" viewBox="0 0 960 540" aria-hidden="true"></svg></div>
+        <div class="loading" id="loading"><div class="spinner"></div><span id="loadingText">Rendering preview…</span></div>
       </div>
-      <div data-for="combo" style="display:flex;flex-direction:column;gap:4px">
-        <span class="hint">Series drawn as lines</span>
-        <div class="chips" id="asLine"></div>
+      <ul class="issues" id="issues" aria-live="polite" aria-label="Layout check"></ul>
+    </section>
+    <div class="splitter" id="splitter" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Resize preview and datasheet" aria-valuemin="10" aria-valuemax="90"></div>
+    <section class="panel sheet-panel" aria-label="Datasheet">
+      <div class="panel-head">
+        <h2>Datasheet</h2>
+        <p class="hint" id="sheetHint"></p>
+        <span class="grow"></span>
+        <span class="help" tabindex="0" aria-label="Datasheet help" data-tip="Type or paste numbers (Excel ranges paste as a block; paste into the top-left cell to replace the whole table). Tab, Enter and arrows move; Shift+arrows or drag select a range; ⌘C/⌘X/Delete work on the range; right-click for insert/delete; ⌘Z undoes.">?</span>
+      </div>
+      <div class="sheet-tools" role="toolbar" aria-label="Datasheet tools">
+        <button id="undoBtn" class="icon" type="button" aria-label="Undo" aria-keyshortcuts="Meta+Z Control+Z" data-tip="Undo (⌘Z)"><svg class="ico" viewBox="0 0 16 16"><path d="M5.5 3 2.5 6l3 3M2.5 6H10a3.5 3.5 0 0 1 0 7H7"/></svg></button>
+        <button id="redoBtn" class="icon" type="button" aria-label="Redo" aria-keyshortcuts="Meta+Shift+Z Control+Y" data-tip="Redo (⇧⌘Z)"><svg class="ico" viewBox="0 0 16 16"><path d="M10.5 3l3 3-3 3M13.5 6H6a3.5 3.5 0 0 0 0 7h3"/></svg></button>
+        <span class="sep"></span>
+        <button id="addSer" type="button" data-tip="Add a series (row) at the bottom">+ Series</button>
+        <button id="addCat" type="button" data-tip="Add a category (column) at the end">+ Category</button>
+        <button id="delSer" type="button" data-tip="Delete the series (row) of the selected cell">− Series</button>
+        <button id="delCat" type="button" data-tip="Delete the category (column) of the selected cell">− Category</button>
+        <span class="sep"></span>
+        <button id="transpose" type="button" data-tip="Swap categories and series">Transpose</button>
+        <button id="reverse" type="button" data-tip="Reverse the order of the series">Reverse series</button>
+      </div>
+      <div class="sheet-wrap" id="sheetWrap"><table id="sheet" aria-label="Chart data"></table></div>
+    </section>
+  </main>
+
+  <aside class="side" id="side" aria-label="Chart options">
+    <section class="panel" data-section>
+      <div class="sec-head"><h2>Chart</h2></div>
+      <div class="sec-body">
+        <button id="typeBtn" class="type-btn" type="button" aria-haspopup="dialog" aria-expanded="false" data-tip="Chart type — the data carries over where the shapes match"></button>
+        <label class="field ctl" data-mode="deck" data-tip="Slide title above the chart (the action title)">Slide title<input id="title" type="text" autocomplete="off"></label>
+        <label class="check ctl" data-for="stacked clustered percent" data-tip="Draw the categories as horizontal bars instead of columns"><input id="orientation" type="checkbox"> Horizontal bars</label>
+        <div class="field ctl" data-for="combo" data-tip="Series drawn as a line on top of the columns">Series drawn as lines<div class="chips" id="asLine"></div></div>
       </div>
     </section>
 
-    <section>
-      <h2>Datasheet</h2>
-      <p class="hint" id="sheetHint" hidden></p>
-      <p class="hint">Paste a block from Excel into any cell; pasting into the top-left cell reads the first row as categories and the first column as series names. Arrow keys and Enter move between cells. − removes the row or column of the selected cell.</p>
-      <div class="sheet-wrap"><table id="sheet"></table></div>
-      <div class="row">
-        <button id="addCat" type="button">+ Category</button>
-        <button id="addSer" type="button">+ Series</button>
-        <button id="delCat" type="button">− Category</button>
-        <button id="delSer" type="button">− Series</button>
-        <button id="transpose" type="button" title="Swap categories and series">Transpose</button>
-        <button id="reverse" type="button" title="Reverse the order of the series">Reverse series</button>
+    <details class="panel" open data-section>
+      <summary><h2>Numbers</h2></summary>
+      <div class="sec-body">
+        <div class="pair">
+          <label class="field ctl" data-hide="pie harvey gantt" data-tip="Text added to every value label, e.g. m, %, bn or $">Unit<input id="unit" type="text" placeholder="m, k, %" autocomplete="off"></label>
+          <label class="field ctl" data-hide="harvey gantt" data-tip="Digits after the decimal point; empty = automatic">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
+        </div>
+        <label class="check ctl" data-hide="pie harvey gantt" data-tip="Put the unit before the number, e.g. $12 instead of 12$"><input id="unitPrefix" type="checkbox"> Unit before the number</label>
+        <div class="pair">
+          <label class="field ctl" data-hide="harvey gantt" data-tip="Divide the values by a thousand, million or billion and add k / m / bn">Magnitude
+            <select id="scale"><option value="">None</option><option value="auto">Auto</option><option value="k">Thousands (k)</option><option value="m">Millions (m)</option><option value="bn">Billions (bn)</option></select>
+          </label>
+          <label class="field ctl" data-hide="harvey" data-tip="Decimal and thousands separators of the labels">Separators
+            <select id="locale"><option value="">1,234.5 (US)</option><option value="en-GB">1,234.5 (UK)</option><option value="en-IN">1,23,456.5 (India)</option><option value="de-DE">1.234,5 (DE)</option><option value="fr-FR">1 234,5 (FR)</option></select>
+          </label>
+        </div>
+        <label class="field ctl" data-hide="harvey gantt" data-tip="Excel number format code, e.g. #,##0.0;(#,##0.0) — overrides decimals; applied on Enter">Number format<input id="format" type="text" placeholder="e.g. #,##0.0" autocomplete="off" spellcheck="false"></label>
+        <label class="check ctl" data-for="percent" data-tip="The datasheet already holds percentages: each column keeps its own total"><input id="percentData" type="checkbox"> Values are %</label>
       </div>
-    </section>
-  </div>
+    </details>
 
-  <section>
-    <h2>Preview</h2>
-    <div class="preview" id="preview"></div>
-    <ul class="issues" id="issues" aria-live="polite"></ul>
-  </section>
-</main>
+    <details class="panel" open data-section>
+      <summary><h2>Axes &amp; layout</h2></summary>
+      <div class="sec-body">
+        <label class="check ctl" data-hide="pie doughnut harvey scatter bubble table gantt" data-tip="Show a value axis with gridlines next to the chart"><input id="valueAxis" type="checkbox"> Value axis</label>
+        <label class="check ctl" data-for="line" data-tip="Draw the line as horizontal steps between categories"><input id="step" type="checkbox"> Step line</label>
+        <label class="field ctl" data-for="line scatter bubble" data-tip="Start the value axis at zero, or fit it to the range of the data">Axis start
+          <select id="zeroBased"><option value="">Auto</option><option value="true">Zero</option><option value="false">Fit data</option></select>
+        </label>
+        <label class="field ctl" data-for="stacked percent clustered waterfall combo" data-tip="Gap between columns as a share of the column width (0–2)">Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
+        <label class="field ctl" data-for="mekko" data-tip="Column heights as shares of 100% or in absolute units">Mekko heights
+          <select id="mekko"><option value="percent">100% (share)</option><option value="unit">Absolute</option></select>
+        </label>
+        <label class="field ctl" data-for="combo" data-tip="How the column series of a combination chart are drawn">Columns
+          <select id="combo"><option value="stacked">Stacked</option><option value="clustered">Clustered</option></select>
+        </label>
+        <label class="field ctl" data-for="mekkoxy" data-tip="Order of the Mekko XY columns from left to right">Order
+          <select id="sort"><option value="sheet">Sheet order</option><option value="reverse">Reverse</option><option value="ascending">Ascending height</option><option value="descending">Descending height</option></select>
+        </label>
+        <div class="pair">
+          <label class="field ctl" data-for="scatter bubble" data-tip="Title along the horizontal axis">X axis title<input id="xTitle" type="text" autocomplete="off"></label>
+          <label class="field ctl" data-for="scatter bubble" data-tip="Title along the vertical axis">Y axis title<input id="yTitle" type="text" autocomplete="off"></label>
+        </div>
+      </div>
+    </details>
+
+    <details class="panel" open data-section>
+      <summary><h2>Labels &amp; legend</h2></summary>
+      <div class="sec-body">
+        <label class="field ctl" data-for="stacked percent clustered line waterfall mekko area area100 pie doughnut combo mekkoxy scatter bubble gantt" data-tip="Where series names go: next to the chart, in a legend, or nowhere">Series labels
+          <select id="seriesLabels"><option value="">Auto</option><option value="right">Right of chart</option><option value="legend">Legend</option><option value="none">None</option></select>
+        </label>
+      </div>
+    </details>
+
+    <details class="panel" open data-section>
+      <summary><h2>Decorations</h2></summary>
+      <div class="sec-body">
+        <label class="check ctl" data-for="stacked percent mekko area doughnut combo mekkoxy" data-tip="Show the sum above each column (in the hole for a doughnut)"><input id="totals" type="checkbox"> Totals</label>
+        <div class="range ctl" data-for="stacked percent" data-tip="Compound annual growth arrow between two categories, from the column totals"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select></div>
+        <div class="range ctl" data-for="stacked percent" data-tip="Arrow showing the difference between two column totals"><span>Difference arrow</span><select id="diffFrom" aria-label="Difference from"></select><select id="diffTo" aria-label="Difference to"></select></div>
+        <div class="field ctl" data-for="waterfall" data-tip="Columns drawn from the baseline as totals instead of steps">Total columns<div class="chips" id="totalsAt"></div></div>
+      </div>
+    </details>
+  </aside>
+</div>
+
+<div class="pop" id="gallery" role="dialog" aria-label="Chart type" hidden></div>
+<div class="pop" id="colorPop" role="dialog" aria-label="Series colour" hidden>
+  <span class="lbl">Theme</span><div class="swatches" id="themeSwatches"></div>
+  <span class="lbl">Accents</span><div class="swatches" id="accentSwatches"></div>
+  <div class="hexrow"><input id="colorHex" type="text" maxlength="7" placeholder="#1F3A5F" aria-label="Hex colour" spellcheck="false"><button id="colorSet" type="button">Set</button></div>
+  <button id="colorAuto" type="button">Automatic (palette)</button>
+</div>
+<div class="pop" id="ctxMenu" role="menu" aria-label="Datasheet actions" hidden></div>
+<div id="tip" role="tooltip" hidden></div>
+<div id="cellTip" role="alert" hidden></div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<div class="fatal" id="fatal" hidden><div class="card"><h2 id="fatalTitle"></h2><p id="fatalText"></p></div></div>
 
 <script>
 const STORE = 'open-charts-deck-v1';
+const SPLIT_KEY = 'open-charts-split';
 const SAMPLE = {
   slides: [{
     title: 'Revenue grew 2.4x in four years, led by Enterprise',
@@ -207,17 +378,90 @@ const HARVEY_SAMPLE = {
     { name: 'Competitor B', values: [2, 3, 1, 0] },
   ],
 };
+const GANTT_SAMPLE = {
+  categories: ['Diagnostic', 'Design', 'Pilot', 'Roll-out', 'Steering committee'],
+  series: [
+    { name: 'Start', values: ['2026-01-05', '2026-02-02', '2026-03-02', '2026-05-04', null] },
+    { name: 'End', values: ['2026-02-02', '2026-03-30', '2026-05-04', '2026-11-30', null] },
+    { name: 'Milestone', values: ['2026-02-02', null, '2026-05-04', '2026-11-30', '2026-03-16'] },
+  ],
+};
 // Engine defaults per chart type, mirrored so the form shows what the chart actually does.
 const DEFAULTS = {
   totals: (t) => t === 'stacked' || t === 'mekkoxy',
   valueAxis: (t) => t === 'line',
 };
+const PALETTE = ['1F3A5F', '3E6A9E', '7FA3CC', 'B9CDE5', 'A6A6A6', 'D9D9D9'];
+const ACCENTS = ['C0504D', 'E46C0A', 'F2B134', '4F9D69', '2E8B9A', '7B5EA7', '1C2330'];
+// Series colours do not apply to these types (slices per category, scores, cells, schedule rows).
+const NO_SERIES_COLOR = ['pie', 'doughnut', 'harvey', 'table', 'gantt'];
+
+// Chart type gallery, grouped like the reference product's insert menu.
+const I = (body) => `<svg class="gal-ico" viewBox="0 0 48 32" aria-hidden="true">${body}</svg>`;
+const TYPES = [
+  ['Column & bar', [
+    ['stacked', 'Stacked', I('<rect class="i1" x="6" y="18" width="8" height="12"/><rect class="i2" x="6" y="12" width="8" height="6"/><rect class="i3" x="6" y="8" width="8" height="4"/><rect class="i1" x="20" y="14" width="8" height="16"/><rect class="i2" x="20" y="8" width="8" height="6"/><rect class="i3" x="20" y="4" width="8" height="4"/><rect class="i1" x="34" y="10" width="8" height="20"/><rect class="i2" x="34" y="5" width="8" height="5"/><rect class="i3" x="34" y="2" width="8" height="3"/>')],
+    ['clustered', 'Clustered', I('<rect class="i1" x="5" y="12" width="5" height="18"/><rect class="i3" x="10" y="18" width="5" height="12"/><rect class="i1" x="19" y="6" width="5" height="24"/><rect class="i3" x="24" y="14" width="5" height="16"/><rect class="i1" x="33" y="9" width="5" height="21"/><rect class="i3" x="38" y="4" width="5" height="26"/>')],
+    ['percent', '100%', I('<rect class="i1" x="6" y="14" width="8" height="16"/><rect class="i2" x="6" y="7" width="8" height="7"/><rect class="i3" x="6" y="2" width="8" height="5"/><rect class="i1" x="20" y="18" width="8" height="12"/><rect class="i2" x="20" y="9" width="8" height="9"/><rect class="i3" x="20" y="2" width="8" height="7"/><rect class="i1" x="34" y="11" width="8" height="19"/><rect class="i2" x="34" y="6" width="8" height="5"/><rect class="i3" x="34" y="2" width="8" height="4"/>')],
+    ['waterfall', 'Waterfall', I('<rect class="i1" x="3" y="10" width="7" height="20"/><rect class="i3" x="12" y="5" width="7" height="5"/><rect class="i3" x="21" y="2" width="7" height="3"/><rect class="i4" x="30" y="2" width="7" height="9"/><rect class="i1" x="39" y="11" width="7" height="19"/>')],
+    ['combo', 'Combination', I('<rect class="i2" x="6" y="16" width="8" height="14"/><rect class="i2" x="20" y="12" width="8" height="18"/><rect class="i2" x="34" y="9" width="8" height="21"/><polyline class="ln" points="10,10 24,6 38,3" style="stroke:#F2B134"/>')],
+  ]],
+  ['Line & area', [
+    ['line', 'Line', I('<line class="ax" x1="3" y1="30" x2="45" y2="30"/><polyline class="ln" points="4,22 14,17 24,19 34,10 44,6"/><polyline class="ln2" points="4,27 14,25 24,22 34,22 44,16"/>')],
+    ['area', 'Stacked area', I('<polygon class="i3" points="4,30 4,14 16,10 28,12 44,4 44,30"/><polygon class="i2" points="4,30 4,20 16,17 28,18 44,12 44,30"/><polygon class="i1" points="4,30 4,25 16,23 28,24 44,20 44,30"/>')],
+    ['area100', '100% area', I('<rect class="i3" x="4" y="2" width="40" height="28"/><polygon class="i2" points="4,30 4,12 16,9 28,14 44,8 44,30"/><polygon class="i1" points="4,30 4,21 16,18 28,22 44,17 44,30"/>')],
+  ]],
+  ['Mekko', [
+    ['mekko', 'Mekko', I('<rect class="i1" x="3" y="14" width="16" height="16"/><rect class="i2" x="3" y="6" width="16" height="8"/><rect class="i3" x="3" y="2" width="16" height="4"/><rect class="i1" x="20" y="19" width="12" height="11"/><rect class="i2" x="20" y="8" width="12" height="11"/><rect class="i3" x="20" y="2" width="12" height="6"/><rect class="i1" x="33" y="10" width="12" height="20"/><rect class="i2" x="33" y="5" width="12" height="5"/><rect class="i3" x="33" y="2" width="12" height="3"/>')],
+    ['mekkoxy', 'Mekko XY', I('<rect class="i1" x="3" y="12" width="16" height="18"/><rect class="i3" x="3" y="6" width="16" height="6"/><rect class="i1" x="20" y="18" width="10" height="12"/><rect class="i3" x="20" y="14" width="10" height="4"/><rect class="i1" x="31" y="22" width="14" height="8"/><rect class="i3" x="31" y="19" width="14" height="3"/>')],
+  ]],
+  ['XY', [
+    ['scatter', 'Scatter', I('<line class="ax" x1="4" y1="30" x2="45" y2="30"/><line class="ax" x1="4" y1="2" x2="4" y2="30"/><circle class="i1" cx="11" cy="22" r="2.4"/><circle class="i1" cx="18" cy="17" r="2.4"/><circle class="i1" cx="26" cy="19" r="2.4"/><circle class="i3" cx="32" cy="10" r="2.4"/><circle class="i3" cx="40" cy="6" r="2.4"/><circle class="i3" cx="36" cy="14" r="2.4"/>')],
+    ['bubble', 'Bubble', I('<line class="ax" x1="4" y1="30" x2="45" y2="30"/><line class="ax" x1="4" y1="2" x2="4" y2="30"/><circle class="i3" cx="14" cy="20" r="5" fill-opacity=".85"/><circle class="i1" cx="28" cy="13" r="7" fill-opacity=".85"/><circle class="i2" cx="39" cy="22" r="3.5" fill-opacity=".85"/>')],
+  ]],
+  ['Circular', [
+    ['pie', 'Pie', I('<circle class="i3" cx="24" cy="16" r="13"/><path class="i1" d="M24 16 L24 3 A13 13 0 0 1 36.4 20 Z"/><path class="i2" d="M24 16 L36.4 20 A13 13 0 0 1 20 28.4 Z"/>')],
+    ['doughnut', 'Doughnut', I('<circle cx="24" cy="16" r="10" fill="none" stroke="#7FA3CC" stroke-width="6"/><path d="M24 6 A10 10 0 0 1 33.5 19" fill="none" stroke="#1F3A5F" stroke-width="6"/><path d="M33.5 19 A10 10 0 0 1 21 25.5" fill="none" stroke="#3E6A9E" stroke-width="6"/>')],
+  ]],
+  ['Special', [
+    ['harvey', 'Harvey balls', I('<circle cx="10" cy="16" r="6.5" fill="#fff" stroke="#1F3A5F" stroke-width="1.4"/><path class="i1" d="M10 16 L10 9.5 A6.5 6.5 0 0 1 16.5 16 Z"/><circle cx="24" cy="16" r="6.5" fill="#fff" stroke="#1F3A5F" stroke-width="1.4"/><path class="i1" d="M24 16 L24 9.5 A6.5 6.5 0 0 1 24 22.5 Z"/><circle class="i1" cx="38" cy="16" r="6.5"/>')],
+    ['table', 'Table', I('<rect class="bg" x="4" y="3" width="40" height="26" rx="1"/><rect class="i1" x="4" y="3" width="40" height="6"/><g class="ax"><line x1="4" y1="15.5" x2="44" y2="15.5"/><line x1="4" y1="22" x2="44" y2="22"/><line x1="17" y1="3" x2="17" y2="29"/><line x1="30" y1="3" x2="30" y2="29"/></g>')],
+    ['gantt', 'Gantt', I('<line class="ax" x1="4" y1="3" x2="44" y2="3"/><rect class="i1" x="6" y="7" width="14" height="5"/><rect class="i2" x="16" y="15" width="16" height="5"/><rect class="i3" x="28" y="23" width="14" height="5"/><polygon class="i1" points="36,14.5 39,17.5 36,20.5 33,17.5" style="fill:#C0504D"/>')],
+  ]],
+];
+const TYPE_INFO = Object.fromEntries(TYPES.flatMap(([, items]) => items.map(([t, label, icon]) => [t, { label, icon }])));
+
+const SHEET_HINTS = {
+  stacked: 'Each row is a series stacked in every column; each column is a category.',
+  clustered: 'Each row is a series; its bars stand side by side in every category.',
+  percent: 'Each row is a series; every column is scaled to 100%.',
+  waterfall: 'The first row drives the bridge: positive values step up, negative step down; type e for a computed total.',
+  combo: 'Each row is a series; pick which series are lines under Chart.',
+  line: 'Each row is a line; each column is a point on the category axis.',
+  area: 'Each row is a band stacked on the ones above it; each column is a point.',
+  area100: 'Each row is a band; every column is scaled to 100%.',
+  mekko: 'Columns are categories (their width is the column total); rows are the segments.',
+  mekkoxy: 'The first row is the column width (X extent); the rows below are stacked heights.',
+  scatter: 'One point per column (its label on top); each cell is "x; y". A series is a group with its own colour.',
+  bubble: 'One bubble per column (its label on top); each cell is "x; y; size" (size sets the area).',
+  pie: 'The first row is drawn: one slice per column.',
+  doughnut: 'The first row is drawn: one segment per column.',
+  harvey: 'Scores from 0 to 4 quarters; each row is an item, each column a criterion.',
+  table: 'Rows become table rows, columns become table columns; text cells are shown as typed.',
+  gantt: 'One activity per column. Rows: Start, End (dates like 2026-03-15, Mar 2026 or Q2 2026), then one row per milestone kind.',
+};
 
 const $ = (id) => document.getElementById(id);
-let deck = load();
+const params = new URLSearchParams(location.search);
+const session = params.get('session') ? { id: params.get('session'), rev: 0, dirty: false } : null;
+let deck = session ? structuredClone(SAMPLE) : load();
 let cur = 0;
 let focusCell = null; // { r, c } of the last focused datasheet cell
-let invalid = new Map(); // "r,c" -> text that is not a number
+let invalid = new Map(); // "r,c" -> text that is not a number (or point/date) for this chart type
+const cellErrors = new Map(); // "r,c" -> engine validation message for that cell
+let hasError = false;
+
+for (const el of document.querySelectorAll('[data-mode]')) el.hidden = el.dataset.mode !== (session ? 'session' : 'deck');
 
 /** Accepts a deck, or a bare chart; returns a deck or throws with a readable reason. */
 function toDeck(d) {
@@ -234,7 +478,7 @@ function toDeck(d) {
 function load() {
   try { return toDeck(JSON.parse(localStorage.getItem(STORE))); } catch { return structuredClone(SAMPLE); }
 }
-function save() { try { localStorage.setItem(STORE, JSON.stringify(deck)); } catch {} }
+function save() { if (!session) try { localStorage.setItem(STORE, JSON.stringify(deck)); } catch {} }
 const slide = () => deck.slides[cur];
 const chart = () => slide().chart;
 const opts = () => (chart().options ??= {});
@@ -261,26 +505,11 @@ function parseFor(type, text) {
   const n = parseCell(t);
   return type === 'table' && n === undefined ? t : n;
 }
-const SHEET_HINTS = {
-  scatter: 'One point per column (its label on top); each cell is "x; y". A series is a group with its own colour.',
-  bubble: 'One bubble per column (its label on top); each cell is "x; y; size" (size sets the area).',
-  gantt: 'One activity per column. Rows: Start, End (dates like 2026-03-15, Mar 2026 or Q2 2026), then one row per milestone kind.',
-  mekkoxy: 'The first row is the column width (X extent); the rows below are stacked heights.',
-  table: 'Rows become table rows, columns become table columns; text cells are shown as typed.',
-};
-const GANTT_SAMPLE = {
-  categories: ['Diagnostic', 'Design', 'Pilot', 'Roll-out', 'Steering committee'],
-  series: [
-    { name: 'Start', values: ['2026-01-05', '2026-02-02', '2026-03-02', '2026-05-04', null] },
-    { name: 'End', values: ['2026-02-02', '2026-03-30', '2026-05-04', '2026-11-30', null] },
-    { name: 'Milestone', values: ['2026-02-02', null, '2026-05-04', '2026-11-30', '2026-03-16'] },
-  ],
-};
 const shapeOf = (t) => POINT[t] ?? (t === 'gantt' ? 'date' : 'num');
+const expected = (type) => (POINT[type] ? `"${['x', 'y', 'size'].slice(0, POINT[type]).join('; ')}"` : 'a number');
 /** Carry the data across a type change whose cells hold something else (numbers, points, dates). */
 function convertData(c, from, to) {
   const a = shapeOf(from), b = shapeOf(to);
-  // Table text cells are not numbers anywhere else.
   if (from === 'table' && to !== 'table') {
     for (const s of c.series) s.values = s.values.map((v) => (typeof v === 'string' ? (typeof parseCell(v) === 'number' ? parseCell(v) : null) : v));
   }
@@ -290,7 +519,6 @@ function convertData(c, from, to) {
     c.categories = [...src.categories];
     c.series = structuredClone(src.series);
   } else if (a === 'num') {
-    // Rows X, Y (and Size) become one group of points.
     c.series = [{ name: 'Points', values: c.categories.map((_, j) => {
       const p = Array.from({ length: b }, (_, k) => (k < c.series.length ? c.series[k].values[j] : 1));
       return p.every((x) => typeof x === 'number') ? p : null;
@@ -323,7 +551,40 @@ function remapCategories(map) {
   }
 }
 
+// ---- Undo / redo: whole-deck snapshots; typing in one control within 1.5 s is one step. --------
+let hist = [], hi = -1, histKey = null, histAt = 0;
+const snap = () => JSON.stringify({ deck, cur });
+function resetHistory() { hist = [snap()]; hi = 0; histKey = null; updateUndo(); }
+function record(key) {
+  const s = snap();
+  if (s === hist[hi]) return;
+  const now = performance.now();
+  if (key && key === histKey && now - histAt < 1500 && hi > 0 && hi === hist.length - 1) hist[hi] = s;
+  else {
+    hist.length = hi + 1; hist.push(s);
+    if (hist.length > 200) hist.shift();
+    hi = hist.length - 1;
+  }
+  histKey = key; histAt = now;
+  updateUndo();
+}
+function updateUndo() { $('undoBtn').disabled = hi <= 0; $('redoBtn').disabled = hi >= hist.length - 1; }
+function restore(s) {
+  const at = focusCell;
+  ({ deck, cur } = JSON.parse(s));
+  histKey = null; invalid.clear();
+  save(); markDirty();
+  renderTabs(); renderForm(); renderSheet(); schedule(); updateUndo(); autoSplit();
+  if (at) moveTo(Math.min(at.r, chart().series.length - 1), Math.min(at.c, chart().categories.length - 1));
+}
+function undo() { if (hi > 0) restore(hist[--hi]); }
+function redo() { if (hi < hist.length - 1) restore(hist[++hi]); }
+$('undoBtn').onclick = undo;
+$('redoBtn').onclick = redo;
+
+// ---- Rendering ------------------------------------------------------------------------------------
 function renderTabs() {
+  if (session) return;
   $('tabs').replaceChildren(...deck.slides.map((s, i) => {
     const b = document.createElement('button');
     b.className = 'tab'; b.type = 'button'; b.role = 'tab';
@@ -336,6 +597,13 @@ function renderTabs() {
   $('delSlide').disabled = deck.slides.length === 1;
 }
 
+function check(label, value, checked, onchange) {
+  const l = document.createElement('label'); l.className = 'check';
+  const box = document.createElement('input'); box.type = 'checkbox'; box.value = String(value); box.checked = checked;
+  box.onchange = () => onchange(box);
+  l.append(box, ` ${label}`);
+  return l;
+}
 function renderArrowSelects() {
   const c = chart(), o = opts();
   for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
@@ -346,35 +614,34 @@ function renderArrowSelects() {
     $(to).value = o[key] ? String(o[key].to) : '';
   }
   const totals = o.totalsAt ?? (c.categories.length > 1 ? [0, c.categories.length - 1] : [0]);
-  $('totalsAt').replaceChildren(...c.categories.map((cat, i) => {
-    const l = document.createElement('label'); l.className = 'check';
-    const box = document.createElement('input'); box.type = 'checkbox'; box.value = String(i);
-    box.checked = totals.includes(i);
-    box.onchange = () => {
-      const on = [...$('totalsAt').querySelectorAll('input:checked')].map((b) => +b.value);
-      setOpt('totalsAt', on);
-    };
-    l.append(box, ` ${cat || `#${i + 1}`}`);
-    return l;
-  }));
-  $('asLine').replaceChildren(...c.series.map((s, i) => {
-    const l = document.createElement('label'); l.className = 'check';
-    const box = document.createElement('input'); box.type = 'checkbox'; box.value = String(i);
-    box.checked = s.as === 'line';
-    box.onchange = () => { if (box.checked) s.as = 'line'; else delete s.as; changed(false); };
-    l.append(box, ` ${s.name || `#${i + 1}`}`);
-    return l;
-  }));
+  $('totalsAt').replaceChildren(...c.categories.map((cat, i) => check(cat || `#${i + 1}`, i, totals.includes(i), () => {
+    setOpt('totalsAt', [...$('totalsAt').querySelectorAll('input:checked')].map((b) => +b.value));
+  })));
+  $('asLine').replaceChildren(...c.series.map((s, i) => check(s.name || `#${i + 1}`, i, s.as === 'line', (box) => {
+    if (box.checked) s.as = 'line'; else delete s.as;
+    changed(false, 'asLine');
+  })));
+}
+
+function renderTypeBtn() {
+  const t = chart().type, info = TYPE_INFO[t] ?? { label: t, icon: '' };
+  $('typeBtn').dataset.type = t;
+  $('typeBtn').innerHTML = `${info.icon}<span><span class="t">${info.label}</span></span>`;
+  $('typeBtn').setAttribute('aria-label', `Chart type: ${info.label}. Change`);
 }
 
 function renderForm() {
   const c = chart(), o = opts();
   $('title').value = slide().title ?? '';
-  const type = $('type');
-  if (![...type.options].some((op) => op.value === c.type)) type.add(new Option(c.type, c.type));
-  type.value = c.type;
+  renderTypeBtn();
   $('unit').value = unitText(o.unit);
+  $('unitPrefix').checked = typeof o.unit === 'object' && o.unit?.position === 'prefix';
   $('decimals').value = o.decimals ?? '';
+  $('scale').value = o.scale && o.scale !== 'none' ? o.scale : '';
+  $('locale').value = o.locale ?? '';
+  if (![...$('locale').options].some((op) => op.value === $('locale').value)) $('locale').add(new Option(o.locale, o.locale));
+  $('locale').value = o.locale ?? '';
+  $('format').value = o.format ?? '';
   $('gap').value = o.gap ?? '';
   $('seriesLabels').value = o.seriesLabels ?? '';
   $('mekko').value = o.mekko ?? 'percent';
@@ -382,6 +649,7 @@ function renderForm() {
   $('valueAxis').checked = o.valueAxis ?? DEFAULTS.valueAxis(c.type);
   $('zeroBased').value = o.zeroBased === undefined ? '' : String(o.zeroBased);
   $('step').checked = !!o.step;
+  $('orientation').checked = o.orientation === 'horizontal';
   $('percentData').checked = !!o.percentData;
   $('combo').value = o.combo ?? 'stacked';
   $('sort').value = o.sort ?? 'sheet';
@@ -389,159 +657,599 @@ function renderForm() {
   $('yTitle').value = o.axisTitles?.y ?? '';
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(c.type);
   for (const el of document.querySelectorAll('[data-hide]')) el.hidden = el.dataset.hide.split(' ').includes(c.type);
+  if (session) $('title').closest('.ctl').hidden = true;
+  // A section with no control that applies to this type disappears.
+  for (const sec of document.querySelectorAll('[data-section]')) {
+    const ctls = [...sec.querySelectorAll('.ctl, .type-btn')];
+    sec.hidden = !ctls.some((el) => !el.hidden && !el.closest('[hidden]:not([data-section])'));
+  }
   $('sheetHint').textContent = SHEET_HINTS[c.type] ?? '';
   $('sheetHint').hidden = !SHEET_HINTS[c.type];
   renderArrowSelects();
 }
 
-function cellInput(r, c, value, onInput) {
+function cellInput(r, c, value, label, onInput) {
   const inp = document.createElement('input');
   inp.value = value; inp.dataset.r = String(r); inp.dataset.c = String(c);
   inp.autocomplete = 'off'; inp.spellcheck = false;
-  if (onInput) inp.oninput = () => onInput(inp);
+  inp.setAttribute('aria-label', label);
+  if (onInput) inp.oninput = () => { onInput(inp); if (inp.value.length + 3 > parseFloat(inp.style.width)) fitColumns(); };
   return inp;
 }
+const seriesColor = (s, i) => (s.color ?? (deck.style?.palette ?? PALETTE)[i % (deck.style?.palette ?? PALETTE).length]).replace('#', '');
 
 function renderSheet() {
   const c = chart();
+  const active = document.activeElement?.closest?.('#sheet') && document.activeElement.dataset.r !== undefined
+    ? { r: +document.activeElement.dataset.r, c: +document.activeElement.dataset.c } : null;
   const head = document.createElement('tr');
   const corner = document.createElement('th');
   corner.className = 'corner';
-  const ci = cellInput(-1, -1, '');
-  ci.readOnly = true; ci.placeholder = 'paste table here'; ci.setAttribute('aria-label', 'Paste a table from Excel here');
+  const ci = cellInput(-1, -1, '', 'Paste a table from Excel here');
+  ci.readOnly = true; ci.placeholder = 'paste table here';
   corner.append(ci); head.append(corner);
   c.categories.forEach((cat, j) => {
     const th = document.createElement('th');
-    th.append(cellInput(-1, j, cat, (inp) => { c.categories[j] = inp.value; renderArrowSelects(); changed(false); }));
+    th.scope = 'col';
+    th.append(cellInput(-1, j, cat, `Category ${j + 1} name`, (inp) => { c.categories[j] = inp.value; renderArrowSelects(); changed(false, `cell:-1,${j}`); }));
     head.append(th);
   });
+  const addCol = document.createElement('th');
+  addCol.className = 'add-col';
+  const addColBtn = document.createElement('button');
+  addColBtn.type = 'button'; addColBtn.textContent = '+'; addColBtn.setAttribute('aria-label', 'Add category');
+  addColBtn.dataset.tip = 'Add a category (column)';
+  addColBtn.onclick = () => $('addCat').click();
+  addCol.append(addColBtn); head.append(addCol);
+  const swatches = !NO_SERIES_COLOR.includes(c.type);
   const rows = c.series.map((s, i) => {
     const tr = document.createElement('tr');
     const name = document.createElement('td');
     name.className = 'name';
-    name.append(cellInput(i, -1, s.name, (inp) => { s.name = inp.value; changed(false); }));
+    const wrap = document.createElement('div'); wrap.className = 'name-cell';
+    if (swatches && !(c.type === 'mekkoxy' && i === 0)) {
+      const sw = document.createElement('button');
+      sw.type = 'button'; sw.className = 'swatch'; sw.dataset.i = String(i);
+      sw.style.background = `#${seriesColor(s, i)}`;
+      sw.setAttribute('aria-label', `Colour of ${s.name || `series ${i + 1}`}: ${s.color ? `#${s.color.replace('#', '')}` : 'automatic'}`);
+      sw.dataset.tip = 'Series colour';
+      sw.onclick = () => openColor(i, sw);
+      wrap.append(sw);
+    }
+    wrap.append(cellInput(i, -1, s.name, `Series ${i + 1} name`, (inp) => { s.name = inp.value; changed(false, `cell:${i},-1`); }));
+    name.append(wrap);
     tr.append(name);
-    s.values.forEach((v, j) => {
+    // One cell per category, even when the series is short (an imported spec with missing values).
+    c.categories.forEach((_, j) => {
+      const v = s.values[j];
       const td = document.createElement('td');
       const key = `${i},${j}`;
-      const inp = cellInput(i, j, invalid.get(key) ?? showCell(v), (el) => {
-        const n = parseFor(c.type, el.value);
-        if (n === undefined) invalid.set(key, el.value); else invalid.delete(key);
-        el.setAttribute('aria-invalid', String(n === undefined));
-        s.values[j] = n ?? null;
-        changed(false);
+      const inp = cellInput(i, j, invalid.get(key) ?? showCell(v), `${s.name || `Series ${i + 1}`}, ${c.categories[j] || `category ${j + 1}`}`, (el) => {
+        setCell(i, j, el.value);
+        el.setAttribute('aria-invalid', String(invalid.has(key)));
+        changed(false, `cell:${key}`);
+        showCellTip(el);
       });
       if (shapeOf(c.type) === 'num' && c.type !== 'table') inp.inputMode = 'decimal';
       inp.setAttribute('aria-invalid', String(invalid.has(key)));
       td.append(inp); tr.append(td);
     });
+    tr.append(Object.assign(document.createElement('td'), { className: 'add-col' }));
     return tr;
   });
-  $('sheet').replaceChildren(head, ...rows);
+  const addRow = document.createElement('tr');
+  addRow.className = 'add-row';
+  const addRowCell = document.createElement('td');
+  const addRowBtn = document.createElement('button');
+  addRowBtn.type = 'button'; addRowBtn.textContent = '+ Series';
+  addRowBtn.setAttribute('aria-label', 'Add series'); addRowBtn.dataset.tip = 'Add a series (row)';
+  addRowBtn.onclick = () => $('addSer').click();
+  addRowCell.append(addRowBtn); addRow.append(addRowCell);
+  $('sheet').replaceChildren(head, ...rows, addRow);
+  fitColumns();
+  markCellErrors();
+  if (active) {
+    const el = cellAt(Math.min(active.r, c.series.length - 1), Math.min(active.c, c.categories.length - 1));
+    if (el) { keepSel = 'keep'; el.focus(); }
+  }
+  paintSel();
 }
 
-function renderAll() { renderTabs(); renderForm(); renderSheet(); schedule(); }
+/** Size each datasheet column to its longest entry (header or value), within limits. */
+function fitColumns() {
+  const width = new Map();
+  for (const inp of $('sheet').querySelectorAll('input[data-r]')) {
+    const c = inp.dataset.c;
+    width.set(c, Math.max(width.get(c) ?? 0, inp.value.length));
+  }
+  for (const inp of $('sheet').querySelectorAll('input[data-r]')) {
+    const c = inp.dataset.c, n = width.get(c);
+    if (c === '-1') { if (inp.dataset.r !== '-1') inp.style.width = `${Math.min(30, Math.max(12, n + 3))}ch`; }
+    else inp.style.width = `${Math.min(24, Math.max(8, n + 3))}ch`;
+  }
+}
 
-// Datasheet keyboard: arrows (at the edge of the text, or with the whole cell selected), Enter / Shift+Enter.
+function renderAll() { renderTabs(); renderForm(); renderSheet(); schedule(); autoSplit(); }
+
+// ---- Datasheet: cells, selection, keyboard, clipboard ------------------------------------------
 function cellAt(r, c) { return $('sheet').querySelector(`input[data-r="${r}"][data-c="${c}"]`); }
-function moveTo(r, c) {
+/** Write typed or pasted text into a cell; text that does not parse is kept and flagged. */
+function setCell(r, c, text) {
+  const ch = chart();
+  if (r === -1 && c === -1) return;
+  if (r === -1) ch.categories[c] = text.trim();
+  else if (c === -1) ch.series[r].name = text.trim();
+  else {
+    const n = parseFor(ch.type, text), key = `${r},${c}`;
+    if (n === undefined) invalid.set(key, text.trim()); else invalid.delete(key);
+    ch.series[r].values[c] = n ?? null;
+  }
+}
+function cellText(r, c) {
+  const ch = chart();
+  if (r === -1 && c === -1) return '';
+  if (r === -1) return ch.categories[c] ?? '';
+  if (c === -1) return ch.series[r]?.name ?? '';
+  return invalid.get(`${r},${c}`) ?? showCell(ch.series[r]?.values[c]);
+}
+
+let sel = null; // { ar, ac, fr, fc }: anchor and focus cell of the selected range
+let keepSel = false, dragging = false;
+const range = () => sel && { r0: Math.min(sel.ar, sel.fr), r1: Math.max(sel.ar, sel.fr), c0: Math.min(sel.ac, sel.fc), c1: Math.max(sel.ac, sel.fc) };
+const multi = () => !!sel && (sel.ar !== sel.fr || sel.ac !== sel.fc);
+function paintSel() {
+  for (const el of $('sheet').querySelectorAll('.sel')) el.classList.remove('sel');
+  if (!multi()) return;
+  const g = range();
+  for (const inp of $('sheet').querySelectorAll('input[data-r]')) {
+    const r = +inp.dataset.r, c = +inp.dataset.c;
+    if (r >= g.r0 && r <= g.r1 && c >= g.c0 && c <= g.c1) inp.closest('td, th').classList.add('sel');
+  }
+}
+function moveTo(r, c, extend = false) {
   const next = cellAt(r, c);
   if (!next) return false;
+  keepSel = extend;
   next.focus(); next.select();
   return true;
 }
+function rangeText() {
+  const g = range() ?? (focusCell && { r0: focusCell.r, r1: focusCell.r, c0: focusCell.c, c1: focusCell.c });
+  if (!g) return '';
+  const rows = [];
+  for (let r = g.r0; r <= g.r1; r++) { const cells = []; for (let c = g.c0; c <= g.c1; c++) cells.push(cellText(r, c)); rows.push(cells.join('\t')); }
+  return rows.join('\n');
+}
+function clearRange() {
+  const g = range() ?? (focusCell && { r0: focusCell.r, r1: focusCell.r, c0: focusCell.c, c1: focusCell.c });
+  if (!g) return;
+  const ch = chart();
+  for (let r = Math.max(0, g.r0); r <= g.r1; r++) for (let c = Math.max(0, g.c0); c <= g.c1; c++) {
+    if (ch.series[r] && c < ch.categories.length) { ch.series[r].values[c] = null; invalid.delete(`${r},${c}`); }
+  }
+  changed(true, 'clear');
+}
+async function copyRange() {
+  try { await navigator.clipboard.writeText(rangeText()); toast('Copied'); } catch { toast('Press ⌘C to copy', true); }
+}
+
+$('sheet').addEventListener('focusin', (e) => {
+  const t = e.target;
+  if (t.dataset?.r === undefined) return;
+  const r = +t.dataset.r, c = +t.dataset.c;
+  if (keepSel === 'keep' && sel) { /* re-render: keep the range as it is */ } else if (keepSel && sel) { sel.fr = r; sel.fc = c; } else sel = { ar: r, ac: c, fr: r, fc: c };
+  keepSel = false;
+  focusCell = { r, c };
+  paintSel();
+  showCellTip(t);
+});
+$('sheet').addEventListener('focusout', () => { $('cellTip').hidden = true; });
+$('sheet').addEventListener('mousedown', (e) => {
+  const t = e.target;
+  if (t.dataset?.r === undefined || e.button !== 0) return;
+  if (e.shiftKey && sel) { e.preventDefault(); keepSel = true; t.focus(); return; }
+  dragging = true;
+});
+$('sheet').addEventListener('mouseover', (e) => {
+  const t = e.target;
+  if (!dragging || t.dataset?.r === undefined || t === document.activeElement) return;
+  keepSel = true; t.focus(); t.select();
+});
+document.addEventListener('mouseup', () => { dragging = false; });
 $('sheet').addEventListener('keydown', (e) => {
   const t = e.target;
-  if (!t.dataset?.r || e.altKey || e.ctrlKey || e.metaKey) return;
+  if (t.dataset?.r === undefined) return;
   const r = +t.dataset.r, c = +t.dataset.c;
+  if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
+    e.preventDefault();
+    const b = t.getBoundingClientRect();
+    return openMenu(r, c, b.left, b.bottom);
+  }
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
   const all = t.selectionStart === 0 && t.selectionEnd === t.value.length;
-  let to = null;
-  if (e.key === 'Enter') to = [r + (e.shiftKey ? -1 : 1), c];
-  else if (e.key === 'ArrowUp') to = [r - 1, c];
-  else if (e.key === 'ArrowDown') to = [r + 1, c];
-  else if (e.key === 'ArrowLeft' && !e.shiftKey && (all || t.selectionEnd === 0)) to = [r, c - 1];
-  else if (e.key === 'ArrowRight' && !e.shiftKey && (all || t.selectionStart === t.value.length)) to = [r, c + 1];
-  if (to && moveTo(...to)) e.preventDefault();
+  if ((e.key === 'Delete' || e.key === 'Backspace') && multi()) { e.preventDefault(); return clearRange(); }
+  if (e.key === 'Escape' && multi()) { sel = { ar: r, ac: c, fr: r, fc: c }; paintSel(); e.stopPropagation(); return; }
+  const nc = chart().categories.length, ns = chart().series.length;
+  let to = null, extend = false;
+  if (e.key === 'Tab') {
+    to = !e.shiftKey ? (c + 1 < nc ? [r, c + 1] : r + 1 < ns ? [r + 1, -1] : null)
+      : (c - 1 >= -1 ? [r, c - 1] : r - 1 >= -1 ? [r - 1, nc - 1] : null);
+  } else if (e.key === 'Enter') to = [r + (e.shiftKey ? -1 : 1), c];
+  else if (e.key === 'ArrowUp') { to = [r - 1, c]; extend = e.shiftKey; }
+  else if (e.key === 'ArrowDown') { to = [r + 1, c]; extend = e.shiftKey; }
+  else if (e.key === 'ArrowLeft' && (all || t.selectionEnd === 0) && (!e.shiftKey || all || !t.value)) { to = [r, c - 1]; extend = e.shiftKey; }
+  else if (e.key === 'ArrowRight' && (all || t.selectionStart === t.value.length) && (!e.shiftKey || all || !t.value)) { to = [r, c + 1]; extend = e.shiftKey; }
+  if (to && moveTo(...to, extend)) e.preventDefault();
 });
-$('sheet').addEventListener('focusin', (e) => {
-  if (e.target.dataset?.r) focusCell = { r: +e.target.dataset.r, c: +e.target.dataset.c };
+for (const kind of ['copy', 'cut']) {
+  $('sheet').addEventListener(kind, (e) => {
+    if (!multi()) return;
+    e.preventDefault();
+    e.clipboardData.setData('text/plain', rangeText());
+    if (kind === 'cut') clearRange();
+  });
+}
+$('sheet').addEventListener('contextmenu', (e) => {
+  const t = e.target;
+  if (t.dataset?.r === undefined) return;
+  e.preventDefault();
+  const r = +t.dataset.r, c = +t.dataset.c, g = range();
+  if (!g || r < g.r0 || r > g.r1 || c < g.c0 || c > g.c1) { t.focus(); }
+  openMenu(r, c, e.clientX, e.clientY);
 });
 
-// Excel paste (tab-separated rows).
+// Excel paste (tab-separated rows). A single value pasted over a selected range fills it.
 $('sheet').addEventListener('paste', (e) => {
-  const t = e.target; if (!t.dataset?.r) return;
+  const t = e.target; if (t.dataset?.r === undefined) return;
   const text = e.clipboardData.getData('text/plain');
-  if (!/[\t\n]/.test(text.trim())) return;
+  const c = chart();
+  if (!/[\t\n]/.test(text.trim())) {
+    if (!multi()) return;
+    e.preventDefault();
+    const g = range();
+    for (let r = g.r0; r <= g.r1; r++) for (let col = g.c0; col <= g.c1; col++) setCell(r, col, text);
+    return changed(true, 'paste');
+  }
   e.preventDefault();
   const grid = text.replace(/\r/g, '').replace(/\n+$/, '').split('\n').map((l) => l.split('\t'));
-  const c = chart();
   const r0 = +t.dataset.r, c0 = +t.dataset.c;
-  invalid.clear();
   if (r0 === -1 && c0 === -1) {
     const [head, ...body] = grid;
     const rows = body.filter((r) => r.some((x) => x.trim()));
     if (head.length < 2 || !rows.length) return showError('Paste a table with categories in the first row and series names in the first column.');
+    invalid.clear();
     const n = c.categories.length;
     c.categories = head.slice(1).map((s) => s.trim());
     c.series = rows.map((r, i) => ({
       ...(c.series[i]?.color ? { color: c.series[i].color } : {}),
-      name: r[0].trim(), values: c.categories.map((_, j) => parseFor(c.type, r[j + 1] ?? '') ?? null),
+      ...(c.series[i]?.as ? { as: c.series[i].as } : {}),
+      name: r[0].trim(), values: c.categories.map(() => null),
     }));
+    rows.forEach((r, i) => c.categories.forEach((_, j) => setCell(i, j, r[j + 1] ?? '')));
     if (c.categories.length < n) remapCategories((i) => (i < c.categories.length ? i : -1));
   } else {
     grid.forEach((cells, di) => cells.forEach((cell, dj) => {
       const r = r0 + di, col = c0 + dj;
       while (col >= c.categories.length) { c.categories.push(`Cat ${c.categories.length + 1}`); c.series.forEach((s) => s.values.push(null)); }
       while (r >= c.series.length) c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
-      if (r === -1 && col >= 0) c.categories[col] = cell.trim();
-      else if (col === -1 && r >= 0) c.series[r].name = cell.trim();
-      else if (r >= 0 && col >= 0) c.series[r].values[col] = parseFor(c.type, cell) ?? null;
+      setCell(r, col, cell);
     }));
+    sel = { ar: r0, ac: c0, fr: r0 + grid.length - 1, fc: c0 + Math.max(...grid.map((g) => g.length)) - 1 };
   }
-  changed(true);
+  changed(true, 'paste');
 });
 
-function changed(rebuild) {
+/** Message for a cell: text that does not parse, or an engine validation error pointing at it. */
+function cellMessage(r, c) {
+  const key = `${r},${c}`;
+  if (invalid.has(key)) return `"${invalid.get(key)}" is not ${expected(chart().type)} — the cell counts as empty`;
+  return cellErrors.get(key);
+}
+function showCellTip(input) {
+  const tip = $('cellTip');
+  const msg = cellMessage(+input.dataset.r, +input.dataset.c);
+  if (!msg || document.activeElement !== input) { tip.hidden = true; input.removeAttribute('title'); return; }
+  input.title = msg;
+  tip.textContent = msg; tip.hidden = false;
+  const b = input.closest('td, th').getBoundingClientRect();
+  tip.style.left = `${Math.max(8, Math.min(b.left, innerWidth - tip.offsetWidth - 8))}px`;
+  tip.style.top = `${b.bottom + 4 + tip.offsetHeight > innerHeight ? b.top - tip.offsetHeight - 4 : b.bottom + 4}px`;
+}
+$('sheetWrap').addEventListener('scroll', () => { $('cellTip').hidden = true; });
+function markCellErrors() {
+  for (const inp of $('sheet').querySelectorAll('input[data-r]')) {
+    const key = `${inp.dataset.r},${inp.dataset.c}`;
+    inp.setAttribute('aria-invalid', String(invalid.has(key) || cellErrors.has(key)));
+  }
+}
+
+// ---- Structure: insert / delete series and categories -------------------------------------------
+function insertSeries(at) {
+  const c = chart();
+  c.series.splice(at, 0, { name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
+  invalid.clear(); changed(true, 'struct');
+  moveTo(at, -1);
+}
+function insertCategory(at) {
+  const c = chart();
+  c.categories.splice(at, 0, `Cat ${c.categories.length + 1}`);
+  c.series.forEach((s) => s.values.splice(at, 0, null));
+  remapCategories((i) => (i >= at ? i + 1 : i));
+  invalid.clear(); changed(true, 'struct');
+  moveTo(-1, at);
+}
+function deleteSeries(i) {
+  const c = chart(); if (c.series.length < 2) return;
+  c.series.splice(i, 1);
+  invalid.clear(); focusCell = null; sel = null; changed(true, 'struct');
+}
+function deleteCategory(j) {
+  const c = chart(); if (c.categories.length < 2) return;
+  c.categories.splice(j, 1); c.series.forEach((s) => s.values.splice(j, 1));
+  remapCategories((i) => (i === j ? -1 : i > j ? i - 1 : i));
+  invalid.clear(); focusCell = null; sel = null; changed(true, 'struct');
+}
+$('addCat').onclick = () => insertCategory(chart().categories.length);
+$('addSer').onclick = () => insertSeries(chart().series.length);
+// − removes the selected cell's row/column, else the last one.
+$('delCat').onclick = () => {
+  const c = chart();
+  deleteCategory(focusCell && focusCell.c >= 0 && focusCell.c < c.categories.length ? focusCell.c : c.categories.length - 1);
+};
+$('delSer').onclick = () => {
+  const c = chart();
+  deleteSeries(focusCell && focusCell.r >= 0 && focusCell.r < c.series.length ? focusCell.r : c.series.length - 1);
+};
+$('transpose').onclick = () => {
+  const c = chart();
+  const series = c.categories.map((cat, j) => ({ name: cat, values: c.series.map((s) => s.values[j] ?? null) }));
+  c.categories = c.series.map((s) => s.name);
+  c.series = series;
+  remapCategories(() => -1); // arrows and totals referred to the old categories
+  invalid.clear(); focusCell = null; sel = null; changed(true, 'struct');
+};
+$('reverse').onclick = () => { chart().series.reverse(); invalid.clear(); focusCell = null; sel = null; changed(true, 'struct'); };
+
+// ---- Popovers: context menu, colour picker, type gallery, tooltips ------------------------------
+let popReturn = null; // element to focus when a popover closes
+function placePop(pop, x, y) {
+  pop.hidden = false;
+  const w = pop.offsetWidth, h = pop.offsetHeight;
+  pop.style.left = `${Math.max(8, Math.min(x, innerWidth - w - 8))}px`;
+  pop.style.top = `${y + h > innerHeight - 8 ? Math.max(8, y - h) : y}px`;
+}
+function closePops(refocus = true) {
+  const open = ['gallery', 'colorPop', 'ctxMenu'].some((id) => !$(id).hidden);
+  for (const id of ['gallery', 'colorPop', 'ctxMenu']) $(id).hidden = true;
+  $('typeBtn').setAttribute('aria-expanded', 'false');
+  if (open && refocus && popReturn?.isConnected) popReturn.focus();
+  popReturn = null;
+  return open;
+}
+document.addEventListener('mousedown', (e) => {
+  if (!e.target.closest?.('.pop') && !e.target.closest?.('#typeBtn')) closePops(false);
+});
+
+function openMenu(r, c, x, y) {
+  closePops(false);
+  const ch = chart();
+  const sName = ch.series[r]?.name, cName = ch.categories[c];
+  const items = [
+    ['Insert series above', r >= 0, () => insertSeries(r)],
+    ['Insert series below', r >= -1, () => insertSeries(r + 1)],
+    ['Insert category left', c >= 0, () => insertCategory(c)],
+    ['Insert category right', c >= -1, () => insertCategory(c + 1)],
+    null,
+    [r >= 0 ? `Delete series “${sName}”` : 'Delete series', r >= 0 && ch.series.length > 1, () => deleteSeries(r)],
+    [c >= 0 ? `Delete category “${cName}”` : 'Delete category', c >= 0 && ch.categories.length > 1, () => deleteCategory(c)],
+    null,
+    ['Copy', true, copyRange],
+    ['Clear contents', true, clearRange],
+  ];
+  const menu = $('ctxMenu');
+  popReturn = cellAt(r, c);
+  menu.replaceChildren(...items.map((it) => {
+    if (!it) return document.createElement('hr');
+    const b = document.createElement('button');
+    b.type = 'button'; b.role = 'menuitem'; b.textContent = it[0]; b.disabled = !it[1];
+    b.onclick = () => { closePops(true); it[2](); };
+    return b;
+  }));
+  placePop(menu, x, y);
+  menu.querySelector('button:not(:disabled)')?.focus();
+}
+$('ctxMenu').addEventListener('keydown', (e) => {
+  const items = [...$('ctxMenu').querySelectorAll('button:not(:disabled)')];
+  const i = items.indexOf(document.activeElement);
+  if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Tab') { e.preventDefault(); }
+});
+
+let colorFor = -1;
+function swatchButtons(colors, current) {
+  return colors.map((hex) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.style.background = `#${hex}`;
+    b.setAttribute('aria-label', `#${hex}`); b.dataset.hex = hex;
+    b.setAttribute('aria-pressed', String(current === hex));
+    b.onclick = () => setColor(hex);
+    return b;
+  });
+}
+function openColor(i, anchor) {
+  closePops(false);
+  colorFor = i;
+  const s = chart().series[i], current = s.color?.replace('#', '').toUpperCase();
+  $('themeSwatches').replaceChildren(...swatchButtons(deck.style?.palette ?? PALETTE, current));
+  $('accentSwatches').replaceChildren(...swatchButtons(ACCENTS, current));
+  $('colorHex').value = current ? `#${current}` : '';
+  $('colorAuto').setAttribute('aria-pressed', String(!current));
+  popReturn = anchor;
+  const b = anchor.getBoundingClientRect();
+  placePop($('colorPop'), b.left, b.bottom + 6);
+  ($('colorPop').querySelector('[aria-pressed="true"]') ?? $('colorPop').querySelector('button')).focus();
+}
+function setColor(hex) {
+  const s = chart().series[colorFor]; if (!s) return;
+  if (hex) s.color = hex.replace('#', '').toUpperCase(); else delete s.color;
+  const i = colorFor;
+  closePops(false);
+  changed(true, 'color');
+  $('sheet').querySelector(`.swatch[data-i="${i}"]`)?.focus();
+}
+$('colorAuto').onclick = () => setColor(null);
+const setHex = () => {
+  const v = $('colorHex').value.trim();
+  if (/^#?[0-9A-Fa-f]{6}$/.test(v)) setColor(v);
+  else { $('colorHex').setAttribute('aria-invalid', 'true'); $('colorHex').focus(); }
+};
+$('colorSet').onclick = setHex;
+$('colorHex').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); setHex(); } });
+$('colorHex').addEventListener('input', () => $('colorHex').removeAttribute('aria-invalid'));
+
+function buildGallery() {
+  $('gallery').replaceChildren(...TYPES.map(([group, items]) => {
+    const g = document.createElement('div');
+    g.setAttribute('role', 'group'); g.setAttribute('aria-label', group);
+    const h = document.createElement('h3'); h.textContent = group;
+    const list = document.createElement('div'); list.className = 'group-items';
+    list.append(...items.map(([t, label, icon]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'gal-item'; b.dataset.type = t;
+      b.innerHTML = `${icon}<span>${label}</span>`;
+      b.onclick = () => { closePops(true); if (chart().type !== t) setType(t); };
+      return b;
+    }));
+    g.append(h, list);
+    return g;
+  }));
+}
+function openGallery() {
+  if (!$('gallery').hidden) return closePops(true);
+  closePops(false);
+  for (const b of $('gallery').querySelectorAll('.gal-item')) b.setAttribute('aria-pressed', String(b.dataset.type === chart().type));
+  popReturn = $('typeBtn');
+  $('typeBtn').setAttribute('aria-expanded', 'true');
+  const b = $('typeBtn').getBoundingClientRect();
+  $('gallery').hidden = false;
+  const w = $('gallery').offsetWidth;
+  placePop($('gallery'), Math.min(b.right - w, b.left), b.bottom + 6);
+  ($('gallery').querySelector('[aria-pressed="true"]') ?? $('gallery').querySelector('.gal-item')).focus();
+}
+$('typeBtn').onclick = openGallery;
+// Arrow keys move to the nearest item in that direction.
+$('gallery').addEventListener('keydown', (e) => {
+  const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+  if (!dir) return;
+  e.preventDefault();
+  const items = [...$('gallery').querySelectorAll('.gal-item')];
+  const at = document.activeElement.getBoundingClientRect();
+  const cx = at.left + at.width / 2, cy = at.top + at.height / 2;
+  let best = null, bestD = Infinity;
+  for (const it of items) {
+    const b = it.getBoundingClientRect(), dx = b.left + b.width / 2 - cx, dy = b.top + b.height / 2 - cy;
+    if ((dir[0] && Math.sign(dx) !== dir[0]) || (dir[1] && Math.sign(dy) !== dir[1]) || (dir[0] && Math.abs(dx) < 4) || (dir[1] && Math.abs(dy) < 4)) continue;
+    const d = dir[0] ? Math.abs(dx) + 3 * Math.abs(dy) : Math.abs(dy) + 3 * Math.abs(dx);
+    if (d < bestD) { bestD = d; best = it; }
+  }
+  best?.focus();
+});
+
+// One-line tooltips for every control: hover or keyboard focus, after a short delay.
+let tipTimer = 0, tipFor = null;
+function showTip(el) {
+  if (tipFor === el) return;
+  clearTimeout(tipTimer); tipFor = el;
+  tipTimer = setTimeout(() => {
+    const tip = $('tip'); tip.textContent = el.dataset.tip; tip.hidden = false;
+    const b = el.getBoundingClientRect();
+    tip.style.left = `${Math.max(8, Math.min(b.left, innerWidth - tip.offsetWidth - 8))}px`;
+    tip.style.top = `${b.bottom + 6 + tip.offsetHeight > innerHeight ? b.top - tip.offsetHeight - 6 : b.bottom + 6}px`;
+  }, 450);
+}
+function hideTip() { clearTimeout(tipTimer); tipFor = null; $('tip').hidden = true; }
+document.addEventListener('mouseover', (e) => { const el = e.target.closest?.('[data-tip]'); if (el) showTip(el); else if (tipFor) hideTip(); });
+document.addEventListener('focusin', (e) => { const el = e.target.closest?.('[data-tip]'); if (el && e.target.matches(':focus-visible')) showTip(el); else hideTip(); });
+document.addEventListener('scroll', hideTip, true);
+for (const el of document.querySelectorAll('[data-tip]')) {
+  const ctl = el.matches('button, input, select, [tabindex]') ? el : el.querySelector('input, select, button');
+  ctl?.setAttribute('aria-description', el.dataset.tip);
+}
+
+// ---- Global keys: undo/redo, apply, Escape --------------------------------------------------------
+document.addEventListener('keydown', (e) => {
+  const mod = e.metaKey || e.ctrlKey;
+  if (e.key === 'Escape') {
+    hideTip();
+    if (closePops(true)) { e.preventDefault(); return; }
+    if (session && escArmed) return cancel();
+    if (session) { escArmed = true; setTimeout(() => { escArmed = false; }, 800); }
+    return;
+  }
+  if (mod && e.key === 'Enter') { e.preventDefault(); if (session) apply(); return; }
+  if (e.target.closest?.('#colorPop') || e.target.type === 'file') return;
+  const k = e.key.toLowerCase();
+  if (mod && !e.altKey && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
+  else if (mod && !e.altKey && k === 'y') { e.preventDefault(); redo(); }
+});
+let escArmed = false;
+
+// ---- State changes ----------------------------------------------------------------------------
+function changed(rebuild, key) {
   save();
-  if (rebuild) { renderForm(); renderSheet(); }
+  record(key);
+  markDirty();
+  if (rebuild) { renderForm(); renderSheet(); autoSplit(); }
   renderTabs();
   schedule();
 }
+function setOpt(k, v, key = k) { if (v === undefined) delete opts()[k]; else opts()[k] = v; changed(false, key); }
 
-// Settings form.
-$('title').oninput = (e) => { slide().title = e.target.value; changed(false); };
-$('type').onchange = (e) => {
-  const c = chart(), o = opts(), from = c.type, to = e.target.value;
+function setType(to) {
+  const c = chart(), o = opts(), from = c.type;
   // Options left at the old type's default follow the new type's default.
   for (const [k, def] of Object.entries(DEFAULTS)) if (o[k] !== undefined && o[k] === def(from)) delete o[k];
   convertData(c, from, to);
   // A combination chart needs a line: the last series becomes one unless a series already is.
   if (to === 'combo' && c.series.length > 1 && !c.series.some((s) => s.as === 'line')) c.series[c.series.length - 1].as = 'line';
-  // Options that only one type reads would fail validation on another.
-  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['axisTitles', ['scatter', 'bubble']], ['shades', ['gantt']]]) {
+  // Options that only some types read would fail validation on another.
+  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['axisTitles', ['scatter', 'bubble']], ['shades', ['gantt']], ['orientation', ['stacked', 'clustered', 'percent']], ['step', ['line']]]) {
     if (!types.includes(to)) delete o[k];
   }
   c.type = to;
-  if (to !== 'line') delete o.step;
   // Harvey balls read 0–4 quarters (or 0–1): start from a small assessment grid if the data does not fit.
   if (to === 'harvey' && c.series.some((s) => s.values.some((v) => typeof v === 'number' && (v < 0 || v > 4)))) {
     Object.assign(c, structuredClone(HARVEY_SAMPLE));
     remapCategories(() => -1);
     invalid.clear(); focusCell = null;
   }
-  changed(true);
+  changed(true, 'type');
+}
+
+$('title').oninput = (e) => { slide().title = e.target.value; changed(false, 'title'); };
+const writeUnit = () => {
+  const text = $('unit').value, prefix = $('unitPrefix').checked, o = opts();
+  const keep = o.unit && typeof o.unit === 'object' ? o.unit : {};
+  if (!text) setOpt('unit', undefined);
+  else if (prefix) setOpt('unit', { ...keep, text, position: 'prefix' }, 'unit');
+  else if (keep.space !== undefined) { const { position, ...rest } = keep; setOpt('unit', { ...rest, text }, 'unit'); }
+  else setOpt('unit', text);
 };
-$('unit').oninput = (e) => {
-  const o = opts(), v = e.target.value;
-  if (o.unit && typeof o.unit === 'object') { o.unit = { ...o.unit, text: v }; changed(false); } else setOpt('unit', v || undefined);
-};
+$('unit').oninput = writeUnit;
+$('unitPrefix').onchange = writeUnit;
 $('decimals').oninput = (e) => { setOpt('decimals', e.target.value === '' ? undefined : +e.target.value); };
+$('scale').onchange = (e) => { setOpt('scale', e.target.value || undefined); };
+$('locale').onchange = (e) => { setOpt('locale', e.target.value || undefined); };
+$('format').onchange = (e) => { setOpt('format', e.target.value.trim() || undefined); };
+$('format').onkeydown = (e) => { if (e.key === 'Enter') e.target.dispatchEvent(new Event('change')); };
 $('gap').oninput = (e) => { setOpt('gap', e.target.value === '' ? undefined : +e.target.value); };
 $('seriesLabels').onchange = (e) => { setOpt('seriesLabels', e.target.value || undefined); };
 $('mekko').onchange = (e) => { setOpt('mekko', e.target.value === 'percent' ? undefined : e.target.value); };
 $('totals').onchange = (e) => { setOpt('totals', e.target.checked); };
 $('valueAxis').onchange = (e) => { setOpt('valueAxis', e.target.checked); };
 $('step').onchange = (e) => { setOpt('step', e.target.checked || undefined); };
+$('orientation').onchange = (e) => { setOpt('orientation', e.target.checked ? 'horizontal' : undefined); };
 $('zeroBased').onchange = (e) => { setOpt('zeroBased', e.target.value === '' ? undefined : e.target.value === 'true'); };
 $('percentData').onchange = (e) => { setOpt('percentData', e.target.checked || undefined); };
 $('combo').onchange = (e) => { setOpt('combo', e.target.value === 'stacked' ? undefined : e.target.value); };
@@ -550,53 +1258,26 @@ for (const [id, axis] of [['xTitle', 'x'], ['yTitle', 'y']]) {
   $(id).oninput = (e) => {
     const t = { ...opts().axisTitles, [axis]: e.target.value || undefined };
     if (!t[axis]) delete t[axis];
-    setOpt('axisTitles', Object.keys(t).length ? t : undefined);
+    setOpt('axisTitles', Object.keys(t).length ? t : undefined, id);
   };
 }
 for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
   const update = () => {
     const a = $(from).value, b = $(to).value;
-    setOpt(key, a !== '' && b !== '' && a !== b ? { from: +a, to: +b } : undefined);
+    setOpt(key, a !== '' && b !== '' && a !== b ? { from: Math.min(+a, +b), to: Math.max(+a, +b) } : undefined);
   };
   $(from).onchange = update; $(to).onchange = update;
 }
-function setOpt(k, v) { if (v === undefined) delete opts()[k]; else opts()[k] = v; changed(false); }
 
-// Datasheet buttons. − removes the selected cell's row/column, else the last one.
-$('addCat').onclick = () => { const c = chart(); c.categories.push(`Cat ${c.categories.length + 1}`); c.series.forEach((s) => s.values.push(null)); changed(true); };
-$('addSer').onclick = () => { const c = chart(); c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) }); changed(true); };
-$('delCat').onclick = () => {
-  const c = chart(); if (c.categories.length < 2) return;
-  const j = focusCell && focusCell.c >= 0 && focusCell.c < c.categories.length ? focusCell.c : c.categories.length - 1;
-  c.categories.splice(j, 1); c.series.forEach((s) => s.values.splice(j, 1));
-  remapCategories((i) => (i === j ? -1 : i > j ? i - 1 : i));
-  invalid.clear(); focusCell = null; changed(true);
-};
-$('delSer').onclick = () => {
-  const c = chart(); if (c.series.length < 2) return;
-  const i = focusCell && focusCell.r >= 0 && focusCell.r < c.series.length ? focusCell.r : c.series.length - 1;
-  c.series.splice(i, 1);
-  invalid.clear(); focusCell = null; changed(true);
-};
-$('transpose').onclick = () => {
-  const c = chart();
-  const series = c.categories.map((cat, j) => ({ name: cat, values: c.series.map((s) => s.values[j] ?? null) }));
-  c.categories = c.series.map((s) => s.name);
-  c.series = series;
-  remapCategories(() => -1); // arrows and totals referred to the old categories
-  invalid.clear(); focusCell = null; changed(true);
-};
-$('reverse').onclick = () => { chart().series.reverse(); invalid.clear(); focusCell = null; changed(true); };
-
-// Slides.
+// ---- Slides, files ------------------------------------------------------------------------------
 $('addSlide').onclick = () => {
   const copy = structuredClone(slide());
   copy.title = 'New slide';
-  deck.slides.splice(cur + 1, 0, copy); cur++; invalid.clear(); changed(true);
+  deck.slides.splice(cur + 1, 0, copy); cur++; invalid.clear(); changed(true, 'slide');
 };
 $('delSlide').onclick = () => {
   if (deck.slides.length === 1) return;
-  deck.slides.splice(cur, 1); cur = Math.max(0, cur - 1); invalid.clear(); changed(true);
+  deck.slides.splice(cur, 1); cur = Math.max(0, cur - 1); invalid.clear(); changed(true, 'slide');
 };
 $('exportBtn').onclick = () => download(new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' }), 'charts.json');
 $('importBtn').onclick = () => $('importFile').click();
@@ -605,7 +1286,7 @@ $('importFile').onchange = async (e) => {
   e.target.value = '';
   try {
     deck = toDeck(JSON.parse(await f.text()));
-    cur = 0; invalid.clear(); changed(true);
+    cur = 0; invalid.clear(); sel = null; changed(true, 'import');
   } catch (err) { showError(`Couldn't read ${f.name}: ${err.message}`); }
 };
 $('downloadBtn').onclick = async () => {
@@ -626,9 +1307,76 @@ async function errorText(res) {
   const t = await res.text();
   try { return JSON.parse(t).error ?? t; } catch { return t || `HTTP ${res.status}`; }
 }
+let toastTimer = 0;
+function toast(text, warn = false) {
+  const t = $('toast');
+  t.textContent = text; t.className = warn ? 'warn' : ''; t.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.hidden = true; }, 2200);
+}
 
-// Live preview: one request in flight at a time; edits made meanwhile are sent as soon as it returns.
-let seq = 0, editAt = 0, inflight = false, dirty = false;
+// ---- Add-in session: load, apply, cancel ----------------------------------------------------------
+function setStatus(state, text) { $('status').dataset.state = state; $('statusText').textContent = text; }
+function markDirty() { if (session && !session.loading) { session.dirty = true; setStatus('dirty', 'Unsaved changes'); } }
+function notifyHost(type) {
+  const msg = { type, id: session.id, rev: session.rev };
+  try { window.Office?.context?.ui?.messageParent?.(JSON.stringify(msg)); } catch {}
+  for (const w of [window.opener, window.parent !== window ? window.parent : null]) try { w?.postMessage(msg, '*'); } catch {}
+}
+let applying = false;
+async function apply() {
+  if (!session || applying || session.loading) return;
+  if (hasError) { toast('Fix the highlighted error before applying', true); return; }
+  applying = true;
+  const btn = $('applyBtn'), label = btn.innerHTML;
+  btn.disabled = true; btn.textContent = 'Applying…';
+  try {
+    const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { method: 'POST', body: JSON.stringify({ chart: chart(), state: 'applied' }) });
+    if (!res.ok) throw new Error(await errorText(res));
+    session.rev = (await res.json()).rev;
+    session.dirty = false;
+    setStatus('applied', 'Applied to slide');
+    toast('✓ Applied to slide');
+    notifyHost('open-charts:apply');
+  } catch (err) {
+    toast(`Apply failed: ${err.message}`, true);
+  } finally {
+    applying = false; btn.innerHTML = label; btn.disabled = false;
+  }
+}
+async function cancel() {
+  if (!session) return;
+  try { await fetch(`/api/session/${encodeURIComponent(session.id)}`, { method: 'POST', body: JSON.stringify({ state: 'cancelled' }) }); } catch {}
+  notifyHost('open-charts:cancel');
+  fatal('Editing cancelled', session.rev ? 'The slide keeps the last applied chart. You can close this window.' : 'The slide was not changed. You can close this window.');
+  try { window.close(); } catch {}
+}
+$('applyBtn').onclick = apply;
+$('cancelBtn').onclick = cancel;
+function fatal(title, text) { $('fatalTitle').textContent = title; $('fatalText').textContent = text; $('fatal').hidden = false; }
+async function loadSession() {
+  session.loading = true;
+  $('loadingText').textContent = 'Loading chart from PowerPoint…';
+  try {
+    const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { cache: 'no-store' });
+    if (res.status === 404) return fatal('This edit session is no longer available', 'Close this window and choose Edit data on the chart in PowerPoint again.');
+    if (!res.ok) throw new Error(await errorText(res));
+    const s = await res.json();
+    deck = toDeck(structuredClone(s.chart));
+    deck.slides[0].title = '';
+    session.rev = s.rev;
+    $('sessionTitle').innerHTML = '';
+    $('sessionTitle').append('Editing ', Object.assign(document.createElement('b'), { textContent: s.title || 'chart' }), ' from PowerPoint');
+  } catch (err) {
+    return fatal('Could not load the chart', err.message);
+  }
+  session.loading = false;
+  setStatus('clean', 'No changes');
+  renderAll(); resetHistory();
+  moveTo(0, 0); // straight into the datasheet
+}
+
+// ---- Live preview: one request in flight; edits made meanwhile are sent as soon as it returns. ----
+let seq = 0, editAt = 0, inflight = false, dirty = false, lastSvg = '';
 function schedule() {
   document.body.dataset.seq = String(++seq);
   editAt = performance.now();
@@ -638,49 +1386,178 @@ async function preview() {
   inflight = true; dirty = false;
   const id = seq;
   try {
-    const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [slide()] }) });
+    const s = session ? { chart: chart() } : slide();
+    const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [s] }) });
     if (!res.ok) showError(await errorText(res));
     else showSlide((await res.json()).slides[0]);
   } catch (err) { showError(`Preview failed: ${err.message}`); }
   inflight = false;
   if (dirty) return preview();
+  $('loading').hidden = true;
   $('preview').dataset.seq = String(id);
   $('preview').dataset.ms = String(Math.round(performance.now() - editAt));
 }
-function showSlide(s) {
-  $('preview').innerHTML = s.svg;
-  $('preview').classList.remove('stale');
-  for (const el of $('sheet').querySelectorAll('.engine-error')) { el.classList.remove('engine-error'); el.setAttribute('aria-invalid', 'false'); }
-  const notes = [];
-  for (const [key, text] of invalid) {
-    const [r, c] = key.split(',').map(Number);
-    const what = POINT[chart().type] ? `"${['x', 'y', 'size'].slice(0, POINT[chart().type]).join('; ')}"` : 'a number';
-    notes.push({ text: `"${text}" in ${chart().series[r]?.name} / ${chart().categories[c]} is not ${what} (left empty)`, cls: '' });
+
+/** Where an issue points: the slide texts it quotes, and the datasheet cell it belongs to. */
+function issueTargets(issue) {
+  const ch = chart();
+  const quoted = [...issue.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+  const boxes = [];
+  if (quoted.length) {
+    for (const el of $('preview').querySelectorAll('svg text')) {
+      const t = [...el.querySelectorAll('tspan')].map((s) => s.textContent).join('\n') || el.textContent;
+      if (quoted.includes(t) || quoted.includes(el.textContent)) { try { boxes.push(el.getBBox()); } catch {} }
+    }
   }
-  const c = chart();
-  if (c.type === 'waterfall' && c.series.length > 1) notes.push({ text: `Waterfall shows the first series (${c.series[0].name}) only`, cls: 'info' });
-  if ((c.type === 'pie' || c.type === 'doughnut') && c.series.length > 1) notes.push({ text: `${c.type === 'pie' ? 'Pie' : 'Doughnut'} shows the first series (${c.series[0].name}) only`, cls: 'info' });
-  for (const t of s.issues) notes.push({ text: t.replace(/^hidden: /, 'Label hidden (no room): '), cls: t.startsWith('hidden') ? 'info' : '' });
-  if (!s.issues.length) notes.push({ text: 'Layout check passed: no overlaps', cls: 'ok' });
-  $('issues').replaceChildren(...notes.map(({ text, cls }) => {
-    const li = document.createElement('li');
-    li.textContent = text; li.className = cls;
-    return li;
+  let cell = null;
+  const role = issue.match(/s(\d+):c(\d+)/);
+  if (role) cell = { r: +role[1], c: +role[2] };
+  else if (issue.startsWith('hidden: ')) {
+    const head = issue.slice(8).split(': ')[0];
+    const [a, b] = head.split(' / ');
+    const si = ch.series.findIndex((s) => s.name === a), ci = ch.categories.indexOf(b ?? a);
+    if (b !== undefined && si >= 0 && ci >= 0) cell = { r: si, c: ci };
+    else if (b === undefined && ci >= 0) cell = { r: -1, c: ci };
+    else if (b === undefined && si >= 0) cell = { r: si, c: -1 };
+  }
+  return { boxes, cell };
+}
+function drawMarks(list) {
+  const NS = 'http://www.w3.org/2000/svg';
+  const make = (tag, attrs) => { const el = document.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v); return el; };
+  $('marks').replaceChildren(...list.map(({ n, boxes }) => {
+    const g = make('g', { 'data-n': n });
+    for (const b of boxes) g.append(make('rect', { class: 'box', x: b.x - 2, y: b.y - 2, width: b.width + 4, height: b.height + 4, rx: 2 }));
+    const b = boxes[0];
+    const badge = make('g', { class: 'badge' });
+    badge.append(make('circle', { cx: b.x + b.width + 4, cy: b.y - 4, r: 6.5 }));
+    const t = make('text', { x: b.x + b.width + 4, y: b.y - 4 }); t.textContent = n;
+    badge.append(t); g.append(badge);
+    return g;
   }));
 }
-function showError(msg) {
-  $('preview').classList.add('stale');
-  // Validation errors carry JSON paths ("/series/1/values/3: ..."): highlight the cells they point at.
-  for (const m of String(msg).matchAll(/\/(series|categories)\/(\d+)(?:\/(values|name)(?:\/(\d+))?)?/g)) {
-    const el = m[1] === 'categories' ? cellAt(-1, m[2]) : cellAt(m[2], m[4] ?? -1);
-    if (el) { el.classList.add('engine-error'); el.setAttribute('aria-invalid', 'true'); }
+function focusIssue(note) {
+  if (note.n) {
+    const g = $('marks').querySelector(`g[data-n="${note.n}"]`);
+    for (const x of $('marks').querySelectorAll('.pulse')) x.classList.remove('pulse');
+    if (g) { void g.getBBox(); g.classList.add('pulse'); setTimeout(() => g.classList.remove('pulse'), 1800); }
   }
-  const li = document.createElement('li');
-  li.className = 'error'; li.textContent = msg;
-  $('issues').replaceChildren(li);
+  if (note.cell) moveTo(note.cell.r, note.cell.c);
+}
+function renderNotes(notes) {
+  let n = 0;
+  const marked = [];
+  $('issues').replaceChildren(...notes.map((note) => {
+    const li = document.createElement('li');
+    li.textContent = note.text; li.className = note.cls ?? '';
+    if (note.boxes?.length) { note.n = String(++n); li.dataset.n = note.n; marked.push(note); }
+    if (note.n || note.cell) {
+      li.tabIndex = 0; li.role = 'button';
+      li.setAttribute('aria-label', `${note.text}. ${note.cell ? 'Go to the cell' : 'Show on the slide'}`);
+      li.onclick = () => focusIssue(note);
+      li.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); focusIssue(note); } };
+    }
+    return li;
+  }));
+  drawMarks(marked);
+}
+function showSlide(s) {
+  if (s.svg !== lastSvg) { $('preview').innerHTML = s.svg; lastSvg = s.svg; }
+  hasError = false;
+  $('previewPanel').classList.remove('stale'); $('staleBanner').hidden = true;
+  $('applyBtn').removeAttribute('aria-disabled');
+  cellErrors.clear(); markCellErrors();
+  const c = chart(), notes = [];
+  for (const [key, text] of invalid) {
+    const [r, col] = key.split(',').map(Number);
+    notes.push({ text: `"${text}" in ${c.series[r]?.name} / ${c.categories[col]} is not ${expected(c.type)} (left empty)`, cls: '', cell: { r, c: col } });
+  }
+  if (c.type === 'waterfall' && c.series.length > 1) notes.push({ text: `Waterfall shows the first series (${c.series[0].name}) only`, cls: 'info' });
+  if ((c.type === 'pie' || c.type === 'doughnut') && c.series.length > 1) notes.push({ text: `${c.type === 'pie' ? 'Pie' : 'Doughnut'} shows the first series (${c.series[0].name}) only`, cls: 'info' });
+  for (const t of s.issues) notes.push({ text: t.replace(/^hidden: /, 'Label hidden (no room): '), cls: t.startsWith('hidden') ? 'info' : '', ...issueTargets(t) });
+  if (!s.issues.length) notes.push({ text: 'Layout check passed: no overlaps', cls: 'ok' });
+  renderNotes(notes);
+  const a = document.activeElement;
+  if (a?.dataset?.r !== undefined) showCellTip(a);
+}
+function showError(msg) {
+  hasError = true;
+  $('previewPanel').classList.add('stale'); $('staleBanner').hidden = false;
+  $('applyBtn').setAttribute('aria-disabled', 'true');
+  $('loading').hidden = true;
+  // Validation errors carry JSON paths ("/series/1/values/3: ..."): put each message on its cell.
+  cellErrors.clear();
+  const ch = chart();
+  let first = null;
+  for (const line of String(msg).split('\n')) {
+    for (const m of line.matchAll(/\/(series|categories)\/(\d+)(?:\/(values|name)(?:\/(\d+))?)?/g)) {
+      const cell = m[1] === 'categories' ? { r: -1, c: +m[2] } : { r: +m[2], c: m[4] !== undefined ? +m[4] : -1 };
+      if (cell.r >= ch.series.length || cell.c >= ch.categories.length) continue;
+      cellErrors.set(`${cell.r},${cell.c}`, line.replace(/^.*?\/(series|categories)\/[^:]*:\s*/, ''));
+      first ??= cell;
+    }
+  }
+  markCellErrors();
+  renderNotes([{ text: msg, cls: 'error', cell: first }]);
+  $('marks').replaceChildren();
 }
 
-renderAll();
+// ---- Zoom and splitter --------------------------------------------------------------------------
+const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+let zoom = 'fit';
+function fitScale() {
+  const st = $('stage');
+  return Math.max(0.1, Math.min((st.clientWidth - 16) / 960, (st.clientHeight - 16) / 540));
+}
+function applyZoom() {
+  const s = zoom === 'fit' ? fitScale() : zoom;
+  $('canvas').style.width = `${Math.round(960 * s)}px`;
+  $('canvas').style.height = `${Math.round(540 * s)}px`;
+  $('stage').classList.toggle('zoomed', zoom !== 'fit');
+  $('zoomLabel').textContent = zoom === 'fit' ? `Fit · ${Math.round(s * 100)}%` : `${Math.round(s * 100)}%`;
+  $('zoomFit').setAttribute('aria-pressed', String(zoom === 'fit'));
+}
+const current = () => (zoom === 'fit' ? fitScale() : zoom);
+$('zoomIn').onclick = () => { zoom = ZOOMS.find((z) => z > current() + 0.01) ?? ZOOMS.at(-1); applyZoom(); };
+$('zoomOut').onclick = () => { zoom = [...ZOOMS].reverse().find((z) => z < current() - 0.01) ?? ZOOMS[0]; applyZoom(); };
+$('zoomFit').onclick = () => { zoom = 'fit'; applyZoom(); };
+$('zoom100').onclick = () => { zoom = 1; applyZoom(); };
+new ResizeObserver(() => { if (zoom === 'fit') applyZoom(); }).observe($('stage'));
+
+function setSplit(frac) {
+  frac = Math.min(0.85, Math.max(0.2, frac));
+  $('work').style.setProperty('--split', `${(frac * 100).toFixed(1)}%`);
+  $('splitter').setAttribute('aria-valuenow', String(Math.round(frac * 100)));
+  return frac;
+}
+let split = 0.58, userSplit = false;
+try { split = Number(localStorage.getItem(SPLIT_KEY)) || 0; userSplit = split > 0; } catch {}
+/** Until the user drags the splitter, give the preview everything the datasheet does not need. */
+function autoSplit() {
+  if (userSplit || matchMedia('(max-width: 899px)').matches) return;
+  const h = $('work').clientHeight - 24;
+  const need = 120 + 33 * (chart().series.length + 2);
+  split = setSplit(Math.min(0.72, Math.max(0.45, 1 - need / h)));
+}
+if (userSplit) setSplit(split); else setSplit(0.58);
+const saveSplit = () => { userSplit = true; try { localStorage.setItem(SPLIT_KEY, String(split)); } catch {} };
+$('splitter').addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  const sp = $('splitter'); sp.setPointerCapture(e.pointerId);
+  const box = $('work').getBoundingClientRect();
+  const move = (ev) => { split = setSplit((ev.clientY - box.top - 12) / (box.height - 24)); };
+  const up = () => { sp.removeEventListener('pointermove', move); sp.removeEventListener('pointerup', up); saveSplit(); };
+  sp.addEventListener('pointermove', move); sp.addEventListener('pointerup', up);
+});
+$('splitter').addEventListener('keydown', (e) => {
+  const d = { ArrowUp: -0.04, ArrowDown: 0.04 }[e.key];
+  if (d) { e.preventDefault(); split = setSplit(split + d); saveSplit(); }
+});
+
+buildGallery();
+applyZoom();
+if (session) loadSession();
+else { renderAll(); resetHistory(); }
 </script>
 </body>
 </html>
