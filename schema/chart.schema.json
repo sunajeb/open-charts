@@ -9,7 +9,7 @@
   "properties": {
     "$schema": { "type": "string" },
     "specVersion": { "const": 1 },
-    "type": { "enum": ["stacked", "clustered", "percent", "waterfall", "mekko", "line"] },
+    "type": { "enum": ["stacked", "clustered", "percent", "waterfall", "mekko", "line", "area", "area100"] },
     "categories": {
       "type": "array",
       "minItems": 1,

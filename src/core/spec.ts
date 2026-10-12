@@ -11,7 +11,10 @@ export interface SpecError {
   message: string;
 }
 
-export const CHART_TYPES = ['stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line'] as const;
+export const CHART_TYPES = [
+  'stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line',
+  'area', 'area100',
+] as const;
 export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options'] as const;
 export const SERIES_KEYS = ['name', 'values', 'color'] as const;
 export const OPTION_KEYS = [

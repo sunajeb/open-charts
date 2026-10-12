@@ -64,4 +64,25 @@ export const samples: Partial<Record<ChartType, ChartSpec>> = {
     ],
     options: { unit: 'm' },
   },
+  area: {
+    specVersion: 1,
+    type: 'area',
+    categories: years,
+    series: [
+      { name: 'Enterprise', values: [42, 58, 75, 96, 118] },
+      { name: 'Mid-market', values: [31, 36, 44, 51, 60] },
+      { name: 'SMB', values: [18, 21, 22, 26, 29] },
+    ],
+    options: { unit: 'm', totals: true },
+  },
+  area100: {
+    specVersion: 1,
+    type: 'area100',
+    categories: years,
+    series: [
+      { name: 'Enterprise', values: [42, 58, 75, 96, 118] },
+      { name: 'Mid-market', values: [31, 36, 44, 51, 60] },
+      { name: 'SMB', values: [18, 21, 22, 26, 29] },
+    ],
+  },
 };

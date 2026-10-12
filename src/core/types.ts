@@ -2,7 +2,8 @@
 import type { Scale, Unit } from './numbers.ts';
 export type { Scale, Unit } from './numbers.ts';
 
-export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line';
+export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line'
+  | 'area' | 'area100';
 
 /** A cell: a number, empty (null), or "e" in a waterfall = this category is a computed total. */
 export type Value = number | null | 'e';
