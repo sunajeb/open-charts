@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Two products make up 85% of revenue; the four smallest share 9%",
+      "chart": {
+        "specVersion": 1,
+        "type": "pie",
+        "categories": ["Core platform","Analytics","Integrations","Mobile","Consulting","Marketplace","Legacy hardware"],
+        "series": [{"name":"Revenue 2025","values":[512,298,61,48,22,9,4]}],
+        "options": {"unit":"m"}
+      }
+    }
+  ]
+}

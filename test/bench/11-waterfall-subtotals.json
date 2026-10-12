@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "EBITDA bridge: volume gains were absorbed by cost inflation",
+      "chart": {
+        "specVersion": 1,
+        "type": "waterfall",
+        "categories": ["EBITDA 2024","Volume","Price","Gross margin","Raw materials","Energy","Labour","SG&A","EBITDA 2025"],
+        "series": [{"name":"EBITDA","values":[184,32,11,"e",-21,-14,-9,6,"e"]}],
+        "options": {"unit":"m"}
+      }
+    }
+  ]
+}

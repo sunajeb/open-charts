@@ -1,0 +1,32 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Active users: Android launched in March, web paused in August",
+      "chart": {
+        "specVersion": 1,
+        "type": "line",
+        "categories": [
+          "Jan 2025",
+          "Feb 2025",
+          "Mar 2025",
+          "Apr 2025",
+          "May 2025",
+          "Jun 2025",
+          "Jul 2025",
+          "Aug 2025",
+          "Sep 2025",
+          "Oct 2025",
+          "Nov 2025",
+          "Dec 2025"
+        ],
+        "series": [
+          {"name":"iOS","values":[210,224,236,251,262,270,288,301,310,322,341,360]},
+          {"name":"Android","values":[null,null,40,88,131,170,204,236,259,281,302,330]},
+          {"name":"Web","values":[180,176,171,169,160,158,150,null,null,120,118,115]}
+        ],
+        "options": {"unit":"k"}
+      }
+    }
+  ]
+}

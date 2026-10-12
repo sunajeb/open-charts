@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Free cash flow turned positive in 2023",
+      "chart": {
+        "specVersion": 1,
+        "type": "line",
+        "categories": ["2019","2020","2021","2022","2023","2024","2025"],
+        "series": [{"name":"Free cash flow","values":[-42,-31,-18,-6,9,24,38]}],
+        "options": {"unit":"m"}
+      }
+    }
+  ]
+}

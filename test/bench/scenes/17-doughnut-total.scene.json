@@ -1,0 +1,26 @@
+{
+  "fonts": "w=177.12 wb=180.44 lh=13.80",
+  "frame": {"x":48,"y":96,"w":864,"h":408},
+  "hidden": [],
+  "shapes": [
+    {"role":"wedge:s0:c0","kind":"path","commands":[{"op":"A","cx":480,"cy":302.6,"r":190.2,"start":-90,"sweep":165.5},{"op":"A","cx":480,"cy":302.6,"r":104.6,"start":75.5,"sweep":-165.5},{"op":"Z"}],"fill":"1F3A5F","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c1","kind":"path","commands":[{"op":"A","cx":480,"cy":302.6,"r":190.2,"start":75.5,"sweep":78.8},{"op":"A","cx":480,"cy":302.6,"r":104.6,"start":154.3,"sweep":-78.7},{"op":"Z"}],"fill":"3E6A9E","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c2","kind":"path","commands":[{"op":"A","cx":480,"cy":302.6,"r":190.2,"start":154.3,"sweep":51.4},{"op":"A","cx":480,"cy":302.6,"r":104.6,"start":205.7,"sweep":-51.4},{"op":"Z"}],"fill":"7FA3CC","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c3","kind":"path","commands":[{"op":"A","cx":480,"cy":302.6,"r":190.2,"start":205.7,"sweep":29.7},{"op":"A","cx":480,"cy":302.6,"r":104.6,"start":235.4,"sweep":-29.7},{"op":"Z"}],"fill":"B9CDE5","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c4","kind":"path","commands":[{"op":"A","cx":480,"cy":302.6,"r":190.2,"start":235.4,"sweep":34.6},{"op":"A","cx":480,"cy":302.6,"r":104.6,"start":270,"sweep":-34.6},{"op":"Z"}],"fill":"A6A6A6","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"label:value:s0:c0","kind":"text","size":12,"color":"FFFFFF","align":"center","valign":"middle","lineHeight":13.8,"x":608.4,"y":275.8,"w":57.4,"h":13.8,"text":"412 (46%)","textRole":"value"},
+    {"role":"label:value:s0:c1","kind":"text","size":12,"color":"FFFFFF","align":"center","valign":"middle","lineHeight":13.8,"x":384.6,"y":439.3,"w":57.4,"h":13.8,"text":"196 (22%)","textRole":"value"},
+    {"role":"label:value:s0:c2","kind":"text","size":12,"color":"222222","align":"center","valign":"middle","lineHeight":13.8,"x":293,"y":295.7,"w":57.4,"h":13.8,"text":"128 (14%)","textRole":"value"},
+    {"role":"label:value:s0:c3","kind":"text","size":12,"color":"222222","align":"center","valign":"middle","lineHeight":13.8,"x":332.9,"y":188.5,"w":44,"h":13.8,"text":"74 (8%)","textRole":"value"},
+    {"role":"label:value:s0:c4","kind":"text","size":12,"color":"222222","align":"center","valign":"middle","lineHeight":13.8,"x":406.7,"y":141.5,"w":50.7,"h":13.8,"text":"86 (10%)","textRole":"value"},
+    {"role":"label:total","kind":"text","size":12,"color":"222222","align":"center","valign":"middle","lineHeight":13.8,"x":469,"y":295.7,"w":22,"h":13.8,"text":"896","bold":true,"textRole":"total"},
+    {"role":"leader:c4","kind":"line","x1":423.5,"y1":121,"x2":403.6,"y2":114.1,"color":"595959","width":0.5},
+    {"role":"leader:c3","kind":"line","x1":335.5,"y1":178.9,"x2":325.4,"y2":174.2,"color":"595959","width":0.5},
+    {"role":"leader:c1","kind":"line","x1":399.9,"y1":475.1,"x2":384.4,"y2":481.6,"color":"595959","width":0.5},
+    {"role":"label:category:c0","kind":"text","size":12,"color":"222222","align":"left","valign":"middle","lineHeight":13.8,"x":676.6,"y":270.8,"w":66,"h":13.8,"text":"Engineering","textRole":"category"},
+    {"role":"label:category:c4","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":375.3,"y":107.2,"w":27.3,"h":13.8,"text":"G&A","textRole":"category"},
+    {"role":"label:category:c3","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":269.7,"y":167.3,"w":54.7,"h":13.8,"text":"Marketing","textRole":"category"},
+    {"role":"label:category:c2","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":181.9,"y":295.7,"w":100.7,"h":13.8,"text":"Customer success","textRole":"category"},
+    {"role":"label:category:c1","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":351.4,"y":474.7,"w":32,"h":13.8,"text":"Sales","textRole":"category"}
+  ]
+}
