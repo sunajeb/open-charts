@@ -139,6 +139,22 @@ export function categoryHeight(ctx: Ctx, slot: number): number {
 /** Widest frame a chart is expected to get (the default chart area of a 16:9 slide). */
 const MAX_CHART_W = 864;
 
+/**
+ * Category names (not a thinned time axis) that cannot all be shown in uniform slots: if a chart of at
+ * most the default slide width would show them, throw TooSmall with that width (the placeholder asks
+ * for it) rather than draw an axis with gaps. Beyond that, labels stay hidden and reported.
+ */
+export function askForRoom(ctx: Ctx, fit: CategoryFit, slot: number, maxLines = 3) {
+  if (fit.span !== 1 || !fit.hidden.size) return;
+  const cats = ctx.spec.categories;
+  // Narrowest slot in which every name wraps into `maxLines` lines at the minimum size.
+  const ok = (w: number) => cats.every((c) => fits(wrap(c, w - 2, ctx.minFs, ctx.m, maxLines), w - 2, ctx.minFs, ctx.m));
+  let lo = slot, hi = Math.max(slot, ...cats.map((c) => ctx.m.width(c, ctx.minFs) + 4));
+  for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; }
+  const need = ctx.frame.w + cats.length * (hi - slot) + 1;
+  if (need <= MAX_CHART_W) throw new TooSmall({ w: need }, 'category labels need wider slots');
+}
+
 export function categoryLabels(ctx: Ctx, centres: number[], slot: number, top: number) {
   const { frame } = ctx;
   // A thinned label is as wide as its text (up to `span` slots), kept inside the frame; if keeping the
@@ -161,16 +177,7 @@ export function categoryLabels(ctx: Ctx, centres: number[], slot: number, top: n
     fit = next;
     bs = boxes(fit);
   }
-  // Names (not dates) that cannot be shown: if a chart of at most the default slide width would show
-  // them all, ask for that size (placeholder) rather than draw a category axis with gaps.
-  if (fit.span === 1 && fit.hidden.size) {
-    // Narrowest slot in which every name wraps into three lines at the minimum size.
-    const ok = (w: number) => ctx.spec.categories.every((c) => fits(wrap(c, w - 2, ctx.minFs, ctx.m, 3), w - 2, ctx.minFs, ctx.m));
-    let lo = slot, hi = Math.max(slot, ...ctx.spec.categories.map((c) => ctx.m.width(c, ctx.minFs) + 4));
-    for (let k = 0; k < 12; k++) { const mid = (lo + hi) / 2; if (ok(mid)) hi = mid; else lo = mid; }
-    const need = ctx.frame.w + centres.length * (hi - slot) + 1;
-    if (need <= MAX_CHART_W) throw new TooSmall({ w: need }, 'category labels need wider slots');
-  }
+  askForRoom(ctx, fit, slot);
   reportFit(ctx, fit);
   ctx.spec.categories.forEach((_, i) => {
     const b = bs[i];
