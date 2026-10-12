@@ -628,7 +628,8 @@ test('area and 100% area: filled bands, area controls only, 100% labels add up',
 
 test('pie and doughnut: one slice per category, shares add up to 100, first series only', async ({ page }) => {
   await edit(page, () => setType(page, 'pie'));
-  expect(await visible(page, ['seriesLabels', 'valueAxis', 'gap', 'unit', 'totals'])).toEqual([true, false, false, false, false]);
+  // Unit applies: slice labels can show values (Slice labels: Value).
+  expect(await visible(page, ['seriesLabels', 'valueAxis', 'gap', 'unit', 'totals'])).toEqual([true, false, false, true, false]);
   expect(await paths(page)).toBe(5);
   const shares = (await texts(page)).map((t) => t.match(/(\d+)%$/)?.[1]).filter(Boolean).map(Number);
   expect(shares.reduce((a, b) => a + b, 0)).toBe(100);
