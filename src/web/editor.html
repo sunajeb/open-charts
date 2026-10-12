@@ -12,6 +12,7 @@
     --mono: ui-monospace, Menlo, Consolas, monospace;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); }
   header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--panel); border-bottom: 1px solid var(--rule); flex-wrap: wrap; }
   header h1 { font-size: 15px; margin: 0 8px 0 0; letter-spacing: .01em; }
@@ -19,7 +20,8 @@
   .tab { border: 1px solid var(--rule); background: var(--panel); padding: 5px 10px; border-radius: 6px; cursor: pointer; font: inherit; color: var(--muted); max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tab[aria-selected="true"] { background: var(--accent-soft); border-color: var(--accent); color: var(--ink); }
   button { font: inherit; border: 1px solid var(--rule); background: var(--panel); color: var(--ink); padding: 6px 12px; border-radius: 6px; cursor: pointer; }
-  button:hover { border-color: var(--muted); }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .45; cursor: default; }
   button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   main { display: grid; grid-template-columns: minmax(360px, 460px) 1fr; gap: 16px; padding: 16px; align-items: start; }
@@ -29,8 +31,11 @@
   label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
   input, select { font: inherit; color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 6px 8px; background: #fff; min-width: 0; }
   .grid2 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .checks { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
   .check { flex-direction: row; align-items: center; gap: 6px; color: var(--ink); font-size: 13px; }
-  .range { display: grid; grid-template-columns: auto 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; }
+  .range { display: grid; grid-template-columns: 120px 1fr 1fr; gap: 6px; align-items: center; font-size: 13px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; }
+  .chips .check { font-size: 12px; }
   .sheet-wrap { overflow: auto; border: 1px solid var(--rule); border-radius: 8px; max-height: 420px; }
   table { border-collapse: collapse; font-variant-numeric: tabular-nums; }
   td, th { border: 1px solid var(--rule); padding: 0; }
@@ -39,23 +44,26 @@
   td input { text-align: right; font-family: var(--mono); font-size: 13px; }
   td.name input { text-align: left; font-family: var(--font); width: 140px; font-weight: 600; }
   th input { font-weight: 600; text-align: center; }
-  .corner { width: 140px; font-size: 11px; color: var(--muted); padding: 0 8px; text-align: left; font-weight: 400; }
+  th.corner input { width: 140px; font-size: 11px; font-weight: 400; text-align: left; color: var(--muted); }
+  #sheet input[aria-invalid="true"] { background: var(--warn-soft); color: var(--warn); }
+  #sheet input:focus { background: var(--accent-soft); outline: none; }
   .row { display: flex; gap: 6px; flex-wrap: wrap; }
   .hint { font-size: 12px; color: var(--muted); margin: 0; }
   .preview { background: #fff; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+  .preview.stale { opacity: .4; }
   .preview svg { width: 100%; height: auto; display: block; }
   .issues { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
   .issues li { background: var(--warn-soft); color: var(--warn); padding: 4px 8px; border-radius: 4px; }
   .issues li.ok { background: var(--accent-soft); color: var(--accent); }
   .issues li.info { background: #f1f2ef; color: var(--muted); }
-  .error { color: var(--warn); font-weight: 600; }
+  .issues li.error { font-weight: 600; white-space: pre-line; }
 </style>
 </head>
 <body>
 <header>
   <h1>open-charts</h1>
-  <div class="tabs" id="tabs" role="tablist"></div>
-  <button id="addSlide" type="button">+ Slide</button>
+  <div class="tabs" id="tabs" role="tablist" aria-label="Slides"></div>
+  <button id="addSlide" type="button" title="Duplicate this slide after the current one">+ Slide</button>
   <button id="delSlide" type="button">Delete slide</button>
   <button id="importBtn" type="button">Import JSON</button>
   <input id="importFile" type="file" accept=".json,application/json" hidden>
@@ -81,7 +89,7 @@
         </label>
         <label>Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
         <label>Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
-        <label>Series labels
+        <label data-for="stacked percent clustered line waterfall mekko">Series labels
           <select id="seriesLabels">
             <option value="">Auto</option>
             <option value="right">Right of chart</option>
@@ -89,25 +97,44 @@
             <option value="none">None</option>
           </select>
         </label>
-        <label>Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
-        <div style="display:flex;flex-direction:column;justify-content:flex-end;gap:4px">
-          <label class="check"><input id="totals" type="checkbox"> Totals</label>
+        <label data-for="stacked percent clustered waterfall">Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
+        <label data-for="line">Axis start
+          <select id="zeroBased">
+            <option value="">Auto</option>
+            <option value="true">Zero</option>
+            <option value="false">Fit data</option>
+          </select>
+        </label>
+        <label data-for="mekko">Mekko heights
+          <select id="mekko">
+            <option value="percent">100% (share)</option>
+            <option value="unit">Absolute</option>
+          </select>
+        </label>
+        <div class="checks">
+          <label class="check" data-for="stacked percent mekko"><input id="totals" type="checkbox"> Totals</label>
           <label class="check"><input id="valueAxis" type="checkbox"> Value axis</label>
         </div>
       </div>
-      <div class="range"><span>CAGR arrow</span><select id="cagrFrom"></select><select id="cagrTo"></select></div>
-      <div class="range"><span>Difference arrow</span><select id="diffFrom"></select><select id="diffTo"></select></div>
+      <div class="range" data-for="stacked percent"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select></div>
+      <div class="range" data-for="stacked percent"><span>Difference arrow</span><select id="diffFrom" aria-label="Difference from"></select><select id="diffTo" aria-label="Difference to"></select></div>
+      <div data-for="waterfall" style="display:flex;flex-direction:column;gap:4px">
+        <span class="hint">Total columns (drawn from the baseline)</span>
+        <div class="chips" id="totalsAt"></div>
+      </div>
     </section>
 
     <section>
       <h2>Datasheet</h2>
-      <p class="hint">Paste a block from Excel into any cell. Pasting into the top-left cell reads the first row as categories and the first column as series names.</p>
+      <p class="hint">Paste a block from Excel into any cell; pasting into the top-left cell reads the first row as categories and the first column as series names. Arrow keys and Enter move between cells. − removes the row or column of the selected cell.</p>
       <div class="sheet-wrap"><table id="sheet"></table></div>
       <div class="row">
         <button id="addCat" type="button">+ Category</button>
         <button id="addSer" type="button">+ Series</button>
         <button id="delCat" type="button">− Category</button>
         <button id="delSer" type="button">− Series</button>
+        <button id="transpose" type="button" title="Swap categories and series">Transpose</button>
+        <button id="reverse" type="button" title="Reverse the order of the series">Reverse series</button>
       </div>
     </section>
   </div>
@@ -115,7 +142,7 @@
   <section>
     <h2>Preview</h2>
     <div class="preview" id="preview"></div>
-    <ul class="issues" id="issues"></ul>
+    <ul class="issues" id="issues" aria-live="polite"></ul>
   </section>
 </main>
 
@@ -137,124 +164,212 @@ const SAMPLE = {
     },
   }],
 };
+// Engine defaults per chart type, mirrored so the form shows what the chart actually does.
+const DEFAULTS = {
+  totals: (t) => t === 'stacked',
+  valueAxis: (t) => t === 'line',
+};
 
+const $ = (id) => document.getElementById(id);
 let deck = load();
 let cur = 0;
-const $ = (id) => document.getElementById(id);
+let focusCell = null; // { r, c } of the last focused datasheet cell
+let invalid = new Map(); // "r,c" -> text that is not a number
 
+/** Accepts a deck, or a bare chart; returns a deck or throws with a readable reason. */
+function toDeck(d) {
+  const isChart = (c) => c && typeof c.type === 'string' && Array.isArray(c.categories) && Array.isArray(c.series)
+    && c.series.every((s) => s && Array.isArray(s.values));
+  if (d && Array.isArray(d.slides)) {
+    if (!d.slides.length) throw new Error('the deck has no slides');
+    d.slides.forEach((s, i) => { if (!isChart(s?.chart)) throw new Error(`slide ${i + 1} has no valid chart (needs type, categories, series)`); });
+    return d;
+  }
+  if (isChart(d)) return { slides: [{ title: '', chart: d }] };
+  throw new Error('expected a deck ({ "slides": [...] }) or a chart ({ "type", "categories", "series" })');
+}
 function load() {
-  try { const d = JSON.parse(localStorage.getItem(STORE)); if (d?.slides?.length) return d; } catch {}
-  return structuredClone(SAMPLE);
+  try { return toDeck(JSON.parse(localStorage.getItem(STORE))); } catch { return structuredClone(SAMPLE); }
 }
 function save() { try { localStorage.setItem(STORE, JSON.stringify(deck)); } catch {} }
 const slide = () => deck.slides[cur];
 const chart = () => slide().chart;
 const opts = () => (chart().options ??= {});
 
+/** Number from a pasted or typed cell: 1,234 · (5) · 7% · −3 · $12 · e (waterfall: computed). undefined = not a number. */
 function parseCell(text) {
-  const t = text.trim();
+  const t = String(text).trim();
   if (t === '') return null;
   if (/^e$/i.test(t)) return 'e';
-  const n = Number(t.replace(/[,\s%]/g, '').replace(/^\((.*)\)$/, '-$1').replace('−', '-'));
-  return Number.isFinite(n) ? n : null;
+  const n = Number(t.replace(/[,\s%$€£¥]/g, '').replace(/^\((.*)\)$/, '-$1').replace(/[−–]/g, '-'));
+  return Number.isFinite(n) ? n : undefined;
 }
 const showCell = (v) => (v == null ? '' : String(v));
+const unitText = (u) => (u && typeof u === 'object' ? u.text ?? '' : u ?? '');
+
+/** Re-index category references (arrows, waterfall totals) after categories move. map(old) → new index or -1. */
+function remapCategories(map) {
+  const o = opts();
+  for (const key of ['cagr', 'difference']) {
+    if (!o[key]) continue;
+    const from = map(o[key].from), to = map(o[key].to);
+    if (from < 0 || to < 0 || from === to) delete o[key];
+    else o[key] = { ...o[key], from, to };
+  }
+  if (o.totalsAt) {
+    o.totalsAt = o.totalsAt.map(map).filter((i) => i >= 0);
+    if (!o.totalsAt.length) delete o.totalsAt;
+  }
+}
 
 function renderTabs() {
-  const tabs = $('tabs');
-  tabs.replaceChildren(...deck.slides.map((s, i) => {
+  $('tabs').replaceChildren(...deck.slides.map((s, i) => {
     const b = document.createElement('button');
     b.className = 'tab'; b.type = 'button'; b.role = 'tab';
     b.setAttribute('aria-selected', String(i === cur));
     b.textContent = `${i + 1}. ${s.title || 'Untitled'}`;
-    b.onclick = () => { cur = i; renderAll(); };
+    b.title = b.textContent;
+    b.onclick = () => { if (i !== cur) { cur = i; invalid.clear(); renderAll(); } };
     return b;
+  }));
+  $('delSlide').disabled = deck.slides.length === 1;
+}
+
+function renderArrowSelects() {
+  const c = chart(), o = opts();
+  for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
+    for (const id of [from, to]) {
+      $(id).replaceChildren(new Option('—', ''), ...c.categories.map((cat, i) => new Option(cat || `#${i + 1}`, String(i))));
+    }
+    $(from).value = o[key] ? String(o[key].from) : '';
+    $(to).value = o[key] ? String(o[key].to) : '';
+  }
+  const totals = o.totalsAt ?? (c.categories.length > 1 ? [0, c.categories.length - 1] : [0]);
+  $('totalsAt').replaceChildren(...c.categories.map((cat, i) => {
+    const l = document.createElement('label'); l.className = 'check';
+    const box = document.createElement('input'); box.type = 'checkbox'; box.value = String(i);
+    box.checked = totals.includes(i);
+    box.onchange = () => {
+      const on = [...$('totalsAt').querySelectorAll('input:checked')].map((b) => +b.value);
+      setOpt('totalsAt', on);
+    };
+    l.append(box, ` ${cat || `#${i + 1}`}`);
+    return l;
   }));
 }
 
 function renderForm() {
   const c = chart(), o = opts();
   $('title').value = slide().title ?? '';
-  $('type').value = c.type;
-  $('unit').value = o.unit ?? '';
+  const type = $('type');
+  if (![...type.options].some((op) => op.value === c.type)) type.add(new Option(c.type, c.type));
+  type.value = c.type;
+  $('unit').value = unitText(o.unit);
   $('decimals').value = o.decimals ?? '';
   $('gap').value = o.gap ?? '';
   $('seriesLabels').value = o.seriesLabels ?? '';
-  $('totals').checked = o.totals ?? c.type === 'stacked';
-  $('valueAxis').checked = o.valueAxis ?? c.type === 'line';
-  for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
-    for (const id of [from, to]) {
-      const sel = $(id);
-      sel.replaceChildren(new Option('—', ''), ...c.categories.map((cat, i) => new Option(cat || `#${i + 1}`, String(i))));
-    }
-    $(from).value = o[key] ? String(o[key].from) : '';
-    $(to).value = o[key] ? String(o[key].to) : '';
-  }
+  $('mekko').value = o.mekko ?? 'percent';
+  $('totals').checked = o.totals ?? DEFAULTS.totals(c.type);
+  $('valueAxis').checked = o.valueAxis ?? DEFAULTS.valueAxis(c.type);
+  $('zeroBased').value = o.zeroBased === undefined ? '' : String(o.zeroBased);
+  for (const el of document.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(c.type);
+  renderArrowSelects();
+}
+
+function cellInput(r, c, value, onInput) {
+  const inp = document.createElement('input');
+  inp.value = value; inp.dataset.r = String(r); inp.dataset.c = String(c);
+  inp.autocomplete = 'off'; inp.spellcheck = false;
+  if (onInput) inp.oninput = () => onInput(inp);
+  return inp;
 }
 
 function renderSheet() {
   const c = chart();
-  const table = $('sheet');
   const head = document.createElement('tr');
   const corner = document.createElement('th');
   corner.className = 'corner';
-  const cornerInput = document.createElement('input');
-  cornerInput.placeholder = 'paste table here';
-  cornerInput.style.width = '140px';
-  cornerInput.dataset.r = '-1'; cornerInput.dataset.c = '-1';
-  corner.append(cornerInput);
-  head.append(corner);
+  const ci = cellInput(-1, -1, '');
+  ci.readOnly = true; ci.placeholder = 'paste table here'; ci.setAttribute('aria-label', 'Paste a table from Excel here');
+  corner.append(ci); head.append(corner);
   c.categories.forEach((cat, j) => {
     const th = document.createElement('th');
-    const inp = document.createElement('input');
-    inp.value = cat; inp.dataset.r = '-1'; inp.dataset.c = String(j);
-    inp.oninput = () => { c.categories[j] = inp.value; changed(false); };
-    th.append(inp); head.append(th);
+    th.append(cellInput(-1, j, cat, (inp) => { c.categories[j] = inp.value; renderArrowSelects(); changed(false); }));
+    head.append(th);
   });
   const rows = c.series.map((s, i) => {
     const tr = document.createElement('tr');
     const name = document.createElement('td');
     name.className = 'name';
-    const ni = document.createElement('input');
-    ni.value = s.name; ni.dataset.r = String(i); ni.dataset.c = '-1';
-    ni.oninput = () => { s.name = ni.value; changed(false); };
-    name.append(ni); tr.append(name);
+    name.append(cellInput(i, -1, s.name, (inp) => { s.name = inp.value; changed(false); }));
+    tr.append(name);
     s.values.forEach((v, j) => {
       const td = document.createElement('td');
-      const inp = document.createElement('input');
-      inp.value = showCell(v); inp.dataset.r = String(i); inp.dataset.c = String(j);
+      const key = `${i},${j}`;
+      const inp = cellInput(i, j, invalid.get(key) ?? showCell(v), (el) => {
+        const n = parseCell(el.value);
+        if (n === undefined) invalid.set(key, el.value); else invalid.delete(key);
+        el.setAttribute('aria-invalid', String(n === undefined));
+        s.values[j] = n ?? null;
+        changed(false);
+      });
       inp.inputMode = 'decimal';
-      inp.oninput = () => { s.values[j] = parseCell(inp.value); changed(false); };
+      inp.setAttribute('aria-invalid', String(invalid.has(key)));
       td.append(inp); tr.append(td);
     });
     return tr;
   });
-  table.replaceChildren(head, ...rows);
+  $('sheet').replaceChildren(head, ...rows);
 }
 
 function renderAll() { renderTabs(); renderForm(); renderSheet(); schedule(); }
 
-// Excel-style navigation and paste.
+// Datasheet keyboard: arrows (at the edge of the text, or with the whole cell selected), Enter / Shift+Enter.
+function cellAt(r, c) { return $('sheet').querySelector(`input[data-r="${r}"][data-c="${c}"]`); }
+function moveTo(r, c) {
+  const next = cellAt(r, c);
+  if (!next) return false;
+  next.focus(); next.select();
+  return true;
+}
 $('sheet').addEventListener('keydown', (e) => {
-  if (e.key !== 'Enter') return;
-  const t = e.target; if (!t.dataset) return;
-  const next = $('sheet').querySelector(`input[data-r="${+t.dataset.r + (e.shiftKey ? -1 : 1)}"][data-c="${t.dataset.c}"]`);
-  if (next) { e.preventDefault(); next.focus(); next.select(); }
+  const t = e.target;
+  if (!t.dataset?.r || e.altKey || e.ctrlKey || e.metaKey) return;
+  const r = +t.dataset.r, c = +t.dataset.c;
+  const all = t.selectionStart === 0 && t.selectionEnd === t.value.length;
+  let to = null;
+  if (e.key === 'Enter') to = [r + (e.shiftKey ? -1 : 1), c];
+  else if (e.key === 'ArrowUp') to = [r - 1, c];
+  else if (e.key === 'ArrowDown') to = [r + 1, c];
+  else if (e.key === 'ArrowLeft' && !e.shiftKey && (all || t.selectionEnd === 0)) to = [r, c - 1];
+  else if (e.key === 'ArrowRight' && !e.shiftKey && (all || t.selectionStart === t.value.length)) to = [r, c + 1];
+  if (to && moveTo(...to)) e.preventDefault();
 });
+$('sheet').addEventListener('focusin', (e) => {
+  if (e.target.dataset?.r) focusCell = { r: +e.target.dataset.r, c: +e.target.dataset.c };
+});
+
+// Excel paste (tab-separated rows).
 $('sheet').addEventListener('paste', (e) => {
   const t = e.target; if (!t.dataset?.r) return;
   const text = e.clipboardData.getData('text/plain');
   if (!/[\t\n]/.test(text.trim())) return;
   e.preventDefault();
-  const grid = text.replace(/\r/g, '').replace(/\n$/, '').split('\n').map((l) => l.split('\t'));
+  const grid = text.replace(/\r/g, '').replace(/\n+$/, '').split('\n').map((l) => l.split('\t'));
   const c = chart();
   const r0 = +t.dataset.r, c0 = +t.dataset.c;
+  invalid.clear();
   if (r0 === -1 && c0 === -1) {
     const [head, ...body] = grid;
+    const rows = body.filter((r) => r.some((x) => x.trim()));
+    if (head.length < 2 || !rows.length) return showError('Paste a table with categories in the first row and series names in the first column.');
+    const n = c.categories.length;
     c.categories = head.slice(1).map((s) => s.trim());
-    c.series = body.filter((r) => r.some((x) => x.trim())).map((r) => ({
-      name: r[0].trim(), values: c.categories.map((_, j) => parseCell(r[j + 1] ?? '')),
+    c.series = rows.map((r, i) => ({
+      ...(c.series[i]?.color ? { color: c.series[i].color } : {}),
+      name: r[0].trim(), values: c.categories.map((_, j) => parseCell(r[j + 1] ?? '') ?? null),
     }));
+    if (c.categories.length < n) remapCategories((i) => (i < c.categories.length ? i : -1));
   } else {
     grid.forEach((cells, di) => cells.forEach((cell, dj) => {
       const r = r0 + di, col = c0 + dj;
@@ -262,7 +377,7 @@ $('sheet').addEventListener('paste', (e) => {
       while (r >= c.series.length) c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
       if (r === -1 && col >= 0) c.categories[col] = cell.trim();
       else if (col === -1 && r >= 0) c.series[r].name = cell.trim();
-      else if (r >= 0 && col >= 0) c.series[r].values[col] = parseCell(cell);
+      else if (r >= 0 && col >= 0) c.series[r].values[col] = parseCell(cell) ?? null;
     }));
   }
   changed(true);
@@ -277,82 +392,144 @@ function changed(rebuild) {
 
 // Settings form.
 $('title').oninput = (e) => { slide().title = e.target.value; changed(false); };
-$('type').onchange = (e) => { chart().type = e.target.value; changed(true); };
-$('unit').oninput = (e) => { setOpt('unit', e.target.value || undefined); };
+$('type').onchange = (e) => {
+  const c = chart(), o = opts(), from = c.type, to = e.target.value;
+  // Options left at the old type's default follow the new type's default.
+  for (const [k, def] of Object.entries(DEFAULTS)) if (o[k] !== undefined && o[k] === def(from)) delete o[k];
+  c.type = to;
+  changed(true);
+};
+$('unit').oninput = (e) => {
+  const o = opts(), v = e.target.value;
+  if (o.unit && typeof o.unit === 'object') { o.unit = { ...o.unit, text: v }; changed(false); } else setOpt('unit', v || undefined);
+};
 $('decimals').oninput = (e) => { setOpt('decimals', e.target.value === '' ? undefined : +e.target.value); };
 $('gap').oninput = (e) => { setOpt('gap', e.target.value === '' ? undefined : +e.target.value); };
 $('seriesLabels').onchange = (e) => { setOpt('seriesLabels', e.target.value || undefined); };
+$('mekko').onchange = (e) => { setOpt('mekko', e.target.value === 'percent' ? undefined : e.target.value); };
 $('totals').onchange = (e) => { setOpt('totals', e.target.checked); };
 $('valueAxis').onchange = (e) => { setOpt('valueAxis', e.target.checked); };
+$('zeroBased').onchange = (e) => { setOpt('zeroBased', e.target.value === '' ? undefined : e.target.value === 'true'); };
 for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
   const update = () => {
     const a = $(from).value, b = $(to).value;
-    setOpt(key, a !== '' && b !== '' ? { from: +a, to: +b } : undefined);
+    setOpt(key, a !== '' && b !== '' && a !== b ? { from: +a, to: +b } : undefined);
   };
   $(from).onchange = update; $(to).onchange = update;
 }
 function setOpt(k, v) { if (v === undefined) delete opts()[k]; else opts()[k] = v; changed(false); }
 
-// Datasheet buttons.
+// Datasheet buttons. − removes the selected cell's row/column, else the last one.
 $('addCat').onclick = () => { const c = chart(); c.categories.push(`Cat ${c.categories.length + 1}`); c.series.forEach((s) => s.values.push(null)); changed(true); };
 $('addSer').onclick = () => { const c = chart(); c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) }); changed(true); };
-$('delCat').onclick = () => { const c = chart(); if (c.categories.length > 1) { c.categories.pop(); c.series.forEach((s) => s.values.pop()); changed(true); } };
-$('delSer').onclick = () => { const c = chart(); if (c.series.length > 1) { c.series.pop(); changed(true); } };
+$('delCat').onclick = () => {
+  const c = chart(); if (c.categories.length < 2) return;
+  const j = focusCell && focusCell.c >= 0 && focusCell.c < c.categories.length ? focusCell.c : c.categories.length - 1;
+  c.categories.splice(j, 1); c.series.forEach((s) => s.values.splice(j, 1));
+  remapCategories((i) => (i === j ? -1 : i > j ? i - 1 : i));
+  invalid.clear(); focusCell = null; changed(true);
+};
+$('delSer').onclick = () => {
+  const c = chart(); if (c.series.length < 2) return;
+  const i = focusCell && focusCell.r >= 0 && focusCell.r < c.series.length ? focusCell.r : c.series.length - 1;
+  c.series.splice(i, 1);
+  invalid.clear(); focusCell = null; changed(true);
+};
+$('transpose').onclick = () => {
+  const c = chart();
+  const series = c.categories.map((cat, j) => ({ name: cat, values: c.series.map((s) => s.values[j] ?? null) }));
+  c.categories = c.series.map((s) => s.name);
+  c.series = series;
+  remapCategories(() => -1); // arrows and totals referred to the old categories
+  invalid.clear(); focusCell = null; changed(true);
+};
+$('reverse').onclick = () => { chart().series.reverse(); invalid.clear(); focusCell = null; changed(true); };
 
 // Slides.
 $('addSlide').onclick = () => {
   const copy = structuredClone(slide());
   copy.title = 'New slide';
-  deck.slides.splice(cur + 1, 0, copy); cur++; changed(true);
+  deck.slides.splice(cur + 1, 0, copy); cur++; invalid.clear(); changed(true);
 };
 $('delSlide').onclick = () => {
   if (deck.slides.length === 1) return;
-  deck.slides.splice(cur, 1); cur = Math.max(0, cur - 1); changed(true);
+  deck.slides.splice(cur, 1); cur = Math.max(0, cur - 1); invalid.clear(); changed(true);
 };
 $('exportBtn').onclick = () => download(new Blob([JSON.stringify(deck, null, 2)], { type: 'application/json' }), 'charts.json');
 $('importBtn').onclick = () => $('importFile').click();
 $('importFile').onchange = async (e) => {
   const f = e.target.files[0]; if (!f) return;
-  try {
-    const d = JSON.parse(await f.text());
-    deck = Array.isArray(d.slides) ? d : { slides: [{ title: '', chart: d }] };
-    cur = 0; changed(true);
-  } catch (err) { showError(`Couldn't read ${f.name}: ${err.message}`); }
   e.target.value = '';
+  try {
+    deck = toDeck(JSON.parse(await f.text()));
+    cur = 0; invalid.clear(); changed(true);
+  } catch (err) { showError(`Couldn't read ${f.name}: ${err.message}`); }
 };
 $('downloadBtn').onclick = async () => {
-  const res = await fetch('/api/pptx', { method: 'POST', body: JSON.stringify(deck) });
-  if (!res.ok) return showError((await res.json()).error);
-  download(await res.blob(), 'charts.pptx');
+  const btn = $('downloadBtn');
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/pptx', { method: 'POST', body: JSON.stringify(deck) });
+    if (!res.ok) return showError(await errorText(res));
+    download(await res.blob(), 'charts.pptx');
+  } catch (err) { showError(`Download failed: ${err.message}`); } finally { btn.disabled = false; }
 };
 function download(blob, name) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = name; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
+async function errorText(res) {
+  const t = await res.text();
+  try { return JSON.parse(t).error ?? t; } catch { return t || `HTTP ${res.status}`; }
+}
 
-// Live preview.
-let timer = null, seq = 0;
-function schedule() { clearTimeout(timer); timer = setTimeout(preview, 150); }
+// Live preview: one request in flight at a time; edits made meanwhile are sent as soon as it returns.
+let seq = 0, editAt = 0, inflight = false, dirty = false;
+function schedule() {
+  document.body.dataset.seq = String(++seq);
+  editAt = performance.now();
+  if (inflight) dirty = true; else preview();
+}
 async function preview() {
-  const id = ++seq;
+  inflight = true; dirty = false;
+  const id = seq;
   try {
     const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [slide()] }) });
-    const data = await res.json();
-    if (id !== seq) return;
-    if (!res.ok) return showError(data.error);
-    const s = data.slides[0];
-    $('preview').innerHTML = s.svg;
-    const issues = s.issues;
-    $('issues').replaceChildren(...(issues.length ? issues : ['Layout check passed: no overlaps']).map((t) => {
-      const li = document.createElement('li');
-      li.textContent = t.replace(/^hidden: /, 'Label hidden (no room): ');
-      li.className = !issues.length ? 'ok' : t.startsWith('hidden') ? 'info' : '';
-      return li;
-    }));
+    if (!res.ok) showError(await errorText(res));
+    else showSlide((await res.json()).slides[0]);
   } catch (err) { showError(`Preview failed: ${err.message}`); }
+  inflight = false;
+  if (dirty) return preview();
+  $('preview').dataset.seq = String(id);
+  $('preview').dataset.ms = String(Math.round(performance.now() - editAt));
+}
+function showSlide(s) {
+  $('preview').innerHTML = s.svg;
+  $('preview').classList.remove('stale');
+  for (const el of $('sheet').querySelectorAll('.engine-error')) { el.classList.remove('engine-error'); el.setAttribute('aria-invalid', 'false'); }
+  const notes = [];
+  for (const [key, text] of invalid) {
+    const [r, c] = key.split(',').map(Number);
+    notes.push({ text: `"${text}" in ${chart().series[r]?.name} / ${chart().categories[c]} is not a number (left empty)`, cls: '' });
+  }
+  const c = chart();
+  if (c.type === 'waterfall' && c.series.length > 1) notes.push({ text: `Waterfall shows the first series (${c.series[0].name}) only`, cls: 'info' });
+  for (const t of s.issues) notes.push({ text: t.replace(/^hidden: /, 'Label hidden (no room): '), cls: t.startsWith('hidden') ? 'info' : '' });
+  if (!s.issues.length) notes.push({ text: 'Layout check passed: no overlaps', cls: 'ok' });
+  $('issues').replaceChildren(...notes.map(({ text, cls }) => {
+    const li = document.createElement('li');
+    li.textContent = text; li.className = cls;
+    return li;
+  }));
 }
 function showError(msg) {
+  $('preview').classList.add('stale');
+  // Validation errors carry JSON paths ("/series/1/values/3: ..."): highlight the cells they point at.
+  for (const m of String(msg).matchAll(/\/(series|categories)\/(\d+)(?:\/(values|name)(?:\/(\d+))?)?/g)) {
+    const el = m[1] === 'categories' ? cellAt(-1, m[2]) : cellAt(m[2], m[4] ?? -1);
+    if (el) { el.classList.add('engine-error'); el.setAttribute('aria-invalid', 'true'); }
+  }
   const li = document.createElement('li');
   li.className = 'error'; li.textContent = msg;
   $('issues').replaceChildren(li);

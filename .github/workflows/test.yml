@@ -3,8 +3,12 @@ on:
   push:
     branches: [master]
   pull_request:
+  schedule:
+    - cron: '17 3 * * *' # nightly: goldens
+  workflow_dispatch:
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -15,3 +19,44 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm test
+
+  e2e:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results
+          path: test-results/
+          retention-days: 7
+
+  # LibreOffice renders fonts differently per OS, so baselines are per platform (test/goldens/<platform>/).
+  # Until test/goldens/linux/ is committed (download the "goldens" artifact, review, commit), this job
+  # renders and uploads without comparing. Nightly and on demand only: installing LibreOffice is slow.
+  goldens:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libreoffice-impress poppler-utils fonts-liberation
+      - run: npm run goldens -- --allow-missing
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: goldens
+          path: |
+            out/goldens/actual/
+            out/goldens/diff/
+          retention-days: 14

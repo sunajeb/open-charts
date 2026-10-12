@@ -64,8 +64,12 @@ The layout engine is pure TypeScript with no Office code. It measures text with 
 ## Tests
 
 ```sh
-node --experimental-strip-types --no-warnings --test test/
+npm test          # unit tests, zero dependencies
+npm run e2e       # editor end-to-end in Chromium (npm install; npx playwright install chromium)
+npm run goldens   # examples → .pptx → LibreOffice PDF → PNG, diffed against test/goldens/<platform>/
 ```
+
+`npm run goldens` needs `soffice` (LibreOffice) and `pdftoppm` (poppler). Baselines are per platform because fonts render differently; `-- --update` rewrites them after you have reviewed `out/goldens/actual/`, and failures write red-on-grey diffs to `out/goldens/diff/`. CI runs unit tests and E2E on every PR, goldens nightly.
 
 ## Licence and provenance
 

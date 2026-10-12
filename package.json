@@ -9,9 +9,14 @@
   },
   "scripts": {
     "examples": "node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o out/deck",
-    "test": "node --experimental-strip-types --no-warnings --test 'test/*.test.ts'"
+    "test": "node --experimental-strip-types --no-warnings --test 'test/*.test.ts'",
+    "e2e": "playwright test -c test/e2e",
+    "goldens": "node --experimental-strip-types --no-warnings test/goldens/run.ts"
   },
   "engines": {
     "node": ">=22.6"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }
