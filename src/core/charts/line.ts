@@ -4,7 +4,10 @@ import { niceTicks } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 import type { LineShape } from '../types.ts';
 
-/** Line chart: one point per category, markers, value labels placed above or below without collisions. */
+/**
+ * Line chart: one point per category, markers, value labels placed above or below without collisions.
+ * `options.step` draws an ortho (step) line: horizontal to the next category, then vertical.
+ */
 export function layoutLine(ctx: Ctx) {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
   const nCat = spec.categories.length;
@@ -42,7 +45,8 @@ export function layoutLine(ctx: Ctx) {
   }
   const px = frame.x + axisW;
   const pw = frame.w - axisW - rightW;
-  const py = frame.y + legendH + lh + pad * 0.5;
+  // Headroom for a label above a point at the top of the scale.
+  const py = frame.y + legendH + lh + pad * 0.5 + r;
   const ph = frame.y + frame.h - catH - py - lh * 0.5;
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const xOf = (c: number) => px + slot * (c + 0.5);
@@ -60,7 +64,13 @@ export function layoutLine(ctx: Ctx) {
     for (let c = 1; c < nCat; c++) {
       const a = val(s, c - 1), b = val(s, c);
       if (a == null || b == null) continue;
-      ctx.add(`line:s${s}`, { kind: 'line', x1: xOf(c - 1), y1: yOf(a), x2: xOf(c), y2: yOf(b), color: ctx.color(s), width: 2 });
+      const seg = (x1: number, y1: number, x2: number, y2: number) =>
+        ctx.add(`line:s${s}`, { kind: 'line', x1, y1, x2, y2, color: ctx.color(s), width: 2 });
+      // Step (ortho) line: hold the previous value across to the next category, then jump vertically.
+      if (o.step) {
+        seg(xOf(c - 1), yOf(a), xOf(c), yOf(a));
+        if (a !== b) seg(xOf(c), yOf(a), xOf(c), yOf(b));
+      } else seg(xOf(c - 1), yOf(a), xOf(c), yOf(b));
     }
   }
   const markers: Box[] = [];
@@ -98,7 +108,8 @@ export function layoutLine(ctx: Ctx) {
       const below = { x, y: yc + r + pad * 0.3, w, h: lh };
       const side = (dir: 1 | -1, dy: number) => ({ x: xOf(c) + dir * (r + pad * 0.4) - (dir < 0 ? w : 0), y: yc - lh / 2 + dy, w, h: lh });
       // The top series prefers above, the bottom series prefers below, so labels move away from each other.
-      const vertical = rank === pts.length - 1 && pts.length > 1 ? [below, above] : [above, below];
+      // Step lines read along their plateaus, so every label sits above its point where it can.
+      const vertical = rank === pts.length - 1 && pts.length > 1 && !o.step ? [below, above] : [above, below];
       const sides = namesRight && c === nCat - 1
         ? [side(-1, -lh / 2), side(-1, lh / 2)]
         : [side(1, -lh / 2), side(-1, -lh / 2), side(1, lh / 2), side(-1, lh / 2)];

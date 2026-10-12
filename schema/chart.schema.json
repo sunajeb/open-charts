@@ -101,7 +101,8 @@
         "mekko": { "enum": ["percent", "unit"] },
         "gap": { "type": "number", "minimum": 0, "maximum": 10 },
         "seriesLabels": { "enum": ["right", "legend", "none"] },
-        "totalsAt": { "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } }
+        "totalsAt": { "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } },
+        "step": { "type": "boolean", "description": "Line only: step (ortho) line, horizontal then vertical." }
       }
     }
   }

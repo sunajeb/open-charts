@@ -49,6 +49,8 @@ export interface ChartOptions {
   seriesLabels?: 'right' | 'legend' | 'none';
   /** Waterfall: category indices drawn as totals anchored at the baseline. Default: first and last category. */
   totalsAt?: number[];
+  /** Line: draw a step (ortho) line, horizontal to the next category and then vertical. Default off. */
+  step?: boolean;
 }
 
 export interface ChartSpec {

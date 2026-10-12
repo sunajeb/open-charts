@@ -1,0 +1,16 @@
+{
+  "slides": [
+    {
+      "title": "List price held flat between reviews, while the discount floor crept up",
+      "chart": {
+        "type": "line",
+        "categories": ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025", "Q2 2025", "Q3 2025"],
+        "series": [
+          { "name": "List price", "values": [120, 120, 135, 135, 135, 150, 150] },
+          { "name": "Discount floor", "values": [84, 90, 90, 96, 102, 102, 108] }
+        ],
+        "options": { "step": true, "unit": { "text": "$", "position": "prefix" } }
+      }
+    }
+  ]
+}
