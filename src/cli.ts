@@ -2,12 +2,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
-import { createMeasurer } from './fonts.ts';
-import { buildDeck, type DeckSpec } from './deck.ts';
-import { serve } from './server.ts';
-import { importDeck, readCharts } from './ooxml/pptx-read.ts';
-import { formatInspect } from './inspect.ts';
-import { buildReport } from './report.ts';
+import type { DeckSpec } from './deck.ts';
+// Each command loads only the modules it needs (dynamic imports): every TypeScript file costs start-up time.
 
 const USAGE = `Usage: open-charts <deck.json> [-o out/deck] [--font Arial.ttf --bold-font "Arial Bold.ttf"] [--svg] [--strict] [--report report.json]
        open-charts inspect <deck.pptx> [--json]
@@ -40,13 +36,16 @@ const command = positionals[0];
 if (values.help) {
   console.log(USAGE);
 } else if (command === 'serve') {
+  const { serve } = await import('./server.ts');
   serve(Number(values.port), { font: values.font, bold: values['bold-font'] });
 } else if (command === 'inspect' || command === 'import') {
   if (positionals.length !== 2) fail(USAGE);
   const file = positionals[1];
   try {
     const bytes = new Uint8Array(readFileSync(file));
+    const { importDeck, readCharts } = await import('./ooxml/pptx-read.ts');
     if (command === 'inspect') {
+      const { formatInspect } = await import('./inspect.ts');
       const slides = readCharts(bytes);
       console.log(values.json ? JSON.stringify(slides, null, 2) : formatInspect(file, slides));
     } else {
@@ -66,7 +65,7 @@ if (values.help) {
     fail(`${file}: ${(err as Error).message}`);
   }
 } else {
-  run();
+  await run();
 }
 
 function fail(msg: string): never {
@@ -74,7 +73,8 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
-function run() {
+async function run() {
+  const [{ createMeasurer }, { buildDeck }, { buildReport }] = await Promise.all([import('./fonts.ts'), import('./deck.ts'), import('./report.ts')]);
   if (positionals.length !== 1) fail(USAGE);
 
   const input = JSON.parse(readFileSync(positionals[0], 'utf8'));
