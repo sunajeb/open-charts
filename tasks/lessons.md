@@ -4,3 +4,5 @@
 - **Don't oversubscribe the Mac.** ~7 concurrent agents plus other sessions hit "fork failed: Device not configured". Keep to ~5 and start more only as others finish.
 
 - **Build lean; confirm scope before adding surfaces.** The owner wants the first build to do one thing: add every chart type into PowerPoint. AI, other apps, data inputs and template fill were cut after I started on them. Before starting work beyond the core goal, check it's wanted.
+
+- **Warn before driving the user's apps.** Live PowerPoint tests run in the user's own session and a broken add-in pops modal dialogs at them (and blocks the automation). Validate files offline first, warn the user before any live run, keep live attempts to one or two, quit the app after each, and use fixed file names so their add-in list isn't littered.
