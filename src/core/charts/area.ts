@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { axisFormatter, fitCategories, reportFit, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis } from '../common.ts';
+import { axisFormatter, fitCategories, reportFit, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 import type { PathCmd } from '../types.ts';
@@ -36,7 +36,7 @@ export function layoutArea(ctx: Ctx) {
 
   let dmax = percent ? 100 : Math.max(...totals);
   if (dmax <= 0) { ctx.hidden.push('area chart has no positive values'); dmax = 1; }
-  const ticks = o.valueAxis ? niceTicks(0, dmax) : null;
+  const ticks = o.valueAxis ? niceTicks(0, dmax, valueTicks(ctx)) : null;
   if (ticks) dmax = ticks[ticks.length - 1];
   const axisFmt = axisFormatter(ctx, ticks, percent);
   const axisW = ticks ? Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad * 1.5 : 0;

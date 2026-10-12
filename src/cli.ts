@@ -2,24 +2,24 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
-import { createMeasurer } from './fonts.ts';
-import { buildDeck, type DeckSpec } from './deck.ts';
-import { serve } from './server.ts';
-import { importDeck, readCharts } from './ooxml/pptx-read.ts';
-import { formatInspect } from './inspect.ts';
-import { buildReport } from './report.ts';
+import type { DeckSpec } from './deck.ts';
+import { ADDIN_USAGE } from './addin/usage.ts';
+// Each command loads only the modules it needs (dynamic imports): every TypeScript file costs start-up time.
 
 const USAGE = `Usage: open-charts <deck.json> [-o out/deck] [--font Arial.ttf --bold-font "Arial Bold.ttf"] [--svg] [--strict] [--report report.json]
        open-charts inspect <deck.pptx> [--json]
        open-charts import <deck.pptx> [-o deck.json]
        open-charts serve [--port 4173]
+       open-charts addin build|install|uninstall|types   (PowerPoint add-in, see below)
 
 Writes <out>.pptx with one native, editable chart per slide.
 --svg also writes <out>-<n>.svg previews. Layout warnings are printed to stderr.
 --strict exits with code 1 if any slide has a layout issue (the deck is still written).
 --report writes the issues per slide as JSON.
 inspect lists the charts in a .pptx: frames, roles, tag sizes, contract version.
-import recovers the deck JSON from the charts' OC_SPEC tags.`;
+import recovers the deck JSON from the charts' OC_SPEC tags.
+
+${ADDIN_USAGE}`;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -33,20 +33,31 @@ const { values, positionals } = parseArgs({
     json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
     port: { type: 'string', default: '4173' },
+    'no-register': { type: 'boolean', default: false },
   },
 });
 
 const command = positionals[0];
 if (values.help) {
   console.log(USAGE);
+} else if (command === 'addin') {
+  try {
+    const { addinMain } = await import('./addin/cli.ts');
+    await addinMain(positionals.slice(1), { out: values.out, register: !values['no-register'] });
+  } catch (err) {
+    fail((err as Error).message);
+  }
 } else if (command === 'serve') {
+  const { serve } = await import('./server.ts');
   serve(Number(values.port), { font: values.font, bold: values['bold-font'] });
 } else if (command === 'inspect' || command === 'import') {
   if (positionals.length !== 2) fail(USAGE);
   const file = positionals[1];
   try {
     const bytes = new Uint8Array(readFileSync(file));
+    const { importDeck, readCharts } = await import('./ooxml/pptx-read.ts');
     if (command === 'inspect') {
+      const { formatInspect } = await import('./inspect.ts');
       const slides = readCharts(bytes);
       console.log(values.json ? JSON.stringify(slides, null, 2) : formatInspect(file, slides));
     } else {
@@ -66,7 +77,7 @@ if (values.help) {
     fail(`${file}: ${(err as Error).message}`);
   }
 } else {
-  run();
+  await run();
 }
 
 function fail(msg: string): never {
@@ -74,7 +85,8 @@ function fail(msg: string): never {
   process.exit(1);
 }
 
-function run() {
+async function run() {
+  const [{ createMeasurer }, { buildDeck }, { buildReport }] = await Promise.all([import('./fonts.ts'), import('./deck.ts'), import('./report.ts')]);
   if (positionals.length !== 1) fail(USAGE);
 
   const input = JSON.parse(readFileSync(positionals[0], 'utf8'));
