@@ -124,7 +124,8 @@
             "required": ["from", "to"],
             "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string" } }
           }
-        }
+        },
+        "labelContent": { "enum": ["percent", "value", "both"], "description": "Pie and doughnut: slice labels show shares (default), absolute values, or both." }
       }
     }
   }

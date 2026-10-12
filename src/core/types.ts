@@ -69,6 +69,8 @@ export interface ChartOptions {
   axisTitles?: { x?: string; y?: string };
   /** Gantt: shaded periods (holidays, phases) across every row, with an optional label. */
   shades?: { from: string; to: string; label?: string }[];
+  /** Pie and doughnut: what the slice labels show — shares (default), absolute values, or both ("118 (52%)"). */
+  labelContent?: 'percent' | 'value' | 'both';
 }
 
 export interface ChartSpec {
