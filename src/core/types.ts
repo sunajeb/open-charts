@@ -148,7 +148,7 @@ export interface Scene {
    * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
    * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
-   * `leader:c<j>` (pie label leader), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball).
+   * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball).
    * Always set by `layoutChart`.
    */
   roles?: string[];
