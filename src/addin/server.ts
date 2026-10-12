@@ -4,13 +4,14 @@
 //   GET  /api/addin/ping   liveness
 //   POST /api/addin/quit   stop (install restarts it with the new engine)
 // When the editor applies a session (docs/ux-editor.md), it tells PowerPoint to re-lay out the
-// chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro via AppleScript.
+// chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro via AppleScript
+// and records the outcome on the session ("drawn" or "error" with a message) for the editor to show.
 import { execFile, spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
-import { addinHome } from './launcher.ts';
+import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { serve, type Session } from '../server.ts';
+import { getSession, serve, setSession, type Session } from '../server.ts';
 import { createMeasurer } from '../fonts.ts';
 import type { Measurer } from '../core/index.ts';
 import { handleRequest, parseRequest, type Sessions } from './engine.ts';
@@ -60,7 +61,7 @@ export function httpSessions(base = BASE, open = (url: string) => { spawn('open'
     },
     async settle(id) {
       try {
-        await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ state: 'open' }), signal: AbortSignal.timeout(2000) });
+        await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ state: 'drawn' }), signal: AbortSignal.timeout(2000) });
       } catch { /* the chart is drawn either way */ }
     },
   };
@@ -98,13 +99,61 @@ export function editorPage(id: string, chart: unknown): string | undefined {
   return at < 0 ? html + boot : html.slice(0, at) + boot + html.slice(at);
 }
 
-/** Runs the add-in's ApplyEdit macro in PowerPoint for an applied session. */
-export function applyInPowerPoint(id: string, home = addinHome()) {
+/** How long an Apply may take in PowerPoint before the editor is told it did not get through. */
+export const APPLY_TIMEOUT_MS = 20_000;
+
+/**
+ * The AppleScript that runs ApplyEdit. It never starts PowerPoint (a `tell` would): a closed
+ * PowerPoint has no chart to update.
+ */
+export const applyScript = (prefix: string, id: string) =>
+  `if application "Microsoft PowerPoint" is not running then error "PowerPoint is not running." number -600
+tell application "Microsoft PowerPoint" to run VB macro macro name "${prefix}_ApplyEdit" list of parameters {"${id}"}`;
+
+/** What the user should be told when `run VB macro` failed (osascript's error, or a timeout). */
+export function applyErrorMessage(err: { message: string; killed?: boolean }): string {
+  const text = err.message;
+  if (err.killed || /-1712\b|timed out/i.test(text)) {
+    return 'PowerPoint did not respond. If macOS is asking whether PowerPoint may control PowerPoint, click Allow in that dialog, then Apply again.';
+  }
+  if (/-1743\b|not authori[sz]ed/i.test(text)) {
+    return 'macOS does not allow PowerPoint to be controlled (Don\'t Allow was chosen). Turn it on in System Settings › Privacy & Security › Automation › Microsoft PowerPoint, then Apply again.';
+  }
+  if (/-600\b|not running/i.test(text)) return 'PowerPoint isn\'t running. Open the presentation, click the chart once, then Apply again.';
+  const why = /execution error: (.*)$/m.exec(text)?.[1] ?? text.split('\n').filter(Boolean).at(-1) ?? text;
+  return `PowerPoint could not update the chart (${why.trim()}). Click the chart once, then Apply again.`;
+}
+
+type Run = (script: string, timeoutMs: number) => Promise<{ message: string; killed?: boolean } | undefined>;
+const osascriptRun: Run = (script, timeoutMs) =>
+  new Promise((resolve) => execFile('osascript', ['-e', script], { timeout: timeoutMs }, (err, _out, stderr) =>
+    resolve(err ? { message: `${err.message}\n${stderr}`, killed: err.killed } : undefined)));
+
+/**
+ * Runs the add-in's ApplyEdit macro for an applied session and records the outcome: the engine
+ * marks the session "drawn" when it lays the chart out; if the macro failed, timed out or found no
+ * chart, the session (still at this Apply's rev) becomes "error" with what to do.
+ */
+export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run = osascriptRun): Promise<void> {
+  const fail = (message: string) => {
+    const now = getSession(s.id);
+    if (now?.state === 'applied' && now.rev === s.rev) setSession(s.id, { state: 'error', message });
+  };
   let prefix = '';
   try { prefix = JSON.parse(readFileSync(join(home, 'addin.json'), 'utf8')).prefix; } catch { /* not installed */ }
-  if (!prefix) { log(`APPLY ${id} skipped: add-in not installed`, home); return; }
-  const script = `tell application "Microsoft PowerPoint" to run VB macro macro name "${prefix}_ApplyEdit" list of parameters {"${id}"}`;
-  execFile('osascript', ['-e', script], { timeout: 60_000 }, (err) => log(`APPLY ${id} ${err ? `failed: ${err.message}` : 'sent'}`, home));
+  if (!prefix) {
+    log(`APPLY ${s.id} skipped: add-in not installed`, home);
+    return fail(`The open-charts add-in is not installed. In Terminal, run: ${reinstallCommand(home)}`);
+  }
+  const t = Date.now();
+  const err = await run(applyScript(prefix, s.id), APPLY_TIMEOUT_MS);
+  const ms = Date.now() - t;
+  if (err) {
+    log(`APPLY ${s.id} failed after ${ms} ms: ${err.killed ? 'timed out' : err.message}`, home);
+    return fail(applyErrorMessage(err));
+  }
+  log(`APPLY ${s.id} ${getSession(s.id)?.state === 'applied' ? 'ran, but no chart was updated' : 'done'} (${ms} ms)`, home);
+  fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
 }
 
 export function addinRoutes(m: () => Measurer, sessions: Sessions) {
@@ -149,7 +198,8 @@ export function serveAddin(port = ADDIN_PORT) {
   const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`));
   return serve(port, {}, {
     routes: (req, res) => { idle(); return routes(req, res); },
-    onSession: (s) => { if (s.state === 'applied') applyInPowerPoint(s.id); },
+    onSession: (s) => { if (s.state === 'applied') void applyInPowerPoint(s); },
+    confirmsApply: true,
   });
 }
 

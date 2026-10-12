@@ -23,7 +23,7 @@ add-in session (editing and applied).
 | 8 | Bar orientation existed in the spec but not in the editor. | "Horizontal bars" toggle for stacked/clustered/100 %. | "Rotate and flip elements". |
 | 9 | Preview was small at 1024 px, fixed to the column width, no zoom; issues were a flat grey list. | Preview **fits the available box** (width and height), with **zoom** (−, Fit, +, 100 %). The quality-gate issues get **numbered markers on the slide** and a compact, clickable list: clicking an issue pulses the shapes it names and, for a hidden label, selects the datasheet cell it belongs to. | The reference flags problem labels in place ("exclamation mark next to the label"). |
 | 10 | Errors from the engine were text only. | Validation errors land **on the offending cell** (red cell, message shown under the cell while focused) and in the list (click → go to cell); the preview is marked stale instead of blanking. | "No flicker" and keep the last good chart visible. |
-| 11 | No loading/empty states; no add-in mode. | Loading skeleton, a clear "session not found" state, a stale-preview banner. **Add-in mode** (`?session=<id>`): no slide tabs or import/export; opens with the first data cell focused; primary **Apply to slide** (also ⌘↵ / Ctrl+Enter) with visible "Applied" confirmation; **Cancel**; unsaved-changes indicator. | Owner requirement: fast round trip. |
+| 11 | No loading/empty states; no add-in mode. | Loading skeleton, a clear "session not found" state, a stale-preview banner. **Add-in mode** (`?session=<id>`): no slide tabs or import/export; opens with the first data cell focused; primary **Apply to slide** (also ⌘↵ / Ctrl+Enter) with a visible confirmation once the slide is updated ("Updated on slide", or why not); **Cancel**; unsaved-changes indicator. | Owner requirement: fast round trip. |
 | 12 | Focus styling inconsistent; no landmark/ARIA labels on the sheet. | Visible focus rings everywhere, `role=grid`-style labelling (`aria-label` "Enterprise, 2022"), menus/popovers with Esc and arrow keys, `aria-live` status. Neutral light theme with a dark-mode variant for the chrome (the slide stays white). | Accessibility baseline. |
 
 Performance budget: edit → new SVG < 200 ms (E2E asserts it on every edit, including the largest
@@ -40,15 +40,31 @@ Ids: `^[A-Za-z0-9_-]{1,64}$` (use a random UUID).
 | `GET /api/session/<id>` | — | `200` same shape, or `404 { error }` |
 | `POST /api/session/<id>` (editor, Apply) | `{ chart, state: "applied" }` | `200` session; `rev` increments on every POST |
 | `POST /api/session/<id>` (editor, Cancel) | `{ state: "cancelled" }` (chart kept) | `200` session |
+| `POST /api/session/<id>` (host, outcome of an Apply) | `{ state: "drawn" }` or `{ state: "error", message }` (chart kept) | `200` session |
 
-Errors: `400 { error }` for a bad id, an unknown state, or a new session without a chart.
+States: `open` → `applied` (editor) → `drawn` (the chart on the slide was updated) or `error`
+(`message`: why not and what to do, written for the user); `cancelled` from any state. A host that
+confirms Apply (`serve(…, { confirmsApply: true })`, the add-in's server) answers every session with
+`confirms: true`; the editor then waits for `drawn`/`error` (any state other than `applied` at a
+higher `rev`; `open` is how older add-ins said "drawn") and shows **Updated on slide** or the
+message in a bar under the toolbar. After 2.5 s it shows "Waiting for PowerPoint… If macOS asks whether
+PowerPoint may control PowerPoint, click Allow"; after 30 s without an outcome it says the update was
+not confirmed. Without `confirms` (plain `open-charts serve`, other hosts) it says **Applied to slide**
+as soon as the POST succeeds, as before.
+
+Errors: `400 { error }` for a bad id, an unknown state, a non-string `message`, or a new session
+without a chart.
 
 Server hooks for the add-in (`src/server.ts`):
 `serve(port, fonts, opts?: { routes?: (req, res) => boolean | Promise<boolean>; onSession?: (s: Session) => void })`
 — `routes` runs before the built-in routes (return `true` when it handled the request, e.g. the add-in's
 `/api/addin/run` and `/api/addin/ping`); `onSession` is called after every successful
-`POST /api/session/<id>`. `Session` (`{ id, rev, state, chart, title?, updatedAt }`) is exported.
-Covered by `test/server.test.ts`.
+`POST /api/session/<id>`; `confirmsApply` is described above. `Session`
+(`{ id, rev, state, chart, title?, updatedAt, message?, confirms? }`), `setSession(id, body)` (the
+POST body, without calling `onSession`) and `getSession(id)` are exported for a host in the same
+process. Covered by `test/server.test.ts`; the editor's side by `test/e2e/editor.spec.ts` against
+`test/e2e/host.ts`, a host that confirms through `onSession` (drawn, permission timeout, PowerPoint
+not running).
 
 Flow:
 1. Add-in: `POST /api/session/<id>` with `{ chart, title }` (id = 16 hex chars derived from the chart's
@@ -56,10 +72,15 @@ Flow:
    `http://localhost:4174/?session=<id>` (Office dialog or window).
 2. Editor: `GET` the session, edits the chart (type, data, options), **Apply** → `POST { chart, state: "applied" }`.
    The window stays open; the user may apply again (each Apply bumps `rev`).
-3. Add-in: reacts in `onSession` (PowerPoint for Mac VBA cannot poll): on `state: "applied"` it
-   re-lays out the chart on the slide, then sets the session back to `open` (`POST { state: "open" }`,
-   chart kept) so the edit is never applied to another chart that has the same data; the next Apply
-   sets it to `applied` again. On `"cancelled"` it stops. Other hosts may instead poll `GET`
+3. Add-in: reacts in `onSession` (PowerPoint for Mac VBA cannot poll): on `state: "applied"` it runs
+   the add-in's `ApplyEdit` macro through AppleScript (`run VB macro`, 20 s timeout; it never starts
+   PowerPoint). The engine re-lays out the chart and sets the session to `drawn`
+   (`POST { state: "drawn" }`, chart kept), so the edit is never applied to another chart that has the
+   same data; the next Apply sets it to `applied` again. If the call fails — macOS permission prompt
+   unanswered (timeout), permission denied (-1743), PowerPoint not running, macro error — or the macro
+   found no chart, the server sets `error` with a message for the user. An `error` session is still
+   picked up by an explicit **Update chart** on that chart (never by the automatic re-layout). On
+   `"cancelled"` it stops. Other hosts may instead poll `GET`
    and act when `rev` grows. When the editor runs inside an Office dialog it
    also calls `Office.context.ui.messageParent(JSON.stringify({ type: "open-charts:apply" | "open-charts:cancel", id, rev }))`,
    and posts the same object to `window.opener` / `window.parent` when present, so the add-in can

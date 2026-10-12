@@ -100,19 +100,23 @@ Public Sub OCPREFIX_Run(ByVal controlId As String)
     gSilent = False
 End Sub
 
-' The editor applied an edit session: lay that chart out again with the new data.
+' The editor applied an edit session: lay that chart out again with the new data. Silent: the
+' add-in server runs this and the editor shows the outcome (the engine marks the session drawn;
+' the server reports anything else), so no dialog may block it.
 Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
     Dim target As Object, t As Single
     t = Timer
+    gSilent = True
+    gLastMessage = ""
     On Error Resume Next
     If sessionId = gEditId And Not gEditShape Is Nothing Then
         If gEditShape.Name <> "" Then Set target = gEditShape
     End If
-    On Error GoTo 0
+    On Error GoTo Failed
     If target Is Nothing Then Set target = FindSelectedChart()
     If target Is Nothing Then
         Report "APPLIED " & sessionId & " no chart"
-        Tell "The edited data is ready. Select the chart in PowerPoint and click Update chart."
+        gSilent = False
         Exit Sub
     End If
     gBusy = True
@@ -124,6 +128,13 @@ Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
         gEditId = sessionId
     End If
     Report "APPLIED " & sessionId & " " & IIf(target Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
+    gSilent = False
+    Exit Sub
+Failed:
+    ' Never leave an error dialog (it would block the server's call) or the busy flag behind.
+    gBusy = False
+    gSilent = False
+    Report "APPLIED " & sessionId & " failed: " & Err.Description
 End Sub
 
 ' Selects the n-th open-charts chart on the active slide (1-based), or nothing for "0" (as a

@@ -59,6 +59,13 @@
   .status .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
   .status[data-state="dirty"] .dot { background: var(--warn); }
   .status[data-state="applied"] .dot { background: var(--ok); }
+  .status[data-state="pending"] .dot { background: var(--accent); animation: pulse 1s ease-in-out infinite alternate; }
+  .status[data-state="error"] .dot { background: var(--err); }
+  .status[data-state="error"] { color: var(--err); font-weight: 600; }
+  @keyframes pulse { to { opacity: .3; } }
+  .apply-alert { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 8px 14px; background: var(--err-soft); color: var(--err); border-bottom: 1px solid currentColor; font-weight: 600; }
+  .apply-alert[data-kind="wait"] { background: var(--accent-soft); color: var(--ink); border-color: var(--accent); font-weight: 400; }
+  .apply-alert span { flex: 1; min-width: 0; }
 
   /* ---- App shell: work area (preview over datasheet) + options sidebar ---- */
   .app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--side); }
@@ -223,6 +230,7 @@
     <button id="applyBtn" class="primary" type="button" data-mode="session" aria-keyshortcuts="Meta+Enter Control+Enter">Apply to slide <kbd style="color:inherit;border-color:currentColor;opacity:.8">⌘↵</kbd></button>
   </div>
 </header>
+<div class="apply-alert" id="applyAlert" role="alert" hidden><span id="applyAlertText"></span><button id="applyAlertClose" class="ghost" type="button">Dismiss</button></div>
 
 <div class="app">
   <main class="work" id="work">
@@ -1415,6 +1423,32 @@ function notifyHost(type) {
   try { window.Office?.context?.ui?.messageParent?.(JSON.stringify(msg)); } catch {}
   for (const w of [window.opener, window.parent !== window ? window.parent : null]) try { w?.postMessage(msg, '*'); } catch {}
 }
+function applyAlert(text, kind = 'error') {
+  $('applyAlert').hidden = !text; $('applyAlert').dataset.kind = kind; $('applyAlertText').textContent = text || '';
+}
+$('applyAlertClose').onclick = () => applyAlert('');
+// A host that confirms Apply (the PowerPoint add-in: `confirms: true`) moves the session from
+// "applied" to "drawn" once the chart on the slide is updated, or to "error" with what to do.
+// Until then the editor says it is waiting; it never claims an update that did not happen.
+const APPLY_HINT_MS = 2500, APPLY_GIVE_UP_MS = 30000;
+const WAIT_HINT = 'Waiting for PowerPoint… If macOS asks whether PowerPoint may control PowerPoint, click Allow.';
+async function slideOutcome(rev) {
+  const t0 = performance.now();
+  let hinted = false;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 150));
+    const waited = performance.now() - t0;
+    if (!hinted && waited > APPLY_HINT_MS) { hinted = true; setStatus('pending', 'Waiting for PowerPoint…'); applyAlert(WAIT_HINT, 'wait'); }
+    if (waited > APPLY_GIVE_UP_MS) return { state: 'error', message: 'PowerPoint did not confirm the update. Check the slide; if the chart did not change, click it once and choose Update chart.' };
+    try {
+      const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { cache: 'no-store' });
+      if (res.status === 404) return { state: 'error', message: 'This edit session is no longer available (the add-in was restarted). Choose Edit data on the chart in PowerPoint again.' };
+      const s = res.ok ? await res.json() : null;
+      // "open" after "applied" is how older add-ins said "drawn".
+      if (s && s.rev > rev && s.state !== 'applied') return s;
+    } catch { /* the server is busy or restarting: keep waiting */ }
+  }
+}
 let applying = false;
 async function apply() {
   if (!session || applying || session.loading) return;
@@ -1422,14 +1456,27 @@ async function apply() {
   applying = true;
   const btn = $('applyBtn'), label = btn.innerHTML;
   btn.disabled = true; btn.textContent = 'Applying…';
+  applyAlert('');
   try {
     const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { method: 'POST', body: JSON.stringify({ chart: chart(), state: 'applied' }) });
     if (!res.ok) throw new Error(await errorText(res));
-    session.rev = (await res.json()).rev;
+    const saved = await res.json();
+    session.rev = saved.rev;
     session.dirty = false;
-    setStatus('applied', 'Applied to slide');
-    toast('✓ Applied to slide');
     notifyHost('open-charts:apply');
+    if (!saved.confirms) { setStatus('applied', 'Applied to slide'); toast('✓ Applied to slide'); return; }
+    setStatus('pending', 'Updating the slide…');
+    const out = await slideOutcome(saved.rev);
+    if (out.rev) session.rev = out.rev;
+    if (out.state === 'cancelled') return;
+    if (out.state === 'error') {
+      if (!session.dirty) setStatus('error', 'Not updated');
+      applyAlert(out.message);
+      return;
+    }
+    applyAlert('');
+    if (!session.dirty) setStatus('applied', 'Updated on slide');
+    toast('✓ Updated on slide');
   } catch (err) {
     toast(`Apply failed: ${err.message}`, true);
   } finally {

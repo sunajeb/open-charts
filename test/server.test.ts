@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
-import { editorHtml, serve, type Session } from '../src/server.ts';
+import { editorHtml, getSession, serve, type Session } from '../src/server.ts';
 import { editorSpec } from '../src/core/spec.ts';
 
 test('the editor page carries the engine option table, per-type defaults and limits before its script', () => {
@@ -58,7 +58,33 @@ test('session: create, read, apply, cancel; bad ids and unknown sessions are rej
     assert.equal((await post('s1', { state: 'done' })).status, 400);
 
     assert.deepEqual(seen.map((x) => [x.rev, x.state]), [[1, 'open'], [2, 'applied'], [3, 'cancelled']], 'onSession after each successful POST');
+    assert.equal(s.confirms, undefined, 'a plain host does not confirm Apply');
     assert.equal(await (await fetch(`${base}/api/addin/ping`)).text(), 'pong', 'extra routes run first');
+
+    // The host's outcome of an Apply: drawn, or error with a message (cleared by the next state).
+    s = await (await post('s1', { chart: edited, state: 'applied' })).json();
+    s = await (await post('s1', { state: 'error', message: 'PowerPoint isn\'t running.' })).json();
+    assert.deepEqual([s.rev, s.state, s.message], [5, 'error', 'PowerPoint isn\'t running.']);
+    s = await (await post('s1', { state: 'drawn' })).json();
+    assert.deepEqual([s.rev, s.state, s.message], [6, 'drawn', undefined]);
+    assert.deepEqual(s.chart, edited);
+    assert.equal((await post('s1', { state: 'error', message: 42 })).status, 400);
+  } finally {
+    server.close();
+  }
+});
+
+test('session: a host that confirms Apply says so on every session', async () => {
+  const log = console.log; console.log = () => {};
+  const server = serve(0, {}, { confirmsApply: true });
+  await new Promise((r) => server.once('listening', r));
+  console.log = log;
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  try {
+    const s = await (await fetch(`${base}/api/session/c1`, { method: 'POST', body: JSON.stringify({ chart }) })).json();
+    assert.equal(s.confirms, true);
+    assert.equal((await (await fetch(`${base}/api/session/c1`)).json()).confirms, true);
+    assert.equal(getSession('c1')!.confirms, undefined, 'not stored');
 
     // The editor page is served with the session query string.
     const page = await fetch(`${base}/?session=s1`);

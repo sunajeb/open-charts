@@ -30,7 +30,7 @@ export interface Sessions {
   /** Stores the chart as an open session and shows it in the editor. */
   open(id: string, chart: object, title: string): Promise<void>;
   /**
-   * Marks an applied session as drawn (back to "open", chart kept). Sessions are keyed by the
+   * Marks an applied session as drawn (state "drawn", chart kept). Sessions are keyed by the
    * chart's OC_SPEC, so without this an edit would later be applied to any other chart that still
    * has the same data (a fresh sample of the same type, a copy) once the editor was closed.
    */
@@ -69,7 +69,10 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         if (!req.spec) return error(SELECT_FIRST);
         const id = req.arg || specKey(req.spec);
         const session = await sessions?.get(id);
-        const edited = session?.state === 'applied' && session.chart && typeof session.chart === 'object';
+        // An Apply that did not reach the slide ("error") is still pending for an explicit Update
+        // chart on that chart, but never for the automatic re-layout of another chart with the same data.
+        const pending = session?.state === 'applied' || (session?.state === 'error' && req.op === 'update');
+        const edited = pending && session!.chart && typeof session!.chart === 'object';
         const { chart, style } = edited ? splitSpec(session!.chart as ChartSpec & { style?: Partial<Style> }) : readSpec(req.spec);
         const frame = resolveFrame(chart, style, req.frame, req.bounds, m);
         if (req.op === 'relayout' && !edited && req.frame && sameFrame(frame, req.frame)) return `${header()}\n${record('N')}\n`;

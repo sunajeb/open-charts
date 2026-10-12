@@ -9,8 +9,8 @@ import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { DEFAULT_FRAME, handleRequest, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { editorPage } from '../src/addin/server.ts';
-import type { Session } from '../src/server.ts';
+import { applyErrorMessage, applyInPowerPoint, applyScript, editorPage } from '../src/addin/server.ts';
+import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
 import { galleryItems, insertableItems, sampleFor } from '../src/addin/registry.ts';
@@ -130,9 +130,9 @@ function fakeSessions() {
       store.set(id, { id, rev: 1, state: 'open', chart, title, updatedAt: '' });
       opened.push(id);
     },
-    async settle(id) { store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'open' }); },
+    async settle(id) { store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'drawn' }); },
   };
-  const apply = (id: string, chart: object) => store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'applied', chart });
+  const apply = (id: string, chart: object, state: Session['state'] = 'applied') => store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state, chart });
   return { sessions, opened, apply };
 }
 
@@ -157,12 +157,18 @@ test('edit data opens a session; the applied chart is used by update of that cha
     apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
     assert.deepEqual(await cats('update', arg), ['A', 'B', 'C', 'D']);
     // Drawn once: another chart that still has the old data (a fresh sample, a copy) keeps it.
-    assert.equal((await sessions.get(id))!.state, 'open');
+    assert.equal((await sessions.get(id))!.state, 'drawn');
     assert.equal((await cats('update', ''))[0], 'North America');
   }
   // The automatic check also picks up an applied edit.
   apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
   assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, false);
+  // An Apply that did not reach the slide: Update chart (clicked on that chart) takes it, but the
+  // automatic re-layout of a same-data chart does not.
+  apply(id, { ...s.spec, categories: ['E', 'F', 'G', 'H'] }, 'error');
+  assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, true);
+  assert.deepEqual(await cats('update', ''), ['E', 'F', 'G', 'H']);
+  assert.equal((await sessions.get(id))!.state, 'drawn');
 });
 
 test('relayout: nothing to do in place, a new frame after a resize', async () => {
@@ -261,4 +267,56 @@ test('launcher: installed open-charts command runs the CLI; messages name a comm
   assert.ok(vba.includes(`Private Const REINSTALL As String = "${reinstallCommand().replace(/"/g, '""')}"`));
   assert.match(vba, /"Open Terminal and run:" & vbLf & REINSTALL/);
   assert.doesNotMatch(vba, /run:\s+open-charts addin/);
+});
+
+test('Apply in PowerPoint records the outcome on the session: drawn, or an error that says what to do', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'oc-apply-'));
+  const chart = { type: 'stacked', categories: ['a'], series: [{ name: 'S', values: [1] }] };
+  const scripts: string[] = [];
+  try {
+    // Not installed: no AppleScript, a clear error.
+    let s = setSession('ap1', { chart, state: 'applied' });
+    await applyInPowerPoint(s, home, async () => assert.fail('must not run'));
+    assert.equal(getSession('ap1')!.state, 'error');
+    assert.match(getSession('ap1')!.message!, /not installed.*addin install/);
+
+    writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
+    // The macro draws the chart (the engine settles the session) → drawn, left alone.
+    s = setSession('ap1', { chart, state: 'applied' });
+    await applyInPowerPoint(s, home, async (script) => { scripts.push(script); setSession('ap1', { state: 'drawn' }); return undefined; });
+    assert.deepEqual([getSession('ap1')!.state, getSession('ap1')!.message], ['drawn', undefined]);
+    assert.equal(scripts[0], applyScript('oc123', 'ap1'));
+    assert.match(scripts[0], /^if application "Microsoft PowerPoint" is not running then error/, 'never starts PowerPoint');
+    assert.match(scripts[0], /run VB macro macro name "oc123_ApplyEdit" list of parameters \{"ap1"\}/);
+
+    // The macro ran but drew nothing (no chart found).
+    s = setSession('ap1', { chart, state: 'applied' });
+    await applyInPowerPoint(s, home, async () => undefined);
+    assert.equal(getSession('ap1')!.state, 'error');
+    assert.match(getSession('ap1')!.message!, /could not find the chart/);
+
+    // Permission prompt unanswered (killed after the timeout), denied, PowerPoint closed, other.
+    const cases: [{ message: string; killed?: boolean }, RegExp][] = [
+      [{ message: 'Command failed', killed: true }, /click Allow in that dialog, then Apply again/],
+      [{ message: 'execution error: Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)' }, /click Allow/],
+      [{ message: 'execution error: Not authorized to send Apple events to Microsoft PowerPoint. (-1743)' }, /System Settings › Privacy & Security › Automation/],
+      [{ message: 'execution error: PowerPoint is not running. (-600)' }, /PowerPoint isn't running/],
+      [{ message: 'Command failed: osascript\n0:10: execution error: Something odd. (-2700)' }, /could not update the chart \(Something odd\. \(-2700\)\)/],
+    ];
+    for (const [err, re] of cases) {
+      assert.match(applyErrorMessage(err), re);
+      s = setSession('ap1', { chart, state: 'applied' });
+      await applyInPowerPoint(s, home, async () => err);
+      assert.equal(getSession('ap1')!.state, 'error');
+      assert.match(getSession('ap1')!.message!, re);
+    }
+
+    // A newer Apply (or a Cancel) while this one ran is not overwritten.
+    s = setSession('ap1', { chart, state: 'applied' });
+    await applyInPowerPoint(s, home, async () => { setSession('ap1', { state: 'cancelled' }); return { message: 'x', killed: true }; });
+    assert.equal(getSession('ap1')!.state, 'cancelled');
+    assert.match(readFileSync(join(home, 'addin.log'), 'utf8'), /APPLY ap1 failed after \d+ ms: timed out/);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
 });

@@ -1,5 +1,5 @@
 // End-to-end test of every control in the web editor (src/web/editor.html).
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { unzip } from './unzip.ts';
 import { CHART_TYPES } from '../../src/core/spec.ts';
@@ -1053,4 +1053,53 @@ test('add-in session: an engine error blocks Apply; an unknown session shows a c
   await page.goto(`${BASE()}/?session=missing${id}`);
   await expect(page.locator('#fatal')).toContainText('no longer available');
   errors = errors.filter((e) => !e.includes('404'));
+});
+
+// A host that confirms Apply (the PowerPoint add-in; here test/e2e/host.ts): the editor says the
+// slide was updated only once the host has drawn it, and shows the host's error otherwise.
+const HOST = () => process.env.E2E_HOST_URL!;
+const hostChart = { type: 'clustered', categories: ['North', 'South'], series: [{ name: 'Sales', values: [10, 20] }] };
+async function openHostSession(page: Page, request: APIRequestContext, prefix: string) {
+  const id = `${prefix}${Date.now().toString(16)}`;
+  expect((await request.post(`${HOST()}/api/session/${id}`, { data: { chart: hostChart, title: 'Sales' } })).ok()).toBe(true);
+  await page.goto(`${HOST()}/?session=${id}`);
+  await expect(cell(page, 0, 0)).toBeFocused();
+  await settled(page);
+  return id;
+}
+
+test('add-in session: Apply says "Updated on slide" only after the host drew the chart', async ({ page, request }) => {
+  const id = await openHostSession(page, request, 'ok');
+  await edit(page, () => page.keyboard.type('15'));
+  await page.click('#applyBtn');
+  await expect(page.locator('#statusText')).toHaveText('Updating the slide…');
+  await expect(page.locator('#applyBtn')).toBeDisabled();
+  await expect(page.locator('#statusText')).toHaveText('Updated on slide');
+  await expect(page.locator('#toast')).toContainText('Updated on slide');
+  await expect(page.locator('#applyAlert')).toBeHidden();
+  await expect(page.locator('#applyBtn')).toBeEnabled();
+  const s = await (await request.get(`${HOST()}/api/session/${id}`)).json();
+  expect([s.state, s.confirms, s.chart.series[0].values]).toEqual(['drawn', true, [15, 20]]);
+});
+
+test('add-in session: Apply that cannot reach PowerPoint shows why and what to do', async ({ page, request }) => {
+  // macOS permission prompt unanswered: a waiting hint first, then the error.
+  await openHostSession(page, request, 'perm');
+  await edit(page, () => page.keyboard.type('15'));
+  await page.keyboard.press(`${MOD}+Enter`);
+  await expect(page.locator('#applyAlert')).toContainText('If macOS asks whether PowerPoint may control PowerPoint, click Allow', { timeout: 5000 });
+  await expect(page.locator('#statusText')).toHaveText('Waiting for PowerPoint…');
+  await expect(page.locator('#statusText')).toHaveText('Not updated', { timeout: 10_000 });
+  await expect(page.locator('#applyAlert')).toContainText('click Allow in that dialog, then Apply again');
+  await expect(page.locator('#toast')).not.toContainText('Updated on slide');
+  await expect(page.locator('#applyBtn')).toBeEnabled();
+
+  // PowerPoint closed.
+  await openHostSession(page, request, 'gone');
+  await edit(page, () => page.keyboard.type('15'));
+  await page.click('#applyBtn');
+  await expect(page.locator('#statusText')).toHaveText('Not updated');
+  await expect(page.locator('#applyAlert')).toContainText("PowerPoint isn't running");
+  await page.click('#applyAlertClose');
+  await expect(page.locator('#applyAlert')).toBeHidden();
 });
