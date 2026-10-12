@@ -130,7 +130,7 @@ function fakeSessions() {
       store.set(id, { id, rev: 1, state: 'open', chart, title, updatedAt: '' });
       opened.push(id);
     },
-    async settle(id) { store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'drawn' }); },
+    async settle(id) { store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state: 'open' }); },
   };
   const apply = (id: string, chart: object, state: Session['state'] = 'applied') => store.set(id, { ...store.get(id)!, rev: store.get(id)!.rev + 1, state, chart });
   return { sessions, opened, apply };
@@ -157,7 +157,7 @@ test('edit data opens a session; the applied chart is used by update of that cha
     apply(id, { ...s.spec, categories: ['A', 'B', 'C', 'D'] });
     assert.deepEqual(await cats('update', arg), ['A', 'B', 'C', 'D']);
     // Drawn once: another chart that still has the old data (a fresh sample, a copy) keeps it.
-    assert.equal((await sessions.get(id))!.state, 'drawn');
+    assert.equal((await sessions.get(id))!.state, 'open');
     assert.equal((await cats('update', ''))[0], 'North America');
   }
   // The automatic check also picks up an applied edit.
@@ -168,7 +168,7 @@ test('edit data opens a session; the applied chart is used by update of that cha
   apply(id, { ...s.spec, categories: ['E', 'F', 'G', 'H'] }, 'error');
   assert.equal(parseResponse(await handleRequest(req('relayout', '', '48,96,864,408', '48,96,864,408', json), m, sessions)).nothing, true);
   assert.deepEqual(await cats('update', ''), ['E', 'F', 'G', 'H']);
-  assert.equal((await sessions.get(id))!.state, 'drawn');
+  assert.equal((await sessions.get(id))!.state, 'open');
 });
 
 test('relayout: nothing to do in place, a new frame after a resize', async () => {
@@ -300,9 +300,14 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     assert.match(getSession('ap1')!.message!, /not installed.*addin install/);
 
     writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
-    // The macro draws the chart (the engine settles the session) → drawn, left alone.
+    // The macro draws the chart: the engine settles the session ("open"), and once the macro has
+    // returned the server says "drawn", never earlier, while PowerPoint is still drawing.
     s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async (script) => { scripts.push(script); setSession('ap1', { state: 'drawn' }); return undefined; });
+    await applyInPowerPoint(s, home, async (script) => {
+      scripts.push(script);
+      setSession('ap1', { state: 'open' });
+      return undefined;
+    });
     assert.deepEqual([getSession('ap1')!.state, getSession('ap1')!.message], ['drawn', undefined]);
     assert.equal(scripts[0], applyScript('oc123', 'ap1'));
     assert.match(scripts[0], /^if application "Microsoft PowerPoint" is not running then error/, 'never starts PowerPoint');
@@ -329,6 +334,11 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
       assert.equal(getSession('ap1')!.state, 'error');
       assert.match(getSession('ap1')!.message!, re);
     }
+
+    // Laid out, then the call failed (e.g. timed out while drawing): error, not drawn.
+    s = setSession('ap1', { chart, state: 'applied' });
+    await applyInPowerPoint(s, home, async () => { setSession('ap1', { state: 'open' }); return { message: 'x', killed: true }; });
+    assert.equal(getSession('ap1')!.state, 'error');
 
     // A newer Apply (or a Cancel) while this one ran is not overwritten.
     s = setSession('ap1', { chart, state: 'applied' });

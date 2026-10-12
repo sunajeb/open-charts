@@ -61,7 +61,7 @@ export function httpSessions(base = BASE, open = (url: string) => { spawn('open'
     },
     async settle(id) {
       try {
-        await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ state: 'drawn' }), signal: AbortSignal.timeout(2000) });
+        await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ state: 'open' }), signal: AbortSignal.timeout(2000) });
       } catch { /* the chart is drawn either way */ }
     },
   };
@@ -130,15 +130,17 @@ const osascriptRun: Run = (script, timeoutMs) =>
     resolve(err ? { message: `${err.message}\n${stderr}`, killed: err.killed } : undefined)));
 
 /**
- * Runs the add-in's ApplyEdit macro for an applied session and records the outcome: the engine
- * marks the session "drawn" when it lays the chart out; if the macro failed, timed out or found no
- * chart, the session (still at this Apply's rev) becomes "error" with what to do.
+ * Runs the add-in's ApplyEdit macro for an applied session and records the outcome. The engine sets
+ * the session back to "open" as it lays the chart out (rev + 1); once the macro has returned (the
+ * shapes are drawn), that becomes "drawn". If the macro failed, timed out or found no chart, the
+ * session becomes "error" with what to do. A newer Apply or a Cancel meanwhile is left alone.
  */
 export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run = osascriptRun): Promise<void> {
-  const fail = (message: string) => {
+  const ours = () => {
     const now = getSession(s.id);
-    if (now?.state === 'applied' && now.rev === s.rev) setSession(s.id, { state: 'error', message });
+    return now && ((now.state === 'applied' && now.rev === s.rev) || (now.state === 'open' && now.rev === s.rev + 1)) ? now : undefined;
   };
+  const fail = (message: string) => { if (ours()) setSession(s.id, { state: 'error', message }); };
   let prefix = '';
   try { prefix = JSON.parse(readFileSync(join(home, 'addin.json'), 'utf8')).prefix; } catch { /* not installed */ }
   if (!prefix) {
@@ -152,8 +154,10 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
     log(`APPLY ${s.id} failed after ${ms} ms: ${err.killed ? 'timed out' : err.message}`, home);
     return fail(applyErrorMessage(err));
   }
-  log(`APPLY ${s.id} ${getSession(s.id)?.state === 'applied' ? 'ran, but no chart was updated' : 'done'} (${ms} ms)`, home);
-  fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
+  const now = ours();
+  log(`APPLY ${s.id} ${now?.state === 'applied' ? 'ran, but no chart was updated' : 'done'} (${ms} ms)`, home);
+  if (now?.state === 'open') setSession(s.id, { state: 'drawn' });
+  else fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
 }
 
 export function addinRoutes(m: () => Measurer, sessions: Sessions) {

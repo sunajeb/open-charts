@@ -1444,8 +1444,7 @@ async function slideOutcome(rev) {
       const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { cache: 'no-store' });
       if (res.status === 404) return { state: 'error', message: 'This edit session is no longer available (the add-in was restarted). Choose Edit data on the chart in PowerPoint again.' };
       const s = res.ok ? await res.json() : null;
-      // "open" after "applied" is how older add-ins said "drawn".
-      if (s && s.rev > rev && s.state !== 'applied') return s;
+      if (s && s.rev > rev && ['drawn', 'error', 'cancelled'].includes(s.state)) return s;
     } catch { /* the server is busy or restarting: keep waiting */ }
   }
 }

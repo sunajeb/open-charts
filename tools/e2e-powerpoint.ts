@@ -146,7 +146,7 @@ if ('spec' in wf && slideOf.waterfall) {
   const rev = (await (await fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: edited, state: 'applied' }) })).json()).rev;
   // What the editor waits for: the server's outcome on the session (drawn, or error + message).
   let outcome: { state: string; rev: number; message?: string } | undefined;
-  for (const end = Date.now() + 30_000; Date.now() < end && !(outcome && outcome.rev > rev && outcome.state !== 'applied'); sleep(100)) {
+  for (const end = Date.now() + 30_000; Date.now() < end && !(outcome && outcome.rev > rev && ['drawn', 'error'].includes(outcome.state)); sleep(100)) {
     outcome = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
   }
   timings.apply = Date.now() - t;
@@ -272,6 +272,23 @@ ready = false; // PowerPoint restarted: the add-in compiles again
 macro('ExportCopy', CLI_PNG_DIR, 'png');
 ppt('close active presentation saving no\nquit saving no');
 rmSync(compareDeck, { force: true });
+
+// 9b. Apply with PowerPoint closed: the session (and so the editor) says so instead of "updated".
+if ('spec' in wf) {
+  const id = specKey(JSON.stringify(wf.spec));
+  const running = () => execFileSync('osascript', ['-e', 'application "Microsoft PowerPoint" is running'], { encoding: 'utf8' }).trim() === 'true';
+  for (const end = Date.now() + 20_000; Date.now() < end && running(); sleep(250)); // PowerPoint is quitting
+  // A pooled keep-alive socket from minutes ago may have been closed by the server: retry once.
+  const post = () => fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: wf.spec, state: 'applied' }) });
+  const rev = (await (await post().catch(post)).json()).rev;
+  let s: { state: string; rev: number; message?: string } | undefined;
+  for (const end = Date.now() + 30_000; Date.now() < end && !(s && s.rev > rev && ['drawn', 'error'].includes(s.state)); sleep(100)) {
+    s = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
+  }
+  console.log(`Apply with PowerPoint closed: ${s?.state}: ${s?.message}`);
+  if (s?.state !== 'error' || !/PowerPoint isn't running/.test(s.message ?? '')) failures.push(`Apply with PowerPoint closed: ${JSON.stringify(s)}`);
+  if (running()) failures.push('Apply started PowerPoint');
+}
 for (const sl of slides) {
   const a = join(PNG_DIR, `slide${sl.index}.png`), b = join(CLI_PNG_DIR, `slide${sl.index}.png`);
   if (!existsSync(a) || !existsSync(b)) { failures.push(`slide ${sl.index}: PNG missing for comparison`); continue; }

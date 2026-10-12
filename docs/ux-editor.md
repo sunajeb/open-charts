@@ -45,8 +45,8 @@ Ids: `^[A-Za-z0-9_-]{1,64}$` (use a random UUID).
 States: `open` → `applied` (editor) → `drawn` (the chart on the slide was updated) or `error`
 (`message`: why not and what to do, written for the user); `cancelled` from any state. A host that
 confirms Apply (`serve(…, { confirmsApply: true })`, the add-in's server) answers every session with
-`confirms: true`; the editor then waits for `drawn`/`error` (any state other than `applied` at a
-higher `rev`; `open` is how older add-ins said "drawn") and shows **Updated on slide** or the
+`confirms: true`; the editor then waits for `drawn`, `error` or `cancelled` at a higher `rev`
+and shows **Updated on slide** or the
 message in a bar under the toolbar. After 2.5 s it shows "Waiting for PowerPoint… If macOS asks whether
 PowerPoint may control PowerPoint, click Allow"; after 30 s without an outcome it says the update was
 not confirmed. Without `confirms` (plain `open-charts serve`, other hosts) it says **Applied to slide**
@@ -74,9 +74,10 @@ Flow:
    The window stays open; the user may apply again (each Apply bumps `rev`).
 3. Add-in: reacts in `onSession` (PowerPoint for Mac VBA cannot poll): on `state: "applied"` it runs
    the add-in's `ApplyEdit` macro through AppleScript (`run VB macro`, 20 s timeout; it never starts
-   PowerPoint). The engine re-lays out the chart and sets the session to `drawn`
-   (`POST { state: "drawn" }`, chart kept), so the edit is never applied to another chart that has the
-   same data; the next Apply sets it to `applied` again. If the call fails — macOS permission prompt
+   PowerPoint). The engine re-lays out the chart and sets the session back to `open`
+   (`POST { state: "open" }`, chart kept), so the edit is never applied to another chart that has the
+   same data; once the macro has returned (the shapes are drawn) the server sets it to `drawn`. The
+   next Apply sets it to `applied` again. If the call fails — macOS permission prompt
    unanswered (timeout), permission denied (-1743), PowerPoint not running, macro error — or the macro
    found no chart, the server sets `error` with a message for the user. An `error` session is still
    picked up by an explicit **Update chart** on that chart (never by the automatic re-layout). On

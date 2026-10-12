@@ -30,9 +30,10 @@ export interface Sessions {
   /** Stores the chart as an open session and shows it in the editor. */
   open(id: string, chart: object, title: string): Promise<void>;
   /**
-   * Marks an applied session as drawn (state "drawn", chart kept). Sessions are keyed by the
-   * chart's OC_SPEC, so without this an edit would later be applied to any other chart that still
-   * has the same data (a fresh sample of the same type, a copy) once the editor was closed.
+   * Marks an applied session as laid out (back to "open", chart kept; the add-in server sets it to
+   * "drawn" once PowerPoint has finished drawing). Sessions are keyed by the chart's OC_SPEC, so
+   * without this an edit would later be applied to any other chart that still has the same data (a
+   * fresh sample of the same type, a copy) once the editor was closed.
    */
   settle?(id: string): Promise<void>;
 }
