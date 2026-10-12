@@ -1,5 +1,5 @@
 import type { Ctx } from '../common.ts';
-import { fitCategories, num, reportFit, text } from '../common.ts';
+import { askForRoom, fitCategories, num, reportFit, text } from '../common.ts';
 import { wrap, fits } from '../text.ts';
 
 /**
@@ -29,6 +29,7 @@ export function layoutHarvey(ctx: Ctx) {
   const nameW = named ? Math.min(frame.w * 0.35, Math.max(...spec.series.map((s) => m.width(s.name, fs))) + pad * 2) : 0;
   const colW = (frame.w - nameW) / nCat;
   const fit = fitCategories(ctx, colW);
+  askForRoom(ctx, fit, colW);
   reportFit(ctx, fit);
   const headH = fit.height + pad * 0.4;
   const d0 = fs * 2;

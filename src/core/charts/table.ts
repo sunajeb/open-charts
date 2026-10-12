@@ -3,6 +3,7 @@ import { text } from '../common.ts';
 import { inferDecimals } from '../numbers.ts';
 import { wrap } from '../text.ts';
 import { parseCategoryDate } from '../dates.ts';
+import { TooSmall } from '../minsize.ts';
 
 /**
  * Table of native shapes: a header row with the categories, one row per series (its name in the
@@ -39,6 +40,8 @@ export function layoutTable(ctx: Ctx) {
   let fs = ctx.fs;
   let lay = fit(fs);
   while (!lay.ok && fs - 1 >= ctx.minFs) lay = fit(--fs);
+  // Columns that do not fit side by side even at the smallest size: the table cannot be drawn here.
+  if (lay.need > frame.w + 0.01) throw new TooSmall({ w: lay.need }, `${nCol} columns need ${Math.ceil(lay.need)} pt at ${fs} pt`);
   if (fs < ctx.fs) ctx.hidden.push(`table text shrunk to ${fs} pt to fit`);
 
   function fit(size: number) {
@@ -77,7 +80,8 @@ export function layoutTable(ctx: Ctx) {
     const height = headH + rowH.reduce((a, h) => a + h, 0);
     const fitsLines = headLines.every((l, c) => l.every((t) => m.width(t, size, true) <= colW[c] - 2 * padX + 0.01))
       && rowLines.every((l) => l.every((t) => m.width(t, size, true) <= first - 2 * padX + 0.01));
-    return { ok: ok && fitsLines && height <= frame.h, size, padX, padY, lh, colW, first, headLines, rowLines, headH, rowH };
+    const need = firstMin + sum(widths(0));
+    return { ok: ok && fitsLines && height <= frame.h, need, size, padX, padY, lh, colW, first, headLines, rowLines, headH, rowH };
   }
 
   function longestWord(t: string, size: number, bold: boolean) {

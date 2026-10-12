@@ -1,0 +1,65 @@
+# Changelog
+
+## 0.2.0 (unreleased)
+
+The first build meant for people who make slides: charts made in PowerPoint, edited through a
+datasheet, laid out by the engine. No AI and no other apps yet.
+
+### PowerPoint add-in (Mac)
+
+- `open-charts addin install` builds `open-charts.ppam`, copies the engine, installs the AppleScript
+  bridge and registers the add-in; `addin uninstall`, `addin build`, `addin types`.
+- **open-charts** ribbon tab: **Insert chart** menu with every chart type (plus *100% with % axis* and
+  *Step line*), **Edit data** and **Update chart**. A chart goes into an empty content placeholder
+  when the slide has one.
+- **Edit data** opens the datasheet in the browser; **Apply to slide** (⌘↵) redraws the chart in
+  place, keeping its position and stacking order.
+- Resizing a chart lays it out again at the new size when you click elsewhere; text is never
+  stretched.
+
+### Chart types
+
+17 types: stacked, clustered and 100% columns (also as horizontal bars), waterfall, combination,
+line (and step line), stacked and 100% area, Mekko, Mekko XY, scatter, bubble, pie, doughnut, Harvey
+balls, table and Gantt.
+
+### Layout engine
+
+- Labels never overlap and never leave the chart; a label that cannot fit is hidden and reported with
+  the reason.
+- Totals, CAGR arrows (years read from labels such as `FY24`, `Q1 2023`, `2025E`) and difference
+  arrows; waterfall totals by `"e"` cells or `totalsAt`.
+- Shares and segment labels rounded so they add up exactly (largest remainder).
+- Numbers: units as prefix or suffix, decimals, k / m / bn magnitudes, Excel number formats, five
+  locales (en-US, en-GB, en-IN, de-DE, fr-FR).
+- Holds up at any size: category names wrap and shrink (not below 8 pt), crowded time axes thin out,
+  series names move to a legend, and below a minimum size the chart shows a "Chart too small"
+  placeholder that says how large to make it.
+- Text colour on fills chosen by contrast; nice axis ranges.
+
+### Editor (`open-charts serve`)
+
+- Preview on top, Excel-like datasheet below, options in a sidebar grouped by Chart, Numbers, Axes &
+  layout, Labels & legend and Decorations.
+- Chart type gallery; range selection, copy/cut/paste of Excel ranges, undo/redo, context menu,
+  transpose, series colours, per-type hints; invalid cells marked in place; hidden labels listed and
+  numbered on the preview.
+- Deck mode with slide titles, JSON import/export and .pptx download; session mode for the add-in's
+  Edit data window.
+
+### Command line and file format
+
+- `open-charts <deck.json>` writes a .pptx (`--svg`, `--strict`, `--report`, `--font`);
+  `inspect` lists the charts in a deck; `import` recovers the deck JSON from a .pptx.
+- Spec version 1 with JSON Schemas (`schema/`), path-addressed validation errors and `migrate()` for
+  older specs.
+- Tag contract v1 on every chart group (`OC_V`, `OC_ENGINE`, `OC_SPEC`, `OC_FRAME`, `OC_FONT`), so
+  charts stay editable in any deck.
+
+### Documentation and tests
+
+- New user guide (`docs/USER-GUIDE.md`) and data format reference (`docs/DATA-FORMAT.md`); README
+  rewritten for consultants and analysts.
+- `test/docs.test.ts` validates every JSON example in the data format reference.
+- Unit tests, editor end-to-end tests, golden images per platform, a PowerPoint end-to-end script
+  and performance budgets (`npm run bench`).

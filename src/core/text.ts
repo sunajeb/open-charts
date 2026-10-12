@@ -4,11 +4,13 @@ import { parse } from '../../vendor/opentype.module.js';
 interface FontTables {
   hhea?: { ascender: number; descender: number; lineGap: number };
   os2?: { usWinAscent: number; usWinDescent: number; sTypoAscender: number; sTypoDescender: number; sTypoLineGap: number; fsSelection: number };
+  cmap?: { glyphIndexMap: Record<string, number> };
 }
 interface Font {
   unitsPerEm?: number;
   tables?: FontTables;
   names?: { fontFamily?: { en?: string } };
+  glyphs?: { get(i: number): { advanceWidth?: number } | undefined };
   getAdvanceWidth(text: string, size: number, options?: { kerning?: boolean }): number;
 }
 
@@ -39,20 +41,97 @@ export function lineHeightFactor(font: Font): number {
   return 1.2;
 }
 
-/** Measurer over parsed font bytes. Widths are measured without kerning, as PowerPoint draws them. */
+/**
+ * What measuring needs from a font file, small enough to cache as JSON (src/fonts.ts keeps it on disk
+ * so the CLI does not parse the font on every start): advance width per code point, in font units.
+ */
+export interface FontMetrics {
+  v: 1;
+  family?: string;
+  unitsPerEm: number;
+  lineHeight: number;
+  notdef: number;
+  /** Code points and their advance widths, as two parallel arrays. */
+  codes: number[];
+  advances: number[];
+}
+
+export function fontMetrics(bytes: ArrayBuffer): FontMetrics {
+  return metricsOf(parse(bytes) as Font);
+}
+
+function metricsOf(font: Font): FontMetrics {
+  const map = font.tables?.cmap?.glyphIndexMap ?? {};
+  const codes = Object.keys(map).map(Number).sort((a, b) => a - b);
+  const adv = (g: number) => font.glyphs?.get(g)?.advanceWidth ?? 0;
+  return {
+    v: 1, family: font.names?.fontFamily?.en, unitsPerEm: font.unitsPerEm || 2048, lineHeight: lineHeightFactor(font),
+    notdef: adv(0), codes, advances: codes.map((c) => adv(map[c])),
+  };
+}
+
+// Scripts whose glyphs change with context (Hebrew, Arabic, Syriac, ... and their presentation forms):
+// measured by the full shaper (opentype.js), parsed on first use.
+const SHAPED = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
+
+/**
+ * Measurer over font metrics: the sum of the glyph advances, without kerning or ligatures, as
+ * PowerPoint draws text by default (identical to opentype.js for Latin, Greek, Cyrillic and CJK — checked
+ * over every pair of Latin characters in test/text.test.ts). Text in shaped scripts goes through
+ * opentype.js, from `fontBytes` when given. Widths are memoised (bounded), so repeated labels cost nothing.
+ */
+export function measurerFromMetrics(
+  regular: FontMetrics, bold?: FontMetrics | null,
+  fontBytes?: () => { regular: ArrayBuffer; bold?: ArrayBuffer | null } | null,
+): Measurer {
+  return build(regular, bold, () => {
+    const b = fontBytes?.();
+    return b ? [parse(b.regular) as Font, b.bold ? (parse(b.bold) as Font) : null] : [];
+  });
+}
+
+function build(regular: FontMetrics, bold: FontMetrics | null | undefined, fonts: () => (Font | null)[]): Measurer {
+  const tables = [regular, bold ?? regular].map((fm) => ({ fm, adv: new Map(fm.codes.map((c, i) => [c, fm.advances[i]])) }));
+  let shaper: (Font | null)[] | null = null;
+  const shaped = (line: string, size: number, isBold: boolean) => {
+    shaper ??= fonts();
+    const font = isBold ? shaper[1] ?? shaper[0] : shaper[0];
+    return font ? font.getAdvanceWidth(line, size, { kerning: false }) : null;
+  };
+  const lineWidth = (line: string, size: number, isBold: boolean) => {
+    if (SHAPED.test(line)) { const w = shaped(line, size, isBold); if (w != null) return w; }
+    const { fm, adv } = tables[isBold ? 1 : 0];
+    // Same arithmetic, in the same order, as opentype.js's forEachGlyph, so widths match to the bit.
+    const scale = 1 / fm.unitsPerEm * size;
+    let x = 0;
+    for (const ch of line) {
+      const a = adv.get(ch.codePointAt(0)!) ?? fm.notdef;
+      if (a) x += a * scale;
+    }
+    return x;
+  };
+  const memo = new Map<string, number>();
+  return {
+    family: regular.family,
+    width(text, size, isBold = false) {
+      const key = `${isBold ? 'b' : 'r'}${size}|${text}`;
+      const hit = memo.get(key);
+      if (hit !== undefined) return hit;
+      const scale = isBold && !bold ? 1.06 : 1;
+      const w = Math.max(...text.split('\n').map((l) => lineWidth(l, size, isBold) * scale));
+      if (memo.size >= 20000) memo.delete(memo.keys().next().value!);
+      memo.set(key, w);
+      return w;
+    },
+    lineHeight: (size) => size * regular.lineHeight,
+  };
+}
+
+/** Measurer over font bytes (parsed once). Widths are measured without kerning, as PowerPoint draws them. */
 export function measurerFromFonts(regularBytes: ArrayBuffer, boldBytes?: ArrayBuffer | null): Measurer {
   const regular = parse(regularBytes) as Font;
   const bold = boldBytes ? (parse(boldBytes) as Font) : null;
-  const factor = lineHeightFactor(regular);
-  return {
-    family: regular.names?.fontFamily?.en,
-    width(text, size, isBold = false) {
-      const font = isBold ? bold ?? regular : regular;
-      const scale = isBold && !bold ? 1.06 : 1;
-      return Math.max(...text.split('\n').map((l) => font.getAdvanceWidth(l, size, { kerning: false }) * scale));
-    },
-    lineHeight: (size) => size * factor,
-  };
+  return build(metricsOf(regular), bold && metricsOf(bold), () => [regular, bold]);
 }
 
 // Break opportunities (a small UAX #14 subset): after spaces (consumed), after hyphens, slashes and

@@ -19,12 +19,12 @@ export interface CheckOptions {
   measurer?: Measurer;
 }
 
-const bounds = (s: Shape): Box =>
+export const bounds = (s: Shape): Box =>
   s.kind === 'line'
     ? { x: Math.min(s.x1, s.x2), y: Math.min(s.y1, s.y2), w: Math.abs(s.x2 - s.x1), h: Math.abs(s.y2 - s.y1) }
     : s.kind === 'path' ? pathBounds(s) : { x: s.x, y: s.y, w: s.w, h: s.h };
 
-const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: Math.max(0, b.w - 2 * d), h: Math.max(0, b.h - 2 * d) });
+export const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: Math.max(0, b.w - 2 * d), h: Math.max(0, b.h - 2 * d) });
 
 /** "bar:s1:c2" / "label:value:s1:c2" → "s1:c2"; "line:s1" → "s1". */
 const owner = (role: string) => role.match(/s\d+(:c\d+)?$/)?.[0] ?? null;
@@ -32,11 +32,25 @@ const owner = (role: string) => role.match(/s\d+(:c\d+)?$/)?.[0] ?? null;
 /** "label:value:s1:c2" / "bar:s0:c2" → "c2". */
 const column = (role: string) => role.match(/:(c\d+)$/)?.[1] ?? null;
 
-function ownedBy(textRole: string, markRole: string): boolean {
+export function ownedBy(textRole: string, markRole: string): boolean {
   const t = owner(textRole), mk = owner(markRole);
   if (!t || !mk) return false;
   return t === mk || (markRole.startsWith('line:') && t.startsWith(`${mk}:`));
 }
+
+/**
+ * Text over a mark (bar or marker) of another owner is a collision — except a line's label sitting
+ * wholly inside a column (combination chart) and a boxed segment label (drawn on a rectangle of its
+ * segment's colour) over its own column. Shared with resolve.ts so both judge alike.
+ */
+export function coversMark(textRole: string, text: Box & { fill?: string }, markRole: string, mark: Box, lineOwners: Set<string | null>, tol: number): boolean {
+  const within = text.x >= mark.x - tol && text.y >= mark.y - tol && text.x + text.w <= mark.x + mark.w + tol && text.y + text.h <= mark.y + mark.h + tol;
+  if (within && markRole.startsWith('bar:') && lineOwners.has(owner(textRole)?.split(':')[0] ?? null)) return false;
+  if (text.fill && textRole.startsWith('label:value:') && markRole.startsWith('bar:') && column(textRole) === column(markRole)) return false;
+  return !ownedBy(textRole, markRole) && overlaps(text, mark, tol);
+}
+
+export { owner as roleOwner };
 
 /**
  * Layout quality gate v2 (B12): text×text and text×frame, plus text over a mark of another owner
@@ -74,15 +88,10 @@ export function checkScene(scene: Scene, options: number | CheckOptions = {}): I
   const arrows = items.filter((it): it is { s: LineShape; role: string } => it.role.startsWith('arrow:') && it.s.kind === 'line');
   // A line's point label may sit wholly inside a column segment (combination charts, contrasting colour).
   const lineOwners = new Set(dataLines.map((ln) => owner(ln.role)));
-  const within = (a: Box, b: Box) => a.x >= b.x - tol && a.y >= b.y - tol && a.x + a.w <= b.x + b.w + tol && a.y + a.h <= b.y + b.h + tol;
   for (const t of texts) {
     const inner = shrink(t.s, tol);
-    const lineLabel = lineOwners.has(owner(t.role)?.split(':')[0] ?? null);
     for (const mk of marks) {
-      if (lineLabel && mk.role.startsWith('bar:') && within(t.s, bounds(mk.s))) continue;
-      // A boxed segment label (drawn on a rectangle of its segment's colour) may overlap its own column.
-      if (t.s.fill && t.role.startsWith('label:value:') && mk.role.startsWith('bar:') && column(t.role) === column(mk.role)) continue;
-      if (!ownedBy(t.role, mk.role) && overlaps(t.s, bounds(mk.s), tol)) {
+      if (coversMark(t.role, t.s, mk.role, bounds(mk.s), lineOwners, tol)) {
         issues.push({ kind: 'text-mark', detail: `"${t.s.text}" × ${mk.role}` });
       }
     }

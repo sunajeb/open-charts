@@ -48,6 +48,12 @@ export function layoutPie(ctx: Ctx) {
   // Beyond the palette, colours repeat as lighter tints, so no two slices (or legend entries) match.
   const colorOf = (c: number) => tint(pal[c % pal.length], style.background, Math.min(0.8, Math.floor(c / pal.length) * 0.45));
 
+  // Narrow frame (resized in the add-in): names beside the pie would squeeze it to a dot; a legend on
+  // top keeps every name and leaves the width to the pie.
+  if (o.seriesLabels === 'right') {
+    const nameW = Math.max(...live.map((c) => m.width(spec.categories[c], fs))) + 2;
+    if (frame.w / 2 - nameW - pad * 3 < 0.6 * (frame.h / 2 - lh)) o.seriesLabels = 'legend';
+  }
   const names = o.seriesLabels === 'right';
   /** Outside label text: the name (its value inside), or the value alone when names are elsewhere. */
   const outsideText = (c: number, insideOk: boolean) =>

@@ -4,3 +4,4 @@ out/
 .claude/
 test-results/
 playwright-report/
+dist/
