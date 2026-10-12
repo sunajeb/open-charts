@@ -36,7 +36,9 @@ export function layoutHarvey(ctx: Ctx) {
   const d = Math.max(4, Math.min(d0, rowH * 0.7, colW * 0.6));
   if (rowH < Math.max(lh, 8)) ctx.hidden.push('chart frame too small');
   const x0 = frame.x + nameW;
-  const y0 = frame.y + headH;
+  // The table keeps its natural row height (balls sized to the text, not stretched to the frame)
+  // and sits centred vertically in the frame.
+  const y0 = frame.y + Math.max(0, (frame.h - headH - rowH * nSer) / 2) + headH;
   const cx = (c: number) => x0 + colW * (c + 0.5);
   const cy = (s: number) => y0 + rowH * (s + 0.5);
 
