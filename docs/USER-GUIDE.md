@@ -54,8 +54,8 @@ Edit data and Update chart are greyed out unless an open-charts chart is selecte
    lays the chart out again at the new size: text keeps its size, and the bars, labels and arrows are
    placed for the new space. Moving a chart only records its new position.
 
-The first time Apply updates a slide, macOS may ask whether the editor may control Microsoft
-PowerPoint; click **OK**.
+The first time Apply updates a slide, macOS asks once: *"Microsoft PowerPoint" wants access to
+control "Microsoft PowerPoint"*; click **Allow**.
 
 ### Editing an existing chart
 
@@ -430,8 +430,10 @@ and click **Update chart**.
 
 **"open-charts is still updating a chart".** Wait a moment and click again.
 
-**macOS asks whether something may control Microsoft PowerPoint.** Click **OK**: that is how Apply
-in the browser updates the slide.
+**macOS asks whether "Microsoft PowerPoint" may control "Microsoft PowerPoint".** Click **Allow**: that
+is how Apply in the browser updates the slide. While the question is unanswered, Apply does nothing on
+the slide. If you clicked **Don't Allow**, turn it back on in System Settings › Privacy & Security ›
+Automation (Microsoft PowerPoint › Microsoft PowerPoint).
 
 **The chart shows "Chart too small".** It is below its minimum size (see [Resizing](#resizing)). Drag
 it bigger; it is laid out again when you click elsewhere.

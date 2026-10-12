@@ -71,7 +71,8 @@ open-charts itself has no runtime dependencies; `npm install` only sets up the t
 Look for the **open-charts** tab, before Home. If PowerPoint asks about macros for
 `open-charts.ppam`, click **Enable Macros**: the add-in is a small macro file that passes your clicks
 to the engine and draws the shapes it returns. The first time you apply data from the datasheet,
-macOS may ask whether the editor may control Microsoft PowerPoint; click **OK**.
+macOS asks once: *"Microsoft PowerPoint" wants access to control "Microsoft PowerPoint"*; click
+**Allow** (until you do, Apply cannot update the slide).
 
 Options and related commands:
 
