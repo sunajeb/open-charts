@@ -2,7 +2,8 @@
 import type { Scale, Unit } from './numbers.ts';
 export type { Scale, Unit } from './numbers.ts';
 
-export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line';
+export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line'
+  | 'area' | 'area100' | 'pie' | 'doughnut' | 'harvey';
 
 /** A cell: a number, empty (null), or "e" in a waterfall = this category is a computed total. */
 export type Value = number | null | 'e';
@@ -49,6 +50,8 @@ export interface ChartOptions {
   seriesLabels?: 'right' | 'legend' | 'none';
   /** Waterfall: category indices drawn as totals anchored at the baseline. Default: first and last category. */
   totalsAt?: number[];
+  /** Line: draw a step (ortho) line, horizontal to the next category and then vertical. Default off. */
+  step?: boolean;
 }
 
 export interface ChartSpec {
@@ -81,8 +84,30 @@ export interface RectShape {
   fill: string;
   stroke?: string;
   strokeWidth?: number;
-  /** Draw as an ellipse inscribed in the box (line chart markers). */
+  /** Draw as an ellipse inscribed in the box (line chart markers). Same as `geom: 'ellipse'`. */
   ellipse?: boolean;
+  /** Preset outline drawn in the box. Default 'rect'. */
+  geom?: 'rect' | 'ellipse' | 'diamond' | 'roundRect' | 'triangle';
+}
+
+/**
+ * One path command. Coordinates are slide points. `A` draws a circular arc centred on (cx, cy):
+ * angles in degrees, 0 = 3 o'clock, positive = clockwise on screen; it starts with a straight
+ * segment from the current point to the arc's start (or moves there if the path is empty).
+ */
+export type PathCmd =
+  | { op: 'M' | 'L'; x: number; y: number }
+  | { op: 'A'; cx: number; cy: number; r: number; start: number; sweep: number }
+  | { op: 'Z' };
+
+/** Freeform: area fills, pie and doughnut wedges, Harvey balls. Renderers draw the flattened outline. */
+export interface PathShape {
+  kind: 'path';
+  commands: PathCmd[];
+  fill?: string;
+  stroke?: string;
+  strokeWidth?: number;
+  dash?: boolean;
 }
 
 export interface LineShape {
@@ -113,7 +138,7 @@ export interface TextShape {
   role?: 'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration' | 'title';
 }
 
-export type Shape = RectShape | LineShape | TextShape;
+export type Shape = RectShape | LineShape | TextShape | PathShape;
 
 export interface Scene {
   frame: Frame;
@@ -122,7 +147,9 @@ export interface Scene {
    * Role of each shape, parallel to `shapes`, assigned by the engine only: `bar:s<i>:c<j>`,
    * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
-   * `marker:s<i>:c<j>`, `line:s<i>`. Always set by `layoutChart`.
+   * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
+   * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball).
+   * Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

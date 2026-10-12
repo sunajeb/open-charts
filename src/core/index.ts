@@ -6,6 +6,9 @@ import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
 import { layoutMekko } from './charts/mekko.ts';
 import { layoutLine } from './charts/line.ts';
+import { layoutArea } from './charts/area.ts';
+import { layoutPie } from './charts/pie.ts';
+import { layoutHarvey } from './charts/harvey.ts';
 
 export * from './types.ts';
 export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
@@ -41,6 +44,11 @@ const layouts: Record<ChartSpec['type'], Layout> = {
   waterfall: layoutWaterfall,
   mekko: layoutMekko,
   line: layoutLine,
+  area: layoutArea,
+  area100: layoutArea,
+  pie: layoutPie,
+  doughnut: layoutPie,
+  harvey: layoutHarvey,
 };
 
 /**

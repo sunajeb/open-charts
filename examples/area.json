@@ -1,0 +1,43 @@
+{
+  "slides": [
+    {
+      "title": "Cloud has driven all of the growth since 2019",
+      "chart": {
+        "type": "area",
+        "categories": ["2019", "2020", "2021", "2022", "2023", "2024", "2025E"],
+        "series": [
+          { "name": "Licences", "values": [210, 205, 198, 190, 182, 176, 170] },
+          { "name": "Maintenance", "values": [120, 124, 126, 127, 126, 124, 121] },
+          { "name": "Cloud", "values": [35, 62, 98, 141, 189, 240, 296] }
+        ],
+        "options": { "unit": "m", "totals": true }
+      }
+    },
+    {
+      "title": "Channel mix: online overtook stores in 2023",
+      "chart": {
+        "type": "area100",
+        "categories": ["2019", "2020", "2021", "2022", "2023", "2024", "2025"],
+        "series": [
+          { "name": "Stores", "values": [61, 48, 45, 41, 37, 34, 31] },
+          { "name": "Online", "values": [27, 40, 42, 45, 49, 52, 55] },
+          { "name": "Wholesale", "values": [12, 12, 13, 14, 14, 14, 14] }
+        ],
+        "options": { "valueAxis": true }
+      }
+    },
+    {
+      "title": "Monthly active users by platform, with a gap in May (m)",
+      "chart": {
+        "type": "area",
+        "categories": ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
+        "series": [
+          { "name": "iOS", "values": [4.1, 4.3, 4.6, 4.8, 5.1, 5.3, 5.2, 5.6, 5.9, 6.2, 6.4, 6.9] },
+          { "name": "Android", "values": [3.8, 3.9, 4.0, 4.4, 4.5, 4.9, 5.0, 5.1, 5.4, 5.6, 5.9, 6.1] },
+          { "name": "Web", "values": [2.2, 2.1, 2.3, 2.2, null, 2.4, 2.6, 2.5, 2.7, 2.6, 2.8, 2.9] }
+        ],
+        "options": { "seriesLabels": "legend", "valueAxis": true }
+      }
+    }
+  ]
+}

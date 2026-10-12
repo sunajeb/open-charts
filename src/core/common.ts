@@ -155,24 +155,28 @@ export function seriesLabelsRight(ctx: Ctx, items: SeriesItem[], x: number, top:
  * Legend: colour swatch + name, laid left to right from the frame's top-left, wrapping onto as many
  * rows as the frame width needs (B9). Returns its height.
  */
-export function legend(ctx: Ctx, swatch: 'box' | 'line' = 'box', colorOf: (s: number) => string = ctx.color): number {
+export function legend(
+  ctx: Ctx, swatch: 'box' | 'line' = 'box', colorOf: (s: number) => string = ctx.color,
+  /** Entries other than the series (pie and doughnut list their categories): names and role key. */
+  entries: { names: string[]; key: 's' | 'c' } = { names: ctx.spec.series.map((s) => s.name), key: 's' },
+): number {
   if (ctx.o.seriesLabels !== 'legend') return 0;
   const { frame, fs, lh, pad } = ctx;
   const sw = fs * 0.75;
   const swW = swatch === 'box' ? sw : sw * 1.6;
   let x = frame.x;
   let y = frame.y;
-  ctx.spec.series.forEach((s, i) => {
-    const w = ctx.m.width(s.name, fs) + 2;
+  entries.names.forEach((name, i) => {
+    const w = ctx.m.width(name, fs) + 2;
     const itemW = swW + pad * 0.6 + w;
     if (x > frame.x && x + itemW > frame.x + frame.w) { x = frame.x; y += lh; }
-    const role = `legend:s${i}`;
+    const role = `legend:${entries.key}${i}`;
     if (swatch === 'box') {
       ctx.add(role, { kind: 'rect', x, y: y + (lh - sw) / 2, w: sw, h: sw, fill: colorOf(i) });
     } else {
       ctx.add(role, { kind: 'line', x1: x, y1: y + lh / 2, x2: x + swW, y2: y + lh / 2, color: colorOf(i), width: 2 });
     }
-    text(ctx, role, { x: x + swW + pad * 0.6, y, w, h: lh, text: s.name, align: 'left', role: 'series' });
+    text(ctx, role, { x: x + swW + pad * 0.6, y, w, h: lh, text: name, align: 'left', role: 'series' });
     x += itemW + pad * 2;
   });
   return y - frame.y + lh + pad;
