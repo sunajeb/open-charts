@@ -90,11 +90,17 @@
             <option value="pie">Pie</option>
             <option value="doughnut">Doughnut</option>
             <option value="harvey">Harvey balls</option>
+            <option value="combo">Combination</option>
+            <option value="mekkoxy">Mekko XY</option>
+            <option value="scatter">Scatter</option>
+            <option value="bubble">Bubble</option>
+            <option value="table">Table</option>
+            <option value="gantt">Gantt</option>
           </select>
         </label>
-        <label data-hide="pie harvey">Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
-        <label data-hide="harvey">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
-        <label data-for="stacked percent clustered line waterfall mekko area area100 pie doughnut">Series labels
+        <label data-hide="pie harvey gantt">Unit suffix<input id="unit" type="text" placeholder="m, k, %"></label>
+        <label data-hide="harvey gantt">Decimals<input id="decimals" type="number" min="0" max="3" placeholder="auto"></label>
+        <label data-for="stacked percent clustered line waterfall mekko area area100 pie doughnut combo mekkoxy scatter bubble gantt">Series labels
           <select id="seriesLabels">
             <option value="">Auto</option>
             <option value="right">Right of chart</option>
@@ -102,8 +108,8 @@
             <option value="none">None</option>
           </select>
         </label>
-        <label data-for="stacked percent clustered waterfall">Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
-        <label data-for="line">Axis start
+        <label data-for="stacked percent clustered waterfall combo">Column gap<input id="gap" type="number" min="0" max="2" step="0.1" placeholder="0.5"></label>
+        <label data-for="line scatter bubble">Axis start
           <select id="zeroBased">
             <option value="">Auto</option>
             <option value="true">Zero</option>
@@ -116,10 +122,27 @@
             <option value="unit">Absolute</option>
           </select>
         </label>
+        <label data-for="combo">Columns
+          <select id="combo">
+            <option value="stacked">Stacked</option>
+            <option value="clustered">Clustered</option>
+          </select>
+        </label>
+        <label data-for="mekkoxy">Order
+          <select id="sort">
+            <option value="sheet">Sheet order</option>
+            <option value="reverse">Reverse</option>
+            <option value="ascending">Ascending height</option>
+            <option value="descending">Descending height</option>
+          </select>
+        </label>
+        <label data-for="scatter bubble">X axis title<input id="xTitle" type="text"></label>
+        <label data-for="scatter bubble">Y axis title<input id="yTitle" type="text"></label>
         <div class="checks">
-          <label class="check" data-for="stacked percent mekko area doughnut"><input id="totals" type="checkbox"> Totals</label>
-          <label class="check" data-hide="pie doughnut harvey"><input id="valueAxis" type="checkbox"> Value axis</label>
+          <label class="check" data-for="stacked percent mekko area doughnut combo mekkoxy"><input id="totals" type="checkbox"> Totals</label>
+          <label class="check" data-hide="pie doughnut harvey scatter bubble table gantt"><input id="valueAxis" type="checkbox"> Value axis</label>
           <label class="check" data-for="line"><input id="step" type="checkbox"> Step line</label>
+          <label class="check" data-for="percent" title="The datasheet holds percentages: columns keep their own totals"><input id="percentData" type="checkbox"> Values are %</label>
         </div>
       </div>
       <div class="range" data-for="stacked percent"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select></div>
@@ -128,10 +151,15 @@
         <span class="hint">Total columns (drawn from the baseline)</span>
         <div class="chips" id="totalsAt"></div>
       </div>
+      <div data-for="combo" style="display:flex;flex-direction:column;gap:4px">
+        <span class="hint">Series drawn as lines</span>
+        <div class="chips" id="asLine"></div>
+      </div>
     </section>
 
     <section>
       <h2>Datasheet</h2>
+      <p class="hint" id="sheetHint" hidden></p>
       <p class="hint">Paste a block from Excel into any cell; pasting into the top-left cell reads the first row as categories and the first column as series names. Arrow keys and Enter move between cells. − removes the row or column of the selected cell.</p>
       <div class="sheet-wrap"><table id="sheet"></table></div>
       <div class="row">
@@ -181,7 +209,7 @@ const HARVEY_SAMPLE = {
 };
 // Engine defaults per chart type, mirrored so the form shows what the chart actually does.
 const DEFAULTS = {
-  totals: (t) => t === 'stacked',
+  totals: (t) => t === 'stacked' || t === 'mekkoxy',
   valueAxis: (t) => t === 'line',
 };
 
@@ -219,7 +247,65 @@ function parseCell(text) {
   const n = Number(t.replace(/[,\s%$€£¥]/g, '').replace(/^\((.*)\)$/, '-$1').replace(/[−–]/g, '-'));
   return Number.isFinite(n) ? n : undefined;
 }
-const showCell = (v) => (v == null ? '' : String(v));
+const showCell = (v) => (v == null ? '' : Array.isArray(v) ? v.join('; ') : String(v));
+// What a cell holds per chart type: scatter "x; y", bubble "x; y; size", Gantt a date, table a number or text.
+const POINT = { scatter: 2, bubble: 3 };
+function parseFor(type, text) {
+  const t = String(text).trim();
+  if (t === '') return null;
+  if (POINT[type]) {
+    const parts = t.split(/\s*[;|]\s*/).map(parseCell);
+    return parts.length === POINT[type] && parts.every((x) => typeof x === 'number') ? parts : undefined;
+  }
+  if (type === 'gantt') return t;
+  const n = parseCell(t);
+  return type === 'table' && n === undefined ? t : n;
+}
+const SHEET_HINTS = {
+  scatter: 'One point per column (its label on top); each cell is "x; y". A series is a group with its own colour.',
+  bubble: 'One bubble per column (its label on top); each cell is "x; y; size" (size sets the area).',
+  gantt: 'One activity per column. Rows: Start, End (dates like 2026-03-15, Mar 2026 or Q2 2026), then one row per milestone kind.',
+  mekkoxy: 'The first row is the column width (X extent); the rows below are stacked heights.',
+  table: 'Rows become table rows, columns become table columns; text cells are shown as typed.',
+};
+const GANTT_SAMPLE = {
+  categories: ['Diagnostic', 'Design', 'Pilot', 'Roll-out', 'Steering committee'],
+  series: [
+    { name: 'Start', values: ['2026-01-05', '2026-02-02', '2026-03-02', '2026-05-04', null] },
+    { name: 'End', values: ['2026-02-02', '2026-03-30', '2026-05-04', '2026-11-30', null] },
+    { name: 'Milestone', values: ['2026-02-02', null, '2026-05-04', '2026-11-30', '2026-03-16'] },
+  ],
+};
+const shapeOf = (t) => POINT[t] ?? (t === 'gantt' ? 'date' : 'num');
+/** Carry the data across a type change whose cells hold something else (numbers, points, dates). */
+function convertData(c, from, to) {
+  const a = shapeOf(from), b = shapeOf(to);
+  // Table text cells are not numbers anywhere else.
+  if (from === 'table' && to !== 'table') {
+    for (const s of c.series) s.values = s.values.map((v) => (typeof v === 'string' ? (typeof parseCell(v) === 'number' ? parseCell(v) : null) : v));
+  }
+  if (a === b) return;
+  if (b === 'date' || a === 'date') {
+    const src = b === 'date' ? GANTT_SAMPLE : SAMPLE.slides[0].chart;
+    c.categories = [...src.categories];
+    c.series = structuredClone(src.series);
+  } else if (a === 'num') {
+    // Rows X, Y (and Size) become one group of points.
+    c.series = [{ name: 'Points', values: c.categories.map((_, j) => {
+      const p = Array.from({ length: b }, (_, k) => (k < c.series.length ? c.series[k].values[j] : 1));
+      return p.every((x) => typeof x === 'number') ? p : null;
+    }) }];
+  } else if (b === 'num') {
+    c.series = ['X', 'Y', 'Size'].slice(0, a).map((name, k) => ({ name, values: c.categories.map((_, j) => {
+      const p = c.series.map((s) => s.values[j]).find(Array.isArray);
+      return p ? p[k] : null;
+    }) }));
+  } else {
+    for (const s of c.series) s.values = s.values.map((v) => (Array.isArray(v) ? (b === 3 ? [v[0], v[1], v[2] ?? 1] : v.slice(0, 2)) : v));
+  }
+  remapCategories(() => -1);
+  invalid.clear();
+}
 const unitText = (u) => (u && typeof u === 'object' ? u.text ?? '' : u ?? '');
 
 /** Re-index category references (arrows, waterfall totals) after categories move. map(old) → new index or -1. */
@@ -271,6 +357,14 @@ function renderArrowSelects() {
     l.append(box, ` ${cat || `#${i + 1}`}`);
     return l;
   }));
+  $('asLine').replaceChildren(...c.series.map((s, i) => {
+    const l = document.createElement('label'); l.className = 'check';
+    const box = document.createElement('input'); box.type = 'checkbox'; box.value = String(i);
+    box.checked = s.as === 'line';
+    box.onchange = () => { if (box.checked) s.as = 'line'; else delete s.as; changed(false); };
+    l.append(box, ` ${s.name || `#${i + 1}`}`);
+    return l;
+  }));
 }
 
 function renderForm() {
@@ -288,8 +382,15 @@ function renderForm() {
   $('valueAxis').checked = o.valueAxis ?? DEFAULTS.valueAxis(c.type);
   $('zeroBased').value = o.zeroBased === undefined ? '' : String(o.zeroBased);
   $('step').checked = !!o.step;
+  $('percentData').checked = !!o.percentData;
+  $('combo').value = o.combo ?? 'stacked';
+  $('sort').value = o.sort ?? 'sheet';
+  $('xTitle').value = o.axisTitles?.x ?? '';
+  $('yTitle').value = o.axisTitles?.y ?? '';
   for (const el of document.querySelectorAll('[data-for]')) el.hidden = !el.dataset.for.split(' ').includes(c.type);
   for (const el of document.querySelectorAll('[data-hide]')) el.hidden = el.dataset.hide.split(' ').includes(c.type);
+  $('sheetHint').textContent = SHEET_HINTS[c.type] ?? '';
+  $('sheetHint').hidden = !SHEET_HINTS[c.type];
   renderArrowSelects();
 }
 
@@ -324,13 +425,13 @@ function renderSheet() {
       const td = document.createElement('td');
       const key = `${i},${j}`;
       const inp = cellInput(i, j, invalid.get(key) ?? showCell(v), (el) => {
-        const n = parseCell(el.value);
+        const n = parseFor(c.type, el.value);
         if (n === undefined) invalid.set(key, el.value); else invalid.delete(key);
         el.setAttribute('aria-invalid', String(n === undefined));
         s.values[j] = n ?? null;
         changed(false);
       });
-      inp.inputMode = 'decimal';
+      if (shapeOf(c.type) === 'num' && c.type !== 'table') inp.inputMode = 'decimal';
       inp.setAttribute('aria-invalid', String(invalid.has(key)));
       td.append(inp); tr.append(td);
     });
@@ -384,7 +485,7 @@ $('sheet').addEventListener('paste', (e) => {
     c.categories = head.slice(1).map((s) => s.trim());
     c.series = rows.map((r, i) => ({
       ...(c.series[i]?.color ? { color: c.series[i].color } : {}),
-      name: r[0].trim(), values: c.categories.map((_, j) => parseCell(r[j + 1] ?? '') ?? null),
+      name: r[0].trim(), values: c.categories.map((_, j) => parseFor(c.type, r[j + 1] ?? '') ?? null),
     }));
     if (c.categories.length < n) remapCategories((i) => (i < c.categories.length ? i : -1));
   } else {
@@ -394,7 +495,7 @@ $('sheet').addEventListener('paste', (e) => {
       while (r >= c.series.length) c.series.push({ name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
       if (r === -1 && col >= 0) c.categories[col] = cell.trim();
       else if (col === -1 && r >= 0) c.series[r].name = cell.trim();
-      else if (r >= 0 && col >= 0) c.series[r].values[col] = parseCell(cell) ?? null;
+      else if (r >= 0 && col >= 0) c.series[r].values[col] = parseFor(c.type, cell) ?? null;
     }));
   }
   changed(true);
@@ -413,6 +514,13 @@ $('type').onchange = (e) => {
   const c = chart(), o = opts(), from = c.type, to = e.target.value;
   // Options left at the old type's default follow the new type's default.
   for (const [k, def] of Object.entries(DEFAULTS)) if (o[k] !== undefined && o[k] === def(from)) delete o[k];
+  convertData(c, from, to);
+  // A combination chart needs a line: the last series becomes one unless a series already is.
+  if (to === 'combo' && c.series.length > 1 && !c.series.some((s) => s.as === 'line')) c.series[c.series.length - 1].as = 'line';
+  // Options that only one type reads would fail validation on another.
+  for (const [k, types] of [['percentData', ['percent']], ['combo', ['combo']], ['sort', ['mekkoxy']], ['axisTitles', ['scatter', 'bubble']], ['shades', ['gantt']]]) {
+    if (!types.includes(to)) delete o[k];
+  }
   c.type = to;
   if (to !== 'line') delete o.step;
   // Harvey balls read 0–4 quarters (or 0–1): start from a small assessment grid if the data does not fit.
@@ -435,6 +543,16 @@ $('totals').onchange = (e) => { setOpt('totals', e.target.checked); };
 $('valueAxis').onchange = (e) => { setOpt('valueAxis', e.target.checked); };
 $('step').onchange = (e) => { setOpt('step', e.target.checked || undefined); };
 $('zeroBased').onchange = (e) => { setOpt('zeroBased', e.target.value === '' ? undefined : e.target.value === 'true'); };
+$('percentData').onchange = (e) => { setOpt('percentData', e.target.checked || undefined); };
+$('combo').onchange = (e) => { setOpt('combo', e.target.value === 'stacked' ? undefined : e.target.value); };
+$('sort').onchange = (e) => { setOpt('sort', e.target.value === 'sheet' ? undefined : e.target.value); };
+for (const [id, axis] of [['xTitle', 'x'], ['yTitle', 'y']]) {
+  $(id).oninput = (e) => {
+    const t = { ...opts().axisTitles, [axis]: e.target.value || undefined };
+    if (!t[axis]) delete t[axis];
+    setOpt('axisTitles', Object.keys(t).length ? t : undefined);
+  };
+}
 for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'diffFrom', 'diffTo']]) {
   const update = () => {
     const a = $(from).value, b = $(to).value;
@@ -536,7 +654,8 @@ function showSlide(s) {
   const notes = [];
   for (const [key, text] of invalid) {
     const [r, c] = key.split(',').map(Number);
-    notes.push({ text: `"${text}" in ${chart().series[r]?.name} / ${chart().categories[c]} is not a number (left empty)`, cls: '' });
+    const what = POINT[chart().type] ? `"${['x', 'y', 'size'].slice(0, POINT[chart().type]).join('; ')}"` : 'a number';
+    notes.push({ text: `"${text}" in ${chart().series[r]?.name} / ${chart().categories[c]} is not ${what} (left empty)`, cls: '' });
   }
   const c = chart();
   if (c.type === 'waterfall' && c.series.length > 1) notes.push({ text: `Waterfall shows the first series (${c.series[0].name}) only`, cls: 'info' });

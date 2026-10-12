@@ -12,7 +12,7 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - P5 Gantt / agenda / Excel live links (52 ew; after P3)
 
 ## Shared contracts (all agents code against these)
-- `Scene.roles?: string[]`, parallel to `Scene.shapes`, assigned by the engine only. Format: `bar:s<i>:c<j>`, `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`, `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`, `marker:s<i>:c<j>`, `line:s<i>`; wave 2: `area:s<i>`, `wedge:s0:c<j>`, `leader:c<j>`, `legend:c<j>`, `ball:s<i>:c<j>`, `label:total` (doughnut grand total)
+- `Scene.roles?: string[]`, parallel to `Scene.shapes`, assigned by the engine only. Format: `bar:s<i>:c<j>`, `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`, `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`, `marker:s<i>:c<j>`, `line:s<i>`; wave 2: `area:s<i>`, `wedge:s0:c<j>`, `leader:c<j>`, `legend:c<j>`, `ball:s<i>:c<j>`, `label:total` (doughnut grand total), `shade:<k>` (Gantt shaded period)
 - Tag contract v1 (MASTER-PLAN §3): group gets `OC_V`="1", `OC_ENGINE`, `OC_SPEC` (chunked above 30 KB), `OC_FRAME`="x,y,w,h", `OC_FONT`; each child gets `OC_ROLE`
 - `specVersion: 1` at chart and deck root; unversioned input = v0, migrated by `migrate()`
 
@@ -25,12 +25,12 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [x] Merge wave 1 (68 unit, 30 editor E2E, 13 goldens green; goldens rebaselined after review)
 - [x] Scene `path` shape + preset outlines (diamond, roundRect, triangle)
 - [ ] Chart catalogue (owner's list, 2026-10-13). ✅ = exists today
-  - Column/bar: ✅ stacked, ✅ clustered, ✅ 100%, [ ] percent-axis variant, ✅ waterfall (subtotals, connectors, below-zero), [ ] combination (stacked/clustered + line); [ ] bar orientation for all (agent A)
+  - Column/bar: ✅ stacked, ✅ clustered, ✅ 100%, ✅ percent-axis variant (`percent` + `percentData`), ✅ waterfall (subtotals, connectors, below-zero), ✅ combination (stacked/clustered + line); [ ] bar orientation for all (agent A)
   - Line/area: ✅ line, ✅ ortho/step line, ✅ stacked area, ✅ area 100%
-  - Marimekko: ✅ Mekko (% and units), [ ] Mekko XY (variable width and height)
-  - XY: [ ] scatter, [ ] bubble
+  - Marimekko: ✅ Mekko (% and units), ✅ Mekko XY (variable width and height)
+  - XY: ✅ scatter, ✅ bubble
   - Circular: ✅ pie, ✅ doughnut
-  - Special: [ ] Gantt (timeline: tasks, milestones, scales), ✅ Harvey ball, [ ] table
+  - Special: ✅ Gantt (timeline: tasks, milestones, scales), ✅ Harvey ball, ✅ table
   - Needs new scene shapes first: `path` (polygon/step/area fills, wedges via arcs) for writer, SVG and add-in
   - `.ppam` = ribbon (`customUI14.xml`: own "open-charts" tab, Charts gallery with every type, Edit data, Update) + one thin VBA module that only forwards the control id
   - VBA → engine through `AppleScriptTask` (the sandbox-approved Mac bridge; the reference uses a `Declare` into its native dylib) → `node` engine lays out the chart → VBA draws native shapes via the object model (AddShape, AddLine + arrowheads, AddTextbox, BuildFreeform), groups and names them, writes the `OC_*` tags
@@ -38,6 +38,11 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
   - Edit data opens the datasheet editor; Update re-lays-out the selected chart in place
   - `install` copies the add-in into Office's add-in folder and the bridge script into `~/Library/Application Scripts/com.microsoft.Powerpoint`
   - Tests: unit (scene serialiser, vbaProject writer, package), and an end-to-end run in real PowerPoint via AppleScript `run VB macro` for every chart type → `inspect` the saved deck → export PNGs and check by eye
+
+## Owner acceptance criteria (2026-10-13)
+- [ ] Easy data editing: Edit data on a selected chart opens its datasheet in ~1 s; Apply updates the chart on the slide in place, no extra clicks
+- [ ] Resize without breaking: resizing a chart re-lays it out at the new size (no stretched text); every type is clean from small to large frames; below a minimum it shows a clear "too small" message
+- [ ] Fast and seamless: insert < 1.5 s, update < 1 s in real PowerPoint; layout p95 < 20 ms per chart; 100-slide deck < 2 s
 
 ## Wave 3 — verification
 - [ ] Full suite + E2E + LibreOffice goldens; open generated decks in PowerPoint for Mac (no repair prompt), export PNGs, check by eye

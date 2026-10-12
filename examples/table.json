@@ -1,0 +1,33 @@
+{
+  "slides": [
+    {
+      "title": "Financial summary: margin expansion continues through 2025",
+      "chart": {
+        "type": "table",
+        "categories": ["2021", "2022", "2023", "2024", "2025E", "CAGR 2021–25"],
+        "series": [
+          { "name": "Revenue ($m)", "values": [1240.5, 1388.2, 1561.9, 1702.4, 1890.7, "11.1%"] },
+          { "name": "Gross profit ($m)", "values": [496.2, 569.2, 656, 732, 832, "13.8%"] },
+          { "name": "EBITDA ($m)", "values": [148.9, 180.5, 218.7, 255.4, 302.5, "19.4%"] },
+          { "name": "EBITDA margin", "values": ["12.0%", "13.0%", "14.0%", "15.0%", "16.0%", "+4.0 pp"] },
+          { "name": "Headcount", "values": [3120, 3340, 3510, 3620, 3790, "5.0%"] },
+          { "name": "Revenue per employee ($k)", "values": [397.6, 415.6, 445, 470.3, 498.9, "5.8%"] }
+        ],
+        "options": { "locale": "en-US" }
+      }
+    },
+    {
+      "title": "Vendor shortlist: B leads on capability, C on cost",
+      "chart": {
+        "type": "table",
+        "categories": ["Annual cost ($k)", "Implementation time (months)", "Capability score", "Reference clients", "Recommendation"],
+        "series": [
+          { "name": "Vendor A", "values": [840, 9, 3.4, 12, "Shortlist"] },
+          { "name": "Vendor B", "values": [1120, 7, 4.6, 28, "Preferred"] },
+          { "name": "Vendor C", "values": [610, 12, 3.1, 9, "Fallback"] },
+          { "name": "Vendor D (incumbent, on-premises only)", "values": [930, null, 2.7, 41, "Exit"] }
+        ]
+      }
+    }
+  ]
+}

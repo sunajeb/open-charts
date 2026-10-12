@@ -2,14 +2,14 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://open-charts.dev/schema/chart/1.json",
   "title": "open-charts chart spec, version 1",
-  "description": "One chart. Unversioned specs (v0) have the same shape and are upgraded by migrate(). Semantic rules the schema cannot express (values per series = number of categories, unique series names, cagr.from < cagr.to, horizontal only for column types) are enforced by validateSpec().",
+  "description": "One chart. Unversioned specs (v0) have the same shape and are upgraded by migrate(). Semantic rules the schema cannot express (values per series = number of categories, unique series names, cagr.from < cagr.to, horizontal only for column types, tuple length per scatter / bubble, gantt end after start) are enforced by validateSpec().",
   "type": "object",
   "additionalProperties": false,
   "required": ["type", "categories", "series"],
   "properties": {
     "$schema": { "type": "string" },
     "specVersion": { "const": 1 },
-    "type": { "enum": ["stacked", "clustered", "percent", "waterfall", "mekko", "line", "area", "area100", "pie", "doughnut", "harvey"] },
+    "type": { "enum": ["stacked", "clustered", "percent", "waterfall", "mekko", "line", "area", "area100", "pie", "doughnut", "harvey", "combo", "mekkoxy", "scatter", "bubble", "table", "gantt"] },
     "categories": {
       "type": "array",
       "minItems": 1,
@@ -47,11 +47,14 @@
             "anyOf": [
               { "type": "number" },
               { "type": "null" },
-              { "const": "e", "description": "Waterfall only: this category is a computed total." }
+              { "const": "e", "description": "Waterfall only: this category is a computed total." },
+              { "type": "array", "minItems": 2, "maxItems": 3, "items": { "type": "number" }, "description": "Scatter: [x, y]; bubble: [x, y, size]. The category is the point's label." },
+              { "type": "string", "description": "Gantt: a date (\"2026-03-15\", \"Mar 2026\", \"Q2 2026\"). Table: text shown as is." }
             ]
           }
         },
-        "color": { "$ref": "#/$defs/hexColor" }
+        "color": { "$ref": "#/$defs/hexColor" },
+        "as": { "enum": ["column", "line"], "description": "Combination chart: draw this series as a line over the columns." }
       }
     },
     "unit": {
@@ -102,7 +105,26 @@
         "gap": { "type": "number", "minimum": 0, "maximum": 10 },
         "seriesLabels": { "enum": ["right", "legend", "none"] },
         "totalsAt": { "type": "array", "items": { "$ref": "#/$defs/categoryIndex" } },
-        "step": { "type": "boolean", "description": "Line only: step (ortho) line, horizontal then vertical." }
+        "step": { "type": "boolean", "description": "Line only: step (ortho) line, horizontal then vertical." },
+        "percentData": { "type": "boolean", "description": "100% chart: values are already percentages; columns keep their own totals on the % axis." },
+        "combo": { "enum": ["stacked", "clustered"], "description": "Combination chart: how the column series are drawn." },
+        "sort": { "enum": ["sheet", "reverse", "ascending", "descending"], "description": "Mekko XY: category order (by height for ascending / descending)." },
+        "axisTitles": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Scatter and bubble: axis titles.",
+          "properties": { "x": { "type": "string" }, "y": { "type": "string" } }
+        },
+        "shades": {
+          "type": "array",
+          "description": "Gantt: shaded periods across every row.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["from", "to"],
+            "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "label": { "type": "string" } }
+          }
+        }
       }
     }
   }

@@ -156,17 +156,21 @@ export function seriesLabelsRight(ctx: Ctx, items: SeriesItem[], x: number, top:
  * rows as the frame width needs (B9). Returns its height.
  */
 export function legend(
-  ctx: Ctx, swatch: 'box' | 'line' = 'box', colorOf: (s: number) => string = ctx.color,
+  ctx: Ctx, swatchKind: 'box' | 'line' | ((i: number) => 'box' | 'line') = 'box', colorOf: (s: number) => string = ctx.color,
   /** Entries other than the series (pie and doughnut list their categories): names and role key. */
   entries: { names: string[]; key: 's' | 'c' } = { names: ctx.spec.series.map((s) => s.name), key: 's' },
+  /** Leave entries out (Mekko XY: the width series has no swatch). */
+  include: (i: number) => boolean = () => true,
 ): number {
   if (ctx.o.seriesLabels !== 'legend') return 0;
   const { frame, fs, lh, pad } = ctx;
   const sw = fs * 0.75;
-  const swW = swatch === 'box' ? sw : sw * 1.6;
   let x = frame.x;
   let y = frame.y;
   entries.names.forEach((name, i) => {
+    if (!include(i)) return;
+    const swatch = typeof swatchKind === 'function' ? swatchKind(i) : swatchKind;
+    const swW = swatch === 'box' ? sw : sw * 1.6;
     const w = ctx.m.width(name, fs) + 2;
     const itemW = swW + pad * 0.6 + w;
     if (x > frame.x && x + itemW > frame.x + frame.w) { x = frame.x; y += lh; }

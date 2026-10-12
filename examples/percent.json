@@ -1,0 +1,30 @@
+{
+  "slides": [
+    {
+      "title": "Enterprise share of revenue rose from 46% to 57%",
+      "chart": {
+        "type": "percent",
+        "categories": ["2021", "2022", "2023", "2024", "2025E"],
+        "series": [
+          { "name": "Enterprise", "values": [42, 58, 75, 96, 118] },
+          { "name": "Mid-market", "values": [31, 36, 44, 51, 60] },
+          { "name": "SMB", "values": [18, 21, 22, 26, 29] }
+        ],
+        "options": { "valueAxis": true }
+      }
+    },
+    {
+      "title": "Survey: a third of buyers are still considering; one in seven gave no answer",
+      "chart": {
+        "type": "percent",
+        "categories": ["CIO", "CFO", "COO", "Head of IT", "Procurement"],
+        "series": [
+          { "name": "Will buy", "values": [46, 38, 41, 52, 29] },
+          { "name": "Considering", "values": [31, 34, 30, 27, 36] },
+          { "name": "Will not buy", "values": [9, 12, 14, 8, 15] }
+        ],
+        "options": { "percentData": true, "valueAxis": true }
+      }
+    }
+  ]
+}

@@ -9,6 +9,11 @@ import { layoutLine } from './charts/line.ts';
 import { layoutArea } from './charts/area.ts';
 import { layoutPie } from './charts/pie.ts';
 import { layoutHarvey } from './charts/harvey.ts';
+import { layoutCombo } from './charts/combo.ts';
+import { layoutMekkoXY } from './charts/mekkoxy.ts';
+import { layoutScatter } from './charts/scatter.ts';
+import { layoutTable } from './charts/table.ts';
+import { layoutGantt } from './charts/gantt.ts';
 
 export * from './types.ts';
 export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
@@ -49,6 +54,12 @@ const layouts: Record<ChartSpec['type'], Layout> = {
   pie: layoutPie,
   doughnut: layoutPie,
   harvey: layoutHarvey,
+  combo: layoutCombo,
+  mekkoxy: layoutMekkoXY,
+  scatter: layoutScatter,
+  bubble: layoutScatter,
+  table: layoutTable,
+  gantt: layoutGantt,
 };
 
 /**

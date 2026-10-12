@@ -12,6 +12,9 @@ function model(ctx: Ctx) {
   const nCat = spec.categories.length;
   const nSer = spec.series.length;
   const percent = spec.type === 'percent';
+  // Values entered as percentages (the datasheet's % toggle): each value is its own share and a
+  // column is drawn at its own total, which may be more or less than 100%.
+  const pdata = percent && !!o.percentData;
   const clustered = spec.type === 'clustered';
   const raw = (s: number, c: number) => num(spec.series[s].values[c]);
   const val = (s: number, c: number) => raw(s, c) ?? 0;
@@ -20,10 +23,10 @@ function model(ctx: Ctx) {
   const pos = cats.map((c) => sers.reduce((a, s) => a + Math.max(0, val(s, c)), 0));
   const neg = cats.map((c) => sers.reduce((a, s) => a + Math.min(0, val(s, c)), 0));
   const total = cats.map((c) => pos[c] + neg[c]);
-  const shown = (s: number, c: number) => (percent ? (pos[c] ? (Math.max(0, val(s, c)) / pos[c]) * 100 : 0) : val(s, c));
+  const shown = (s: number, c: number) => (pdata ? Math.max(0, val(s, c)) : percent ? (pos[c] ? (Math.max(0, val(s, c)) / pos[c]) * 100 : 0) : val(s, c));
   if (percent && neg.some((v) => v < 0)) ctx.hidden.push('negative values ignored in 100% chart');
   // 100% labels are rounded together so every column reads exactly 100%.
-  const pctDecimals = o.decimals ?? 0;
+  const pctDecimals = o.decimals ?? (pdata ? ctx.decimals : 0);
   const shares = cats.map((c) => roundToTotal(sers.map((s) => shown(s, c)), pctDecimals));
   // Stacked labels are rounded together so the segments add up to the total shown above the column.
   const consistent = !clustered && !percent && !o.format;
@@ -31,7 +34,7 @@ function model(ctx: Ctx) {
   const segLabel = (s: number, c: number) =>
     percent ? ctx.pct(shares[c][s], pctDecimals) : rounded[c] ? ctx.fmt(rounded[c]![s], { scaled: true }) : ctx.fmt(val(s, c));
 
-  let [dmin, dmax] = percent ? [0, 100]
+  let [dmin, dmax] = percent ? [0, Math.max(100, ...(pdata ? pos : []))]
     : clustered ? [Math.min(0, ...cats.flatMap((c) => sers.map((s) => val(s, c)))), Math.max(0, ...cats.flatMap((c) => sers.map((s) => val(s, c))))]
     : [Math.min(0, ...neg), Math.max(0, ...pos)];
   if (dmax === dmin) dmax = dmin + 1;
@@ -41,7 +44,7 @@ function model(ctx: Ctx) {
   const showTotals = !clustered && !!o.totals;
   const totalsFor = (c: number) => (percent ? pos[c] : total[c]);
   const arrows = ([['cagr', o.cagr], ['diff', o.difference]] as const).filter(([, r]) => r && !clustered);
-  return { nCat, nSer, percent, clustered, raw, val, cats, sers, pos, neg, total, shown, shares, pctDecimals, segLabel, dmin, dmax, ticks, axisFmt, showTotals, totalsFor, arrows };
+  return { pdata, nCat, nSer, percent, clustered, raw, val, cats, sers, pos, neg, total, shown, shares, pctDecimals, segLabel, dmin, dmax, ticks, axisFmt, showTotals, totalsFor, arrows };
 }
 
 type Model = ReturnType<typeof model>;
@@ -85,7 +88,7 @@ function layoutVertical(ctx: Ctx, md: Model) {
   }
   const px = frame.x + axisW;
   const pw = frame.w - axisW - rightW;
-  const py = frame.y + legendH + arrowsH + totalsH + barLabelH;
+  const py = frame.y + legendH + arrowsH + Math.max(totalsH + barLabelH, ticks ? lh / 2 : 0); // room for the top tick label
   const ph = frame.y + frame.h - catH - (clustered && dmin < 0 ? barLabelH : 0) - py;
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
@@ -139,9 +142,9 @@ function layoutVertical(ctx: Ctx, md: Model) {
       } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
       if (c === nCat - 1) lastSegs.push({ s, y: y1 + h / 2 });
     }
-    let top = yOf(percent ? 100 : up);
+    let top = yOf(percent && !md.pdata ? 100 : up);
     if (showTotals) {
-      const label = ctx.fmt(total[c]);
+      const label = md.pdata ? ctx.pct(total[c], md.pctDecimals) : ctx.fmt(total[c]);
       const tw = m.width(label, fs, true);
       top -= lh + pad * 0.2;
       text(ctx, `label:total:c${c}`, { x: cx(c) - tw / 2 - 1, y: top, w: tw + 2, h: lh, text: label, bold: true, role: 'total' });
@@ -182,7 +185,7 @@ function layoutBars(ctx: Ctx, md: Model) {
   const catW = Math.min(frame.w * 0.3, Math.max(...spec.categories.map((c) => m.width(c, fs))) + 2);
   const fit = fitCategories(ctx, catW);
   reportFit(ctx, fit);
-  const totalLabels = cats.map((c) => ctx.fmt(total[c]));
+  const totalLabels = cats.map((c) => (md.pdata ? ctx.pct(total[c], md.pctDecimals) : ctx.fmt(total[c])));
   const totalsW = showTotals ? Math.max(...totalLabels.map((t) => m.width(t, fs, true))) + pad * 0.8 : 0;
   const valueLabels = clustered ? cats.flatMap((c) => sers.map((s) => raw(s, c)).filter((v): v is number => v != null).map((v) => ({ v, w: m.width(ctx.fmt(v), fs) }))) : [];
   const barLabelR = Math.max(0, ...valueLabels.filter((l) => l.v >= 0).map((l) => l.w + pad * 0.6));
@@ -252,7 +255,7 @@ function layoutBars(ctx: Ctx, md: Model) {
         text(ctx, `label:value:s${s}:c${c}`, { x: x1 + w / 2 - tw / 2 - 1, y: cy(c) - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
       } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`);
     }
-    let end = xOf(percent ? 100 : right);
+    let end = xOf(percent && !md.pdata ? 100 : right);
     if (showTotals) {
       const tw = m.width(totalLabels[c], fs, true) + 2;
       text(ctx, `label:total:c${c}`, { x: end + pad * 0.4, y: cy(c) - lh / 2, w: tw, h: lh, text: totalLabels[c], bold: true, align: 'left', role: 'total' });

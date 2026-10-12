@@ -3,16 +3,23 @@ import type { Scale, Unit } from './numbers.ts';
 export type { Scale, Unit } from './numbers.ts';
 
 export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line'
-  | 'area' | 'area100' | 'pie' | 'doughnut' | 'harvey';
+  | 'area' | 'area100' | 'pie' | 'doughnut' | 'harvey'
+  | 'combo' | 'mekkoxy' | 'scatter' | 'bubble' | 'table' | 'gantt';
 
-/** A cell: a number, empty (null), or "e" in a waterfall = this category is a computed total. */
-export type Value = number | null | 'e';
+/**
+ * A cell: a number, empty (null), or "e" in a waterfall = this category is a computed total.
+ * Scatter / bubble: an [x, y] / [x, y, size] tuple (one point; the category is its label).
+ * Gantt: a date string ("2026-03-15", "Mar 2026", "Q2 2026") read with parseCategoryDate.
+ */
+export type Value = number | null | 'e' | number[] | string;
 
 export interface Series {
   name: string;
   values: Value[];
   /** Hex colour, "RRGGBB" or "#RRGGBB". */
   color?: string;
+  /** Combination chart: draw this series as a line over the columns (same value axis). */
+  as?: 'column' | 'line';
 }
 
 export interface ChartOptions {
@@ -52,6 +59,16 @@ export interface ChartOptions {
   totalsAt?: number[];
   /** Line: draw a step (ortho) line, horizontal to the next category and then vertical. Default off. */
   step?: boolean;
+  /** 100% chart: values are already percentages (the datasheet's % toggle); columns keep their own totals. */
+  percentData?: boolean;
+  /** Combination chart: how the column series are drawn. Default "stacked". */
+  combo?: 'stacked' | 'clustered';
+  /** Category order (Mekko XY): sheet order (default), reverse, or by height. */
+  sort?: 'sheet' | 'reverse' | 'ascending' | 'descending';
+  /** Scatter and bubble: axis titles. */
+  axisTitles?: { x?: string; y?: string };
+  /** Gantt: shaded periods (holidays, phases) across every row, with an optional label. */
+  shades?: { from: string; to: string; label?: string }[];
 }
 
 export interface ChartSpec {
@@ -148,8 +165,8 @@ export interface Scene {
    * `label:value:s<i>:c<j>`, `label:total:c<j>`, `label:category:c<j>`, `label:series:s<i>`, `axis`,
    * `axis:tick:<k>`, `gridline:<k>`, `arrow:cagr`, `arrow:diff`, `connector:c<j>`, `legend:s<i>`,
    * `marker:s<i>:c<j>`, `line:s<i>`, `area:s<i>` (area band), `wedge:s0:c<j>` (pie/doughnut slice),
-   * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball).
-   * Always set by `layoutChart`.
+   * `leader:c<j>` (pie label leader), `label:total` (doughnut grand total), `legend:c<j>` (legend of categories), `ball:s<i>:c<j>` (Harvey ball),
+   * `shade:<k>` (Gantt shaded period). Always set by `layoutChart`.
    */
   roles?: string[];
   /** Labels the engine chose to hide (or shrink) because they did not fit, with the reason. */

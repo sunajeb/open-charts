@@ -1,0 +1,30 @@
+{
+  "slides": [
+    {
+      "title": "Revenue outgrew the plan in every year since 2022",
+      "chart": {
+        "type": "combo",
+        "categories": ["2021", "2022", "2023", "2024", "2025E"],
+        "series": [
+          { "name": "Products", "values": [62, 71, 84, 98, 112] },
+          { "name": "Services", "values": [24, 27, 33, 38, 44] },
+          { "name": "Plan", "values": [90, 96, 108, 118, 126], "as": "line" }
+        ],
+        "options": { "unit": "m", "totals": true }
+      }
+    },
+    {
+      "title": "Win rate by region against the company average",
+      "chart": {
+        "type": "combo",
+        "categories": ["North America", "Europe", "Asia Pacific", "Latin America", "Middle East"],
+        "series": [
+          { "name": "Enterprise", "values": [38, 31, 27, 22, 25] },
+          { "name": "Mid-market", "values": [29, 26, 24, 19, 21] },
+          { "name": "Company average", "values": [33, 33, 33, 33, 33], "as": "line" }
+        ],
+        "options": { "combo": "clustered", "unit": "%", "valueAxis": true }
+      }
+    }
+  ]
+}

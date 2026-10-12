@@ -23,6 +23,8 @@ const TYPE_NAMES: Record<ChartSpec['type'], string> = {
   waterfall: 'Waterfall chart', mekko: 'Mekko chart', line: 'Line chart',
   area: 'Stacked area chart', area100: '100% area chart', pie: 'Pie chart', doughnut: 'Doughnut chart',
   harvey: 'Harvey ball chart',
+  combo: 'Combination chart', mekkoxy: 'Mekko XY chart', scatter: 'Scatter chart', bubble: 'Bubble chart',
+  table: 'Table', gantt: 'Gantt chart',
 };
 
 export function altText(chart: ChartSpec): string {
