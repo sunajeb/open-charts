@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-charts.dev/schema/deck/1.json",
+  "title": "open-charts deck spec, version 1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["slides"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "specVersion": { "const": 1 },
+    "style": { "$ref": "#/$defs/style" },
+    "slides": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["chart"],
+        "properties": {
+          "title": { "type": "string" },
+          "chart": { "$ref": "https://open-charts.dev/schema/chart/1.json" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "hexColor": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
+    "style": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "font": { "type": "string", "minLength": 1 },
+        "fontSize": { "type": "number", "minimum": 4, "maximum": 72 },
+        "text": { "$ref": "#/$defs/hexColor" },
+        "muted": { "$ref": "#/$defs/hexColor" },
+        "axis": { "$ref": "#/$defs/hexColor" },
+        "background": { "$ref": "#/$defs/hexColor" },
+        "palette": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/hexColor" } },
+        "positive": { "$ref": "#/$defs/hexColor" },
+        "negative": { "$ref": "#/$defs/hexColor" }
+      }
+    }
+  }
+}
