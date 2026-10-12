@@ -1,5 +1,5 @@
 {
-  "fonts": "w=177.12 wb=180.44 lh=13.80",
+  "fonts": "sha1:8c286838fd35 lh=13.80",
   "frame": {"x":48,"y":96,"w":864,"h":408},
   "hidden": ["value labels wider than their bars (32 hidden): the value axis shows the values"],
   "shapes": [

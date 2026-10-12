@@ -5,6 +5,7 @@
 // test/bench/scenes/<NN-name>.scene.json: the laid-out scene with coordinates rounded to 0.1 pt, one
 // shape per line, so a layout change shows up as a readable diff. `npm run bench:accept` rewrites them
 // (review the change in the goldens gallery: `npm run goldens` renders the bench decks too).
+import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,12 +30,17 @@ export function benchSlides(dir = benchDir): BenchSlide[] {
 /** Lay a bench slide out exactly as the CLI does (buildDeck): migrated spec, default chart frame. */
 export const layoutBench = (b: BenchSlide, m: Measurer): Scene => layoutChart(migrate(b.spec), CHART_FRAME, m, b.style);
 
+/** Characters whose widths (regular and bold) identify the font metrics. */
+const SAMPLE = [...Array.from({ length: 95 }, (_, i) => String.fromCharCode(32 + i)), ...'−€£¥%‰–—…·äöüÄÖÜßéèêçñåøÉ中円한'];
+
 /**
  * The measurer's fingerprint: snapshots are only comparable under the same font metrics (Arial or a
  * metric-compatible substitute). A snapshot made under other metrics is skipped, not failed.
  */
-export const fingerprint = (m: Measurer) =>
-  `w=${m.width('Revenue 2025: 1,234.5m (+12%)', 12).toFixed(2)} wb=${m.width('Revenue 2025: 1,234.5m (+12%)', 12, true).toFixed(2)} lh=${m.lineHeight(12).toFixed(2)}`;
+export const fingerprint = (m: Measurer) => {
+  const widths = SAMPLE.flatMap((ch) => [m.width(ch, 12), m.width(ch, 12, true)].map((w) => w.toFixed(3))).join(',');
+  return `sha1:${createHash('sha1').update(widths).digest('hex').slice(0, 12)} lh=${m.lineHeight(12).toFixed(2)}`;
+};
 
 const r = (v: number) => Math.round(v * 10) / 10 + 0; // + 0 turns -0 into 0
 
