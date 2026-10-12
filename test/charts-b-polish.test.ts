@@ -29,7 +29,7 @@ const gapBetween = (a: TextShape, b: TextShape) => Math.max(b.x - (a.x + a.w), a
 test('combo: line labels read as their point\'s, segment labels stay inside, no two labels touch', () => {
   for (const { title, chart: spec } of slides('combo')) {
     const scene = layoutChart(spec, F, m);
-    const lh = m.lineHeight(10);
+    const lh = m.lineHeight(12);
     const line = spec.series.findIndex((s) => s.as === 'line');
     const lineLabels = textsOf(scene, new RegExp(`^label:value:s${line}:`));
     assert.equal(lineLabels.length, spec.categories.length, `${title}: every point labelled`);
@@ -55,6 +55,86 @@ test('combo: line labels read as their point\'s, segment labels stay inside, no 
     }
     assert.deepEqual(strict(scene), [], title);
   }
+});
+
+// ---- Gantt -------------------------------------------------------------------------------------------
+
+const lines = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is import('../src/core/index.ts').LineShape => x.kind === 'line');
+
+test('gantt: rows share the frame height up to a comfortable maximum; the chart keeps its top edge', () => {
+  const lh = m.lineHeight(12);
+  const rowSeps = (s: Scene) => lines(s, /^gridline:/).filter((l) => l.y1 === l.y2).map((l) => l.y1).sort((a, b) => a - b);
+  // Seven activities: the rows fill the frame (minus header, bracket band and key).
+  const long = layoutChart(slides('gantt')[0].chart, F, m);
+  const ys = rowSeps(long);
+  const rowH = ys[1] - ys[0];
+  assert.ok(rowH > lh * 3, `rows use the height (${rowH.toFixed(1)} pt)`);
+  const key = textsOf(long, /^legend:s\d+$/)[0];
+  assert.ok(F.y + F.h - (key.y + key.h) < lh, 'nothing but the key below the band');
+  // A short plan: rows stop growing at the maximum, the header stays at the top of the frame.
+  const short = layoutChart({ type: 'gantt', categories: ['A', 'B'], series: [{ name: 'S', values: ['2026-01-05', '2026-02-02'] }, { name: 'E', values: ['2026-03-02', '2026-04-06'] }] }, F, m);
+  const sep = rowSeps(short)[0];
+  const head = lines(short, /^axis$/).find((l) => l.y1 === l.y2 && l.x1 === F.x)!;
+  assert.ok(close(sep - head.y1, lh * 4.5, 0.01), 'row height capped');
+  assert.ok(textsOf(short, /^axis:tick:/).every((t) => t.y < F.y + lh * 3), 'header at the top');
+  assert.deepEqual(strict(short), []);
+});
+
+test('gantt: a week scale spans whole weeks even when a milestone label widens the range', () => {
+  const scene = layoutChart(slides('gantt')[1].chart, F, m);
+  const fine = lines(scene, /^gridline:/).filter((l) => l.dash).map((l) => l.x1).sort((a, b) => a - b);
+  const step = fine[1] - fine[0];
+  const bars = rectsOf(scene, /^bar:/);
+  const right = Math.max(...lines(scene, /^axis$/).map((l) => l.x2));
+  const left = Math.min(...bars.map((b) => b.x));
+  assert.ok(close((right - left) / step, Math.round((right - left) / step), 1e-6), `${((right - left) / step).toFixed(3)} weeks`);
+});
+
+test('gantt: brackets label periods under the rows; a labelled shade gets one; the today line crosses every row', () => {
+  const spec = slides('gantt')[0].chart;
+  const scene = layoutChart(spec, F, m);
+  const day = (s: string) => Date.parse(s) / 864e5;
+  const bar0 = rectsOf(scene, /^bar:s0:c0$/)[0]; // Diagnostic 2026-01-05 … 2026-02-02
+  const ppd = bar0.w / (day('2026-02-02') - day('2026-01-05'));
+  const xOf = (s: string) => bar0.x + (day(s) - day('2026-01-05')) * ppd;
+  const rowsBottom = Math.max(...rectsOf(scene, /^shade:0$/).map((r) => r.y + r.h));
+  for (const [k, b] of spec.options!.brackets!.entries()) {
+    const ls = lines(scene, new RegExp(`^bracket:${k}$`));
+    assert.equal(ls.length, 3, 'two ends and a span');
+    const span = ls.find((l) => l.y1 === l.y2)!;
+    assert.ok(close(span.x1, xOf(b.from), 1e-6) && close(span.x2, xOf(b.to), 1e-6), b.label);
+    assert.ok(ls.every((l) => Math.min(l.y1, l.y2) >= rowsBottom), 'under the rows');
+    const label = textsOf(scene, new RegExp(`^bracket:${k}$`))[0];
+    assert.equal(label.text, b.label);
+    assert.ok(label.y >= span.y1, 'label under its bracket');
+  }
+  assert.equal(lines(scene, /^shade:0$/).length, 3, 'the shade label hangs from a bracket');
+  const today = lines(scene, /^today$/)[0];
+  assert.ok(close(today.x1, xOf('2026-04-13'), 1e-6) && today.x1 === today.x2);
+  assert.ok(today.y1 <= bar0.y && today.y2 >= rowsBottom, 'through every row');
+  assert.equal(today.color, 'C0504D');
+  assert.equal(textsOf(scene, /^today$/)[0].text, 'Today');
+  assert.deepEqual(strict(scene), []);
+  const off = layoutChart({ ...spec, options: { ...spec.options, today: '2030-01-01' } }, F, m);
+  assert.ok(off.hidden.some((h) => /today: outside/.test(h)));
+});
+
+// ---- Table -------------------------------------------------------------------------------------------
+
+test('table: rows share the spare frame height (at most two lines more each), content centred, top edge kept', () => {
+  const lh = m.lineHeight(12);
+  const scene = layoutChart(slides('table')[0].chart, F, m);
+  const rules = lines(scene, /^(axis|gridline:\d+)$/).map((l) => l.y1).sort((a, b) => a - b);
+  const rowH = rules[1] - rules[0];
+  assert.ok(rowH > lh * 2.5, `rows grew (${rowH.toFixed(1)} pt)`);
+  assert.ok(rules.at(-1)! <= F.y + F.h + 0.01);
+  const cell = textsOf(scene, /^label:value:s0:c0$/)[0];
+  assert.ok(close(cell.y + cell.h / 2, (rules[0] + rules[1]) / 2, 0.6), 'centred in its row');
+  assert.ok(textsOf(scene, /^label:category:/).every((t) => t.y < F.y + lh * 2), 'header at the top');
+  // A long table that fills the frame does not grow at all.
+  const long = layoutChart({ type: 'table', categories: ['A'], series: Array.from({ length: 30 }, (_, i) => ({ name: `R${i}`, values: [i] })) }, F, m);
+  assert.ok(long.hidden.length === 0 || long.hidden.every((h) => /does not fit|shrunk/.test(h)));
+  assert.deepEqual(checkScene(long, { measurer: m }), []);
 });
 
 // ---- Scatter and bubble -----------------------------------------------------------------------------

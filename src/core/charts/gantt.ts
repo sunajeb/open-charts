@@ -13,7 +13,10 @@ import { overlaps, type Box } from '../place.ts';
  *   tier, the next larger unit the upper tier. Larger units get solid separators, smaller dashed ones.
  * - The date range fits the data, snapped to whole units of the lower tier.
  * - Row labels sit in a column on the left (wrapped, shrunk, then hidden and reported).
- * - `options.shades`: shaded periods behind every row, labelled under the chart.
+ * - `options.shades`: shaded periods behind every row; a label hangs from a bracket under the chart.
+ * - `options.brackets`: periods (phases) marked by brackets under the rows, sharing lanes with shade labels.
+ * - `options.today`: a red line through every row at that date, labelled "Today" under the rows.
+ * - Rows share the frame's height up to a comfortable maximum (4.5 lines); a short plan keeps its top edge.
  */
 export function layoutGantt(ctx: Ctx) {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
@@ -29,7 +32,10 @@ export function layoutGantt(ctx: Ctx) {
   const msSeries = spec.series.map((_, i) => i).slice(2);
   const ms = msSeries.flatMap((s) => rows.map((r) => ({ s, r, d: day(spec.series[s].values[r]) }))).filter((x): x is { s: number; r: number; d: number } => x.d != null);
   const shades = (o.shades ?? []).map((sh) => ({ from: day(sh.from)!, to: day(sh.to)!, label: sh.label ?? '' }));
-  const all = [...start, ...end, ...ms.map((x) => x.d), ...ms.map((x) => x.d + 1), ...shades.flatMap((s) => [s.from, s.to])].filter((d): d is number => d != null);
+  const brackets = (o.brackets ?? []).map((b) => ({ from: day(b.from)!, to: day(b.to)!, label: b.label ?? '' }));
+  const today = day(o.today);
+  const all = [...start, ...end, ...ms.map((x) => x.d), ...ms.map((x) => x.d + 1), ...shades.flatMap((s) => [s.from, s.to]),
+    ...brackets.flatMap((b) => [b.from, b.to])].filter((d): d is number => d != null);
   if (!all.length) { ctx.hidden.push('Gantt chart has no dates'); return; }
   let lo = Math.min(...all), hi = Math.max(...all);
 
@@ -71,14 +77,37 @@ export function layoutGantt(ctx: Ctx) {
     return Math.max(...SAMPLE[u].map((t) => m.width(t, fs))) + 2;
   }
 
-  // Shade labels under the chart; rows fill the rest, but not taller than three lines each.
-  const shadeH = shades.some((s) => s.label) ? lh + pad * 0.6 : 0;
+  // Under the rows, the reference's band for chart-wide items: brackets labelling periods (a labelled
+  // shade gets one, as in the reference), and the "today" label. Items that would touch share no lane.
+  const bracketH = pad * 0.8;
+  type BandItem = { role: string; x1: number; x2: number; label: string; bracket: boolean; lx: number; lw: number; lane: number };
+  const band: BandItem[] = [];
+  const addBand = (role: string, from: number, to: number, label: string, bracket: boolean) => {
+    const x1 = Math.max(px, xOf(from)), x2 = Math.min(px + pw, xOf(to));
+    if (x2 < x1 || (bracket && x2 - x1 < 1)) return;
+    const lw = label ? m.width(label, fs) + 2 : 0;
+    const lx = Math.min(Math.max((x1 + x2) / 2 - lw / 2, frame.x), frame.x + frame.w - lw);
+    const lo2 = Math.min(x1, lx), hi2 = Math.max(x2, lx + lw);
+    let lane = 0;
+    while (band.some((b) => b.lane === lane && Math.min(b.x1, b.lx) < hi2 + pad && lo2 - pad < Math.max(b.x2, b.lx + b.lw))) lane++;
+    band.push({ role, x1, x2, label, bracket, lx, lw, lane });
+  };
   // Milestone kinds need a key once there is more than one.
   const showKey = msSeries.length > 1 && o.seriesLabels !== 'none';
   const keyH = showKey ? lh + pad * 0.6 : 0;
   const headH = tierH * (coarse ? 2 : 1);
   const top = frame.y + headH;
-  const rowH = Math.min((frame.y + frame.h - shadeH - keyH - top) / Math.max(1, nRow), Math.max(lh * 2.4, fit.lh * 2 + pad));
+  // Band lanes are known once the date range is (x positions only); their height then fixes the rows.
+  shades.forEach((sh, k) => { if (sh.label) addBand(`shade:${k}`, sh.from, sh.to, sh.label, true); });
+  brackets.forEach((b, k) => addBand(`bracket:${k}`, b.from, b.to, b.label, true));
+  if (today != null) addBand('today', today, today, 'Today', false);
+  const lanes = band.length ? Math.max(...band.map((b) => b.lane)) + 1 : 0;
+  const laneH = lh + bracketH + pad * 0.2;
+  const bandH = lanes ? lanes * laneH + pad * 0.3 : 0;
+  // Rows share the frame's height (as when the reference's chart is sized to the slide) up to a
+  // comfortable maximum; a short plan keeps its top edge and ends early rather than ballooning.
+  const rowMax = Math.max(lh * 4.5, fit.lh * 2 + pad * 2);
+  const rowH = Math.min((frame.y + frame.h - bandH - keyH - top) / Math.max(1, nRow), rowMax);
   if (rowH < lh) ctx.hidden.push('chart frame too small');
   const bottom = top + rowH * nRow;
   const yMid = (r: number) => top + rowH * (r + 0.5);
@@ -88,11 +117,19 @@ export function layoutGantt(ctx: Ctx) {
     const x1 = Math.max(px, xOf(sh.from)), x2 = Math.min(px + pw, xOf(sh.to));
     if (x2 <= x1) return;
     ctx.add(`shade:${k}`, { kind: 'rect', x: x1, y: top, w: x2 - x1, h: bottom - top, fill: SHADE });
-    if (!sh.label) return;
-    const w = m.width(sh.label, fs) + 2;
-    const lx = Math.min(Math.max((x1 + x2) / 2 - w / 2, px), px + pw - w);
-    text(ctx, `shade:${k}`, { x: lx, y: bottom + pad * 0.4, w, h: lh, text: sh.label, color: style.muted, role: 'decoration' });
   });
+  // Brackets (an upturned square bracket over the period, label under it) and the today label.
+  for (const b of band) {
+    const y = bottom + pad * 0.3 + b.lane * laneH;
+    if (b.bracket) {
+      const c = style.muted;
+      ctx.add(b.role,
+        { kind: 'line', x1: b.x1, y1: y, x2: b.x1, y2: y + bracketH, color: c, width: 0.75 },
+        { kind: 'line', x1: b.x1, y1: y + bracketH, x2: b.x2, y2: y + bracketH, color: c, width: 0.75 },
+        { kind: 'line', x1: b.x2, y1: y + bracketH, x2: b.x2, y2: y, color: c, width: 0.75 });
+    }
+    if (b.label) text(ctx, b.role, { x: b.lx, y: y + bracketH + pad * 0.1, w: b.lw, h: lh, text: b.label, color: b.bracket ? style.muted : style.negative, role: 'decoration' });
+  }
 
   // Header tiers, separators and the rule under the header.
   const tiers: [Unit, number][] = coarse ? [[coarse, frame.y], [fine, frame.y + tierH]] : [[fine, frame.y]];
@@ -132,7 +169,7 @@ export function layoutGantt(ctx: Ctx) {
   if (coarse) ctx.add('axis', { kind: 'line', x1: px, y1: frame.y + tierH, x2: px + pw, y2: frame.y + tierH, color: style.axis, width: 0.5 });
 
   // Rows: label, separator, bar, milestones.
-  const barH = Math.min(rowH * 0.5, lh * 1.1);
+  const barH = Math.min(rowH * 0.45, lh * 1.4);
   const dia = Math.min(rowH * 0.6, diaMax);
   const msColors = [style.text, style.muted, ...style.palette];
   const msColor = (s: number) => (spec.series[s].color ?? msColors[(s - 2) % msColors.length]).replace('#', '');
@@ -156,10 +193,16 @@ export function layoutGantt(ctx: Ctx) {
     items[x.r].push(box);
     ctx.add(`marker:s${x.s}:c${x.r}`, { kind: 'rect', ...box, fill: msColor(x.s), stroke: style.background, strokeWidth: 0.75, geom: 'diamond' });
   }
+  // Today: a red line through every row, down to its label in the band.
+  const todayItem = band.find((b) => b.role === 'today');
+  if (todayItem) {
+    ctx.add('today', { kind: 'line', x1: todayItem.x1, y1: top, x2: todayItem.x1, y2: bottom + pad * 0.3 + todayItem.lane * laneH + bracketH, color: style.negative, width: 1 });
+    for (const r of rows) items[r].push({ x: todayItem.x1 - 1, y: top + rowH * r, w: 2, h: rowH });
+  } else if (today != null) ctx.hidden.push('today: outside the chart\'s date range');
 
   if (showKey) {
     let x = frame.x;
-    const y = bottom + shadeH + pad * 0.4;
+    const y = bottom + bandH + pad * 0.4;
     const ks = Math.min(dia, fs * 0.9);
     for (const s of msSeries) {
       const name = spec.series[s].name;
@@ -200,6 +243,7 @@ const ymd = (d: number) => { const t = new Date(d * DAY); return { y: t.getUTCFu
 const utc = (y: number, m: number, d = 1) => Date.UTC(y, m, d) / DAY;
 
 function floorTo(u: Unit, d: number): number {
+  d = Math.floor(d); // the range may have grown by part of a day for a label
   const t = ymd(d);
   if (u === 'week') return d - ((t.dow + 6) % 7); // weeks start on Monday
   if (u === 'month') return utc(t.y, t.m);
