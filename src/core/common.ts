@@ -322,7 +322,7 @@ export function cagrLabel(ctx: Ctx, a: number, b: number, years: number): string
  */
 export function valueTicks(ctx: Ctx, horizontal = ctx.o.orientation === 'horizontal', length?: number): number {
   const len = length ?? (horizontal ? ctx.frame.w : ctx.frame.h - ctx.lh * 3);
-  return Math.max(3, Math.min(5, Math.floor(len / (horizontal ? ctx.fs * 6.5 : ctx.lh * 2.5))));
+  return Math.max(3, Math.min(5, Math.floor(len / (horizontal ? ctx.fs * 5 : ctx.lh * 2.5))));
 }
 
 /** Axis tick labels: unit, magnitude and locale of the chart, decimals inferred from the ticks. */
