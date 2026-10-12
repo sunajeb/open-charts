@@ -104,6 +104,7 @@ Rules that keep this honest: `src/core` imports nothing outside itself and never
 | `OC_BASE` *ext.* | group | JSON `{role: {fill?, size?, bold?, color?}}` — last-*rendered* value of override-able props per role; ≈ 10 KB for 250 shapes, chunked like `OC_SPEC` if needed | native differ (three-way merge: current ≠ base ⇒ user override, kept and written into `OC_SPEC`); Office.js override read-back (03 §4.6) uses the same key |
 | `OC_LINK` *ext.* | group | JSON `{path, sheet, range\|name, hash}` — mirrors `data.source` | P5 Excel links; others ignore |
 | *(spec fields, not tags)* *ext.* | `OC_SPEC.options` | `labelOffsets: {role: {dx, dy}}`, `arrowLevel`, `axisMax` | written by drag handles (P4) and by the pane; plain `ChartOptions` additions in `src/core`, so CLI, editor and Office.js honour them |
+| `OC_ROLE` = `frame` *ext.* | invisible rect child | add-in charts carry an invisible frame rectangle so the group's bounds equal `OC_FRAME`; bounds ≠ `OC_FRAME` ⇒ the user resized it ⇒ re-layout (2026-10-13) | add-in |
 | *(engine output, not a tag)* *ext.* | `Scene.roles` | `string[]` parallel to shapes/nodes | the **engine assigns roles**, never a host; CLI writer, Office.js and native all emit `OC_ROLE` from it (lands with the scene graph in P1 week 3) |
 
 Reading rules shared by all hosts: `OC_V` > known → read-only with a "made with a newer open-charts" banner; `OC_ENGINE` older → migrate spec on first edit and rewrite `OC_ENGINE`; `OC_FRAME` ≠ current group bounds → user resized/moved natively, offer re-layout. The tag-size limit is measured by **one** spike (OJ-S2; native's former S6 is the same spike).
@@ -251,7 +252,7 @@ Solo variant: Track E as written; from Track S only the starred items (OJ-S2, OJ
 | One engine in TypeScript; Python = wrapper over `--stdio`; native = Jint host; no ports | 04 A.2, native §2 |
 | Zero runtime dependencies; opentype.js vendored and hashed; tooling only at the edges (`tsc`, `esbuild`) | 04 C.2, C.10 |
 | Scene-first layout, both renderers read the same scene; no native `c:chart` export | 02 §1.5 |
-| Measure without kerning; writer never sets `kern` | 02 B6, code |
+| Measure without kerning; writer and add-in set `kern="400000"` on every run so PowerPoint never kerns (it kerns when the attribute is missing — found in the live add-in test, 2026-10-13) | 02 B6, code |
 | Bundled Liberation metrics primary in the browser, canvas fallback, `.ttf` upload later | 03 §3.2 |
 | Office.js: XML manifest first (pending OJ-S1), PowerPointApi 1.2 floor, feature-detect 1.3–1.5; Path A always ships; Path B per-platform via `hostCaps` | 03 §2, §4.1 |
 | Native: C#/.NET Fx 4.8 shared COM add-in, no VSTO; Jint; thread-local `WH_GETMESSAGE` hook; ghost-preview drags; in-place diff, never delete-and-recreate on the hot path | native §1–5 |
