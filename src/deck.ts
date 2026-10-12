@@ -1,7 +1,8 @@
 import type { ChartSpec, Scene, Style } from './core/index.ts';
 import { checkScene, defaultStyle, layoutChart } from './core/index.ts';
 import type { Measurer } from './core/text.ts';
-import { SLIDE, writePptx } from './render/pptx.ts';
+import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
+import { chartTags } from './render/tags.ts';
 import { sceneToSvg } from './render/svg.ts';
 
 export interface DeckSpec {
@@ -31,8 +32,14 @@ export function buildDeck(deck: DeckSpec, m: Measurer): { pptx: Uint8Array; slid
     return { title: s.title, scene, svg: sceneToSvg([scene], SLIDE, s.title, style.font), issues };
   });
   const pptx = writePptx(
-    deck.slides.map((s, i) => ({ title: s.title, scenes: [{ scene: slides[i].scene, name: 'Chart', altText: altText(s.chart) }] })),
+    deck.slides.map((s, i) => ({ title: s.title, scenes: [chartContent(s.chart, slides[i].scene, style.font, deck.style)] })),
     style.font,
   );
   return { pptx, slides };
+}
+
+/** A laid-out chart ready for the writer: meaningful group name, alt text and tag contract v1. */
+export function chartContent(chart: ChartSpec, scene: Scene, font: string, style?: Partial<Style>, name = TYPE_NAMES[chart.type] ?? 'Chart'): SceneContent {
+  const spec = style && Object.keys(style).length ? { ...chart, style } : chart;
+  return { scene, name, altText: altText(chart), tags: chartTags(spec, scene.frame, font) };
 }
