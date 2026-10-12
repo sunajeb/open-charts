@@ -69,9 +69,14 @@ export function checkScene(scene: Scene, options: number | CheckOptions = {}): I
   const marks = items.filter((it) => /^(bar|marker):/.test(it.role) && it.s.kind === 'rect');
   const dataLines = items.filter((it): it is { s: LineShape; role: string } => it.role.startsWith('line:') && it.s.kind === 'line');
   const arrows = items.filter((it): it is { s: LineShape; role: string } => it.role.startsWith('arrow:') && it.s.kind === 'line');
+  // A line's point label may sit wholly inside a column segment (combination charts, contrasting colour).
+  const lineOwners = new Set(dataLines.map((ln) => owner(ln.role)));
+  const within = (a: Box, b: Box) => a.x >= b.x - tol && a.y >= b.y - tol && a.x + a.w <= b.x + b.w + tol && a.y + a.h <= b.y + b.h + tol;
   for (const t of texts) {
     const inner = shrink(t.s, tol);
+    const lineLabel = lineOwners.has(owner(t.role)?.split(':')[0] ?? null);
     for (const mk of marks) {
+      if (lineLabel && mk.role.startsWith('bar:') && within(t.s, bounds(mk.s))) continue;
       if (!ownedBy(t.role, mk.role) && overlaps(t.s, bounds(mk.s), tol)) {
         issues.push({ kind: 'text-mark', detail: `"${t.s.text}" × ${mk.role}` });
       }
