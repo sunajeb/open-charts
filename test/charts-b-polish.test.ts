@@ -8,7 +8,7 @@ import {
   type ChartSpec, type LineShape, type RectShape, type Scene, type TextShape,
 } from '../src/core/index.ts';
 import { createMeasurer } from '../src/fonts.ts';
-import { segmentHitsBox } from '../src/core/place.ts';
+import { overlaps, segmentHitsBox } from '../src/core/place.ts';
 import { CHART_FRAME } from '../src/deck.ts';
 
 const m = createMeasurer();
@@ -42,7 +42,13 @@ test('combo: line labels read as their point\'s, segment labels stay inside, no 
       const vertical = close(t.x + t.w / 2, px, 0.5) && (t.y + t.h <= py || t.y >= py);
       const beside = Math.min(Math.abs(t.x - px), Math.abs(t.x + t.w - px)) <= mk.w;
       assert.ok(vertical || beside, `${title}: ${t.text} reads as its point's label`);
-      assert.ok(Math.min(Math.abs(t.y + t.h - py), Math.abs(t.y - py)) <= lh * 1.5, `${title}: ${t.text} close to its point`);
+      // Close to its point; or, for a point inside its columns, straight above them (manual: line labels
+      // go above / below the point, not onto the column segments, where they read as segment values).
+      const bars = rectsOf(scene, new RegExp(`^bar:s\\d+:c${c}$`));
+      const top = Math.min(...bars.map((b) => b.y));
+      const overStack = vertical && py > top && t.y + t.h <= top && top - (t.y + t.h) <= lh * 0.8;
+      assert.ok(overStack || Math.min(Math.abs(t.y + t.h - py), Math.abs(t.y - py)) <= lh * 1.5, `${title}: ${t.text} close to its point`);
+      for (const b of rectsOf(scene, /^bar:/)) assert.ok(!overlaps(t, b, 0), `${title}: ${t.text} sits on a column`);
     }
     if (spec.options?.combo !== 'clustered') {
       for (const t of textsOf(scene, /^label:value:s[01]:/)) {
@@ -57,6 +63,32 @@ test('combo: line labels read as their point\'s, segment labels stay inside, no 
     assert.deepEqual(strict(scene), [], title);
   }
 });
+
+test('combo: a line point inside its stack is labelled above the stack; on a segment only as a last resort', () => {
+  const spec = (top: number): ChartSpec => ({
+    type: 'combo', categories: ['A', 'B', 'C'],
+    series: [{ name: 'P', values: [50, 50, 50] }, { name: 'Q', values: [50, 50, 50] },
+      { name: 'In', values: [60, 60, 60], as: 'line' }, { name: 'Over', values: [top, top, top], as: 'line' }],
+    options: { totals: true },
+  });
+  // Room above the stack: the "60" sits there, off the columns, under the total.
+  const free = layoutChart(spec(106), F, m);
+  assert.deepEqual(free.hidden, []);
+  const bar = rectsOf(free, /^bar:s1:c1$/)[0];
+  const t = textsOf(free, /^label:value:s2:c1$/)[0];
+  assert.ok(t.y + t.h <= bar.y && !rectsOf(free, /^bar:/).some((b) => overlaps(t, b, 0)), 'above the stack');
+  assert.ok(textsOf(free, /^label:total:c1$/)[0].y + lh() <= t.y, 'under the total');
+  // A second line runs just above the stack, through every spot there: the "60" falls back onto its
+  // segment, wholly inside it, in a contrasting colour.
+  const tight = layoutChart(spec(103), F, m);
+  assert.deepEqual(tight.hidden, []);
+  const seg = rectsOf(tight, /^bar:s1:c1$/)[0];
+  const u = textsOf(tight, /^label:value:s2:c1$/)[0];
+  assert.ok(u.y >= seg.y && u.y + u.h <= seg.y + seg.h && u.x >= seg.x && u.x + u.w <= seg.x + seg.w, 'inside one segment');
+  assert.equal(u.color, 'FFFFFF');
+  assert.deepEqual(strict(tight), []);
+});
+const lh = () => m.lineHeight(12);
 
 // ---- Mekko XY ----------------------------------------------------------------------------------------
 
