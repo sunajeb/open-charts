@@ -243,8 +243,9 @@ test('VBA: Apply is silent, an ungrouped chart is named as such, the engine star
   // O3: pieces of an ungrouped chart keep OC_ROLE; say so instead of "select a chart".
   assert.match(src, /This chart was ungrouped, so it can't be edited as a chart\. Undo \(" & ChrW\(&H2318\) & "Z\) the ungroup or insert it again\./);
   assert.match(body('OCPREFIX_getEnabled'), /UngroupedSelected\(\)/, 'the buttons stay enabled so the click can explain');
-  // O5: the warm server is started from Auto_Open / onLoad through the bridge's startServer handler.
-  for (const s of ['Auto_Open', 'OCPREFIX_onLoad']) assert.match(body(s), /StartEngine/);
+  // O5: the warm server is started from onLoad through the bridge's startServer handler.
+  assert.match(body('OCPREFIX_onLoad'), /StartEngine/);
+  assert.doesNotMatch(body('Auto_Open'), /StartEngine/, 'not while PowerPoint launches (breaks register add in)');
   assert.match(src, /AppleScriptTask\(SCRIPT_FILE, "startServer", ""\)/);
   const bridge = readFileSync(new URL('../addin/applescript/open-charts.applescript', import.meta.url), 'utf8');
   assert.match(bridge, /^on startServer\(ignored\)$/m);

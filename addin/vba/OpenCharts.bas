@@ -41,11 +41,12 @@ Private gDrawMs As Single
 
 Public Sub Auto_Open()
     StartEvents
-    StartEngine
 End Sub
 
-' Starts the warm engine (the add-in's local server) in the background as the add-in loads, so
-' the first chart inserted does not wait for node to start. Never blocks: the bridge only spawns it.
+' Starts the warm engine (the add-in's local server) in the background when the ribbon loads (the
+' first document window), so the first chart inserted does not wait for node to start. Never blocks:
+' the bridge only spawns it. Not from Auto_Open: an AppleScriptTask while PowerPoint is still
+' launching makes `register add in` (addin install with PowerPoint closed) fail with -43.
 Private Sub StartEngine()
     Dim ignored As String
     If gEngineStarted Then Exit Sub
