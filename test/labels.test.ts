@@ -102,6 +102,26 @@ test('placer: a boxed label never pokes out of its column: its text must fit the
   }
 });
 
+test('placer: leaders run away from their mark; a long, nearly flat leader costs more than a closer spot', () => {
+  const wide = { x: 50, y: 100, w: 140, h: 4 };
+  const cands = segmentCandidates(wide, 20, 12, { sides: ['above'], lead: 3 });
+  // Staggered along a wide segment, the leader still leaves the edge right below its label.
+  for (const c of cands) assert.ok(Math.abs(c.leader!.x1 - c.leader!.x2) < 1e-9, 'vertical leader');
+  const narrow = { x: 90, y: 100, w: 20, h: 4 };
+  const far = segmentCandidates(narrow, 20, 12, { sides: ['above'], lead: 3 });
+  const k3 = far.reduce((a, c) => (c.box.x < a.box.x ? c : a));
+  assert.ok(k3.cost > 10 + 3 * 4 + 10, 'three steps sideways from a narrow column: penalised for the flat leader');
+});
+
+test('mekko-3: the thin Asia Pacific "Other" share gets a short leader, not a long flat one', () => {
+  const scene = layoutChart(deck('mekko', 2), F, m);
+  const l = one<LineShape>(scene, 'leader:s3:c2');
+  assert.ok(l, 'labelled outside with a leader');
+  const dx = Math.abs(l.x2 - l.x1), dy = Math.abs(l.y2 - l.y1);
+  assert.ok(Math.hypot(dx, dy) < 15 && dx <= dy, `leader ${dx.toFixed(1)} across, ${dy.toFixed(1)} away`);
+  assertLeaders(scene);
+});
+
 test('placer: leaders never cross each other or another label; a blocked label evicts one blocker', () => {
   // Three stacked thin segments, only the right side allowed: labels stagger in segment order, so leaders do not cross.
   const segs = [0, 1, 2].map((i) => ({ x: 90, y: 100 + i * 2, w: 20, h: 2 }));

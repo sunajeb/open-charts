@@ -153,16 +153,29 @@ export function segmentCandidates(a: Box, w: number, h: number, o: AroundOptions
         const cy = my + k * (h + GAP);
         const x = side === 'right' ? a.x + a.w + o.lead : a.x - o.lead - w;
         const ex = side === 'right' ? a.x + a.w : a.x;
-        out.push({ box: { x, y: cy - h / 2, w, h }, cost, side, leader: { x1: ex, y1: my, x2: side === 'right' ? x - 0.5 : x + w + 0.5, y2: cy } });
+        out.push(lead({ box: { x, y: cy - h / 2, w, h }, cost, side, leader: { x1: ex, y1: my, x2: side === 'right' ? x - 0.5 : x + w + 0.5, y2: cy } }, h));
       } else {
         const cx = mx + k * (w + GAP * 2);
         const y = side === 'above' ? a.y - o.lead - h : a.y + a.h + o.lead;
         const ey = side === 'above' ? a.y : a.y + a.h;
-        out.push({ box: { x: cx - w / 2, y, w, h }, cost, side, leader: { x1: mx, y1: ey, x2: cx, y2: side === 'above' ? y + h + 0.5 : y - 0.5 } });
+        // The leader leaves the mark's edge as close below / above the label as the mark allows.
+        const ex = a.w > 2 ? Math.min(Math.max(cx, a.x + 1), a.x + a.w - 1) : mx;
+        out.push(lead({ box: { x: cx - w / 2, y, w, h }, cost, side, leader: { x1: ex, y1: ey, x2: cx, y2: side === 'above' ? y + h + 0.5 : y - 0.5 } }, h));
       }
     }
   });
   return out;
+}
+
+/**
+ * A leader should run away from its mark, not along it: the part of its run that goes sideways
+ * (across, beyond its run away from the mark) costs as much per label height as one stagger step.
+ * A long, nearly flat leader thus loses to a closer spot or a box.
+ */
+function lead(c: Candidate, h: number): Candidate {
+  const l = c.leader!, dx = Math.abs(l.x2 - l.x1), dy = Math.abs(l.y2 - l.y1);
+  const [away, across] = c.side === 'left' || c.side === 'right' ? [dx, dy] : [dy, dx];
+  return { ...c, cost: c.cost + (4 * Math.max(0, across - away)) / h };
 }
 
 /** Bounding box of any scene shape; rects and texts are their own box, so identity is kept. */
