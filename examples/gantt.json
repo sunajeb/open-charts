@@ -1,7 +1,7 @@
 {
   "slides": [
     {
-      "title": "Transformation roadmap: pilots in Q1, full roll-out by year end",
+      "title": "Transformation roadmap: pilots start in Q1, full roll-out by year end",
       "chart": {
         "type": "gantt",
         "categories": ["Diagnostic", "Design target operating model", "Pilot in two business units", "Steering committee", "Roll-out wave 1", "Roll-out wave 2", "Benefits tracking"],

@@ -72,7 +72,7 @@ async function paste(page: Page, r: number, c: number, text: string) {
 
 test('sample deck renders with title, totals, CAGR and a passing layout check', async ({ page }) => {
   const t = await texts(page);
-  expect(t).toContain('Revenue grew 2.4x in four years, led by Enterprise');
+  expect(t).toContain('Revenue grew 2.2x in four years, led by Enterprise');
   expect(t).toContain('2025E');
   expect(t.some((s) => /^\+?\d+(\.\d)?%$/.test(s.replace(/\s/g, '')) || /CAGR|%/.test(s))).toBe(true);
   expect(await rects(page, NAVY)).toBeGreaterThanOrEqual(5);
@@ -230,14 +230,14 @@ test('slides: add, switch, delete', async ({ page }) => {
   await edit(page, () => page.fill('#title', 'Second'));
   await edit(page, () => setType(page, 'line'));
   await edit(page, () => page.locator('#tabs .tab').first().click());
-  expect(await texts(page)).toContain('Revenue grew 2.4x in four years, led by Enterprise');
+  expect(await texts(page)).toContain('Revenue grew 2.2x in four years, led by Enterprise');
   await expect(page.locator('#typeBtn')).toHaveAttribute('data-type', 'stacked');
   await edit(page, () => page.locator('#tabs .tab').nth(1).click());
   expect(await texts(page)).toContain('Second');
   await expect(page.locator('#typeBtn')).toHaveAttribute('data-type', 'line');
   await edit(page, () => page.click('#delSlide'));
   await expect(page.locator('#tabs .tab')).toHaveCount(1);
-  expect(await texts(page)).toContain('Revenue grew 2.4x in four years, led by Enterprise');
+  expect(await texts(page)).toContain('Revenue grew 2.2x in four years, led by Enterprise');
   expect((await deck(page)).slides).toHaveLength(1);
 });
 
@@ -281,7 +281,7 @@ test('Import JSON reports a broken file without losing the deck', async ({ page 
   await chooser.setFiles(bad);
   await expect(page.locator('#issues li.error')).toContainText("Couldn't read bad.json");
   await page.evaluate(() => document.querySelector('#issues')!.replaceChildren()); // acknowledged
-  expect(await texts(page)).toContain('Revenue grew 2.4x in four years, led by Enterprise');
+  expect(await texts(page)).toContain('Revenue grew 2.2x in four years, led by Enterprise');
 });
 
 test('Download .pptx is a valid deck with one slide per tab', async ({ page }) => {
@@ -293,7 +293,7 @@ test('Download .pptx is a valid deck with one slide per tab', async ({ page }) =
   const files = unzip(buf);
   expect(files.has('[Content_Types].xml')).toBe(true);
   const s1 = files.get('ppt/slides/slide1.xml')!.toString('utf8');
-  expect(s1).toContain('Revenue grew 2.4x in four years, led by Enterprise');
+  expect(s1).toContain('Revenue grew 2.2x in four years, led by Enterprise');
   expect(s1).toContain('<p:grpSp>');
   expect(files.has('ppt/slides/slide2.xml')).toBe(true);
 });

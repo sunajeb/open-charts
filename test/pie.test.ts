@@ -38,19 +38,17 @@ test('pie: slices start at 12 o\'clock, run clockwise and their sweeps are propo
   assert.ok(Math.abs(angle - 270) < 1e-9, 'full circle');
 });
 
-test('pie: shares add up to exactly 100 (largest remainder); names outside, shares inside, even for a sliver', () => {
+test('pie: shares add up to exactly 100 (largest remainder); names outside, shares inside, a sliver\'s with its name', () => {
   const scene = layoutChart(spec, CHART_FRAME, m);
-  const shares = [0, 1, 2, 3, 4].map((c) => parseFloat((at(scene, `label:value:s0:c${c}`) as TextShape).text));
+  const shares = [0, 1, 2, 3].map((c) => parseFloat((at(scene, `label:value:s0:c${c}`) as TextShape).text));
+  // The 2% sliver is narrower than any box holding "2%": the share joins its name outside, on a leader.
+  assert.ok(!scene.roles!.includes('label:value:s0:c4'));
+  assert.equal((at(scene, 'label:category:c4') as TextShape).text, 'Islands 2%');
+  assert.ok(scene.roles!.includes('leader:c4'));
+  shares.push(2);
   assert.equal(shares.reduce((a, b) => a + b, 0), 100);
   assert.deepEqual(shares, [28, 28, 28, 14, 2]);
-  // One label style throughout (manual: a label larger than its slice sits on a rectangle in the
-  // slice colour): every outside label is the bare name, every share is on the pie.
-  assert.deepEqual(textsOf(scene, 'label:category').map((t) => t.text).sort(), [...spec.categories].sort());
-  const sliver = at(scene, 'label:value:s0:c4') as TextShape;
-  assert.ok(sliver.fill, 'the 2% sits on a filled rectangle');
-  assert.equal((at(scene, 'wedge:s0:c4') as PathShape).fill, sliver.fill);
-  const disc = arcs(at(scene, 'wedge:s0:c0') as PathShape)[0];
-  for (const [x, y] of [[sliver.x, sliver.y], [sliver.x + sliver.w, sliver.y + sliver.h]]) assert.ok(Math.hypot(x - disc.cx, y - disc.cy) < disc.r);
+  assert.deepEqual(textsOf(scene, 'label:category').map((t) => t.text).sort(), [...spec.categories.slice(0, 4), 'Islands 2%'].sort());
   // Names on the right of the pie are left-aligned, those on the left right-aligned.
   assert.equal((at(scene, 'label:category:c0') as TextShape).align, 'left');
   assert.equal((at(scene, 'label:category:c2') as TextShape).align, 'right');
@@ -99,6 +97,32 @@ test('pie: small slices\' shares stack in a column outside, spaced apart, with c
   out.forEach((t) => assert.equal(t.align, 'right'));
   assert.ok(out.every((t) => Math.abs(t.x + t.w - (out[0].x + out[0].w)) < 0.01), 'one column');
   for (let k = 1; k < out.length; k++) assert.ok(out[k - 1].y >= out[k].y + out[k].h - 0.01, 'spread apart, smaller slice higher');
+});
+
+test('pie: a boxed share is never wider than its slice; too wide, it goes outside with the name', () => {
+  // Example deck: "Other" is 3% of revenue, a 9.5° slice — the "3%" box would be wider than it.
+  const deck = JSON.parse(readFileSync(new URL('../examples/pie.json', import.meta.url), 'utf8'));
+  const scene = layoutChart(deck.slides[0].chart, CHART_FRAME, m);
+  assert.ok(!scene.roles!.includes('label:value:s0:c4'));
+  assert.equal((at(scene, 'label:category:c4') as TextShape).text, 'Other 3%');
+  assert.ok(scene.roles!.includes('leader:c4'));
+  assertLeaders(scene);
+  // Every slide and sample, at several sizes: a filled share is no wider (across the slice) than the
+  // slice's chord at the rim.
+  const specs: ChartSpec[] = [...deck.slides.map((x: { chart: ChartSpec }) => x.chart), samples.pie!, samples.doughnut!, spec];
+  for (const sp of specs) {
+    for (const [w, h] of [[864, 408], [520, 300], [360, 200], [1100, 560]]) {
+      const sc = layoutChart(sp, { x: 0, y: 0, w, h }, m);
+      sc.shapes.forEach((t, i) => {
+        const mm = sc.roles![i].match(/^label:value:s0:c(\d+)$/);
+        if (t.kind !== 'text' || !t.fill || !mm) return;
+        const [a] = arcs(at(sc, `wedge:s0:c${mm[1]}`) as PathShape);
+        const mid = ((a.start + a.sweep / 2) * Math.PI) / 180;
+        const across = t.w * Math.abs(Math.sin(mid)) + t.h * Math.abs(Math.cos(mid));
+        assert.ok(a.sweep >= 180 || across <= 2 * a.r * Math.sin((a.sweep * Math.PI) / 360) + 0.01, `${sp.type} ${w}x${h}: "${t.text}" wider than its slice`);
+      });
+    }
+  }
 });
 
 test('pie: label content shows values, or values and shares', () => {

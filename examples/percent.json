@@ -14,7 +14,7 @@
       }
     },
     {
-      "title": "Survey: a third of buyers are still considering; one in seven gave no answer",
+      "title": "Survey: a third of buyers are still considering; one in six gave no answer",
       "chart": {
         "type": "percent",
         "categories": ["CIO", "CFO", "COO", "Head of IT", "Procurement"],
