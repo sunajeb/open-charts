@@ -44,3 +44,34 @@ test('line breaking: spaces, hyphens, slashes and CJK', () => {
   assert.deepEqual(wrap('Mid-market', m.width('Mid-', 12) + 1, 12, m), ['Mid-', 'market']);
   assert.equal(fits(wrap('Supercalifragilistic', 30, 12, m), 30, 12, m), false);
 });
+
+// ---- Metrics measurer and font cache (perf) ---------------------------------------------------
+
+test('metrics measurer matches opentype.js to the bit for Latin text, and cached metrics match a fresh parse', async () => {
+  const { parse } = await import('../vendor/opentype.module.js');
+  const { cachedMetrics } = await import('../src/fonts.ts');
+  const { fontMetrics, measurerFromMetrics } = await import('../src/core/text.ts');
+  const path = [
+    '/System/Library/Fonts/Supplemental/Arial.ttf', '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
+    '/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf', 'C:\\Windows\\Fonts\\arial.ttf',
+  ].find(existsSync);
+  if (!path) return;
+  const buf = readFileSync(path);
+  const bytes = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  const font = parse(bytes);
+  const fresh = fontMetrics(bytes);
+  assert.deepEqual(cachedMetrics(path), fresh);
+  const mm = measurerFromMetrics(fresh);
+  const letters = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,%$€()-–'];
+  const strings = letters.flatMap((a) => letters.map((b) => a + b));
+  strings.push('office ffi', 'Raw materials', 'Asia Pacific (excluding Japan)', 'Ünïcödé façade', '中国市场', '−12.5%', '');
+  for (const t of strings) assert.equal(mm.width(t, 12), font.getAdvanceWidth(t, 12, { kerning: false }), JSON.stringify(t));
+  assert.equal(mm.width('ab\nabcd', 10), mm.width('abcd', 10));
+});
+
+test('measurer memoises widths and shapes Arabic and Hebrew through opentype.js', () => {
+  const t = 'Revenue by region';
+  assert.equal(m.width(t, 12), m.width(t, 12));
+  assert.ok(m.width('مرحبا بالعالم', 12) > 0);
+  assert.ok(m.width('שלום', 12) > 0);
+});

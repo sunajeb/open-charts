@@ -18,8 +18,8 @@ import { layoutTable } from './charts/table.ts';
 import { layoutGantt } from './charts/gantt.ts';
 
 export * from './types.ts';
-export { measurerFromFonts, lineHeightFactor, wrap } from './text.ts';
-export type { Measurer } from './text.ts';
+export { measurerFromFonts, measurerFromMetrics, fontMetrics, lineHeightFactor, wrap } from './text.ts';
+export type { Measurer, FontMetrics } from './text.ts';
 export { checkScene } from './quality.ts';
 export { minimumSize, TooSmall } from './minsize.ts';
 export type { Size } from './minsize.ts';
