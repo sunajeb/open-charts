@@ -149,7 +149,7 @@ options. A deck is a list of slides:
 ```json
 {
   "slides": [{
-    "title": "Revenue grew 2.4x in four years",
+    "title": "Revenue doubled in three years",
     "chart": {
       "type": "stacked",
       "categories": ["2021", "2022", "2023", "2024"],

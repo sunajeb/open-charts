@@ -31,7 +31,7 @@ A deck is what the command line reads: a list of slides, each with an optional t
 {
   "slides": [
     {
-      "title": "Revenue grew 2.4x in four years",
+      "title": "Revenue doubled in three years",
       "chart": {
         "type": "stacked",
         "categories": ["2021", "2022", "2023", "2024"],
