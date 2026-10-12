@@ -32,6 +32,14 @@ node --experimental-strip-types --no-warnings src/cli.ts serve
 node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o out/deck --svg
 ```
 
+**PowerPoint add-in** (Mac): an **open-charts** ribbon tab with every chart type, Edit data and Update chart:
+
+```sh
+node --experimental-strip-types --no-warnings src/cli.ts addin install
+```
+
+This builds `open-charts.ppam` (a ribbon plus one small VBA module), copies the engine to `~/Library/Application Support/open-charts`, installs the bridge script PowerPoint's VBA calls (`AppleScriptTask`) and registers the add-in. Charts are drawn as native, grouped PowerPoint shapes with the same `OC_*` tags the command line writes. `addin uninstall` removes it.
+
 ## Data format
 
 ```json
@@ -67,6 +75,7 @@ The layout engine is pure TypeScript with no Office code. It measures text with 
 npm test          # unit tests, zero dependencies
 npm run e2e       # editor end-to-end in Chromium (npm install; npx playwright install chromium)
 npm run goldens   # examples → .pptx → LibreOffice PDF → PNG, diffed against test/goldens/<platform>/
+npm run e2e:powerpoint  # macOS + PowerPoint: insert/update every chart type through the add-in
 ```
 
 `npm run goldens` needs `soffice` (LibreOffice) and `pdftoppm` (poppler). Baselines are per platform because fonts render differently; `-- --update` rewrites them after you have reviewed `out/goldens/actual/`, and failures write red-on-grey diffs to `out/goldens/diff/`. CI runs unit tests and E2E on every PR, goldens nightly.

@@ -168,7 +168,7 @@ End Sub
 ' Draws the response on the slide, groups it and writes the tags. Returns the group, or Nothing.
 Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
     Dim lines() As String, f() As String, i As Long, n As Long
-    Dim names() As String, finalNames() As String, roles() As String
+    Dim names() As Variant, finalNames() As String, roles() As String
     Dim tagKeys() As String, tagVals() As String, nTags As Long
     Dim groupName As String, alt As String, stamp As String, shp As Object
     lines = Split(response, vbLf)
