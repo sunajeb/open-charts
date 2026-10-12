@@ -2,15 +2,28 @@
 // uncompressed; parts copied from another package (see src/ooxml/unzip.ts) keep their original
 // compressed bytes, so anything we did not touch comes out byte-identical.
 
-const CRC_TABLE = new Uint32Array(256).map((_, n) => {
-  let c = n;
-  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-  return c >>> 0;
-});
+// CRC-32, slicing by 4: four 256-entry tables, four bytes per step (the bytewise loop was the
+// single largest cost of writing a deck).
+const CRC = (() => {
+  const t = new Uint32Array(1024);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  for (let n = 0; n < 256; n++) for (let k = 1; k < 4; k++) t[k * 256 + n] = (t[(k - 1) * 256 + n] >>> 8) ^ t[t[(k - 1) * 256 + n] & 0xff];
+  return t;
+})();
 
 export function crc32(buf: Uint8Array): number {
   let c = 0xffffffff;
-  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  let i = 0;
+  const n4 = buf.length & ~3;
+  for (; i < n4; i += 4) {
+    c ^= buf[i] | (buf[i + 1] << 8) | (buf[i + 2] << 16) | (buf[i + 3] << 24);
+    c = CRC[768 + (c & 0xff)] ^ CRC[512 + ((c >>> 8) & 0xff)] ^ CRC[256 + ((c >>> 16) & 0xff)] ^ CRC[c >>> 24];
+  }
+  for (; i < buf.length; i++) c = CRC[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
   return (c ^ 0xffffffff) >>> 0;
 }
 
