@@ -95,7 +95,11 @@ the folder-based install are in [Install on Windows](#install-on-windows).
 - **Mac / Jamf:** the `.pkg` installs per user, so run it as the user (for example from Self
   Service).
 
-Both are described in [docs/release.md](docs/release.md#it-deployment).
+- **Office.js add-in:** host the built files on any https server and deploy the manifest from the
+  Microsoft 365 admin center ([docs/OFFICEJS-HOSTING.md](docs/OFFICEJS-HOSTING.md)).
+
+What is installed where, network use, silent commands, detection rules, macro policy and macOS
+permissions: [docs/IT-DEPLOYMENT.md](docs/IT-DEPLOYMENT.md).
 
 ### From source (developers, and the web editor and command line)
 
@@ -243,7 +247,9 @@ Then **Home › open-charts** opens the pane: **Insert on slide** draws the char
 select an open-charts chart and the pane loads its data, **Apply to slide** replaces it in place,
 **Revert** puts back the previous version, and a banner offers **Re-layout to new size** after a
 resize. Sideloading on Windows and the web, and how charts are drawn on PowerPoints with fewer API
-features, are in the [user guide](docs/USER-GUIDE.md#officejs-add-in-windows-web-mac).
+features, are in the [user guide](docs/USER-GUIDE.md#officejs-add-in-windows-web-mac). To host it for
+an organization: `npm run build:officejs -- --base https://your-host/path/`, then
+[docs/OFFICEJS-HOSTING.md](docs/OFFICEJS-HOSTING.md).
 
 ## The editor
 

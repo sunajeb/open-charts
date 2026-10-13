@@ -167,6 +167,8 @@ needs the same certificate and comes with task C3.
 
 ## IT deployment
 
+The full guide for IT admins is [IT-DEPLOYMENT.md](IT-DEPLOYMENT.md). In short:
+
 ### Windows (Intune)
 
 - **Per machine:** upload `open-charts-<version>-machine.msi` as a *line-of-business app*, or as a

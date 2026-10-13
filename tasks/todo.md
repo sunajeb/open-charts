@@ -37,12 +37,14 @@ Rules for this plan
       (npm run build:msi, WiX v5; CI builds both MSIs and installs/uninstalls them silently: green 2026-10-13)
 - [ ] C3 Signing pipeline in CI: Apple Developer ID + notarization (Mac), Azure Trusted Signing (Windows exe,
       installer, VBA project) — needs owner accounts (Q3)
-- [ ] C4 Office.js production: static https hosting, production manifest, M365 admin-center deployment guide;
-      AppSource submission later
+- [x] C4 Office.js production: static https hosting, production manifest, M365 admin-center deployment guide;
+      AppSource submission later (`build:officejs -- --base https://… --out dir`, docs/OFFICEJS-HOSTING.md;
+      a real host and admin-center upload need the owner's domain/tenant)
 - [ ] C5 Updates: version check + update download (signed packages only)
       (done: client check behind `addin update on`; `addin update install` downloads, verifies SHA-256 +
       signature, opens; IT policy.json forces it off. todo: ribbon button; signing identity needs C3)
-- [ ] C6 IT deployment guide: Intune / Jamf / M365 admin center, coexistence with think-cell, macro trust settings
+- [x] C6 IT deployment guide: Intune / Jamf / M365 admin center, coexistence with think-cell, macro trust settings
+      (docs/IT-DEPLOYMENT.md; Office policy names and Intune/Jamf details to confirm in the owner's pilot)
 
 ## D. Verification (live runs in approved windows only)
 - [x] D1 Split tools/e2e-powerpoint.ts into short scenarios (insert-all, edit/apply, resize, chart tools,

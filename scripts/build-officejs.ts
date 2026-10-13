@@ -4,15 +4,19 @@
 //   engine.js      the engine + writer as an ES module for other browser hosts and the parity test
 //   commands.html  the ribbon's function file (the one button only opens the pane)
 //   manifest.xml   PowerPoint XML manifest pointing at --base (default https://localhost:4175)
+//   support.html   the manifest's support page
 //   fonts/         Liberation Sans Regular + Bold (SIL OFL, licence alongside) for text measurement
 //   assets/        ribbon and add-in icons
+// For production hosting (docs/OFFICEJS-HOSTING.md):
+//   npm run build:officejs -- --base https://example.org/open-charts/ [--out dir]
+// then upload the whole folder to that URL and deploy manifest.xml.
 // esbuild bundles for the browser platform, so any Node built-in reaching the engine fails the build.
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { editorHtml } from '../src/server.ts';
-import { DEFAULT_BASE, manifestXml } from '../src/officejs/manifest.ts';
+import { DEFAULT_BASE, manifestXml, normalizeBase } from '../src/officejs/manifest.ts';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 export const OUT = join(ROOT, 'dist', 'officejs');
@@ -20,7 +24,9 @@ const OFFICE_JS = 'https://appsforoffice.microsoft.com/lib/1/hosted/office.js';
 
 export async function buildOfficeJs(opts: { base?: string; out?: string; quiet?: boolean } = {}) {
   const out = opts.out ?? OUT;
-  const base = opts.base ?? DEFAULT_BASE;
+  const base = normalizeBase(opts.base ?? DEFAULT_BASE); // a bad --base fails before anything is deleted
+  // The folder is replaced: refuse one that holds something other than an earlier build.
+  if (existsSync(out) && readdirSync(out).length && !existsSync(join(out, 'manifest.xml'))) throw new Error(`${out} is not empty and not an add-in build: pick an empty or new folder`);
   rmSync(out, { recursive: true, force: true });
   mkdirSync(join(out, 'fonts'), { recursive: true });
   mkdirSync(join(out, 'assets'), { recursive: true });
@@ -40,11 +46,22 @@ export async function buildOfficeJs(opts: { base?: string; out?: string; quiet?:
   writeFileSync(join(out, 'manifest.xml'), manifestXml(base));
   for (const f of ['LiberationSans-Regular.ttf', 'LiberationSans-Bold.ttf', 'LiberationSans.LICENSE']) copyFileSync(join(ROOT, 'vendor/fonts', f), join(out, 'fonts', f));
   for (const n of [16, 32, 64, 80, 128]) copyFileSync(join(ROOT, `src/officejs/assets/icon-${n}.png`), join(out, 'assets', `icon-${n}.png`));
-  if (!opts.quiet) console.log(`open-charts Office.js add-in built in ${out} (manifest for ${base})`);
+  if (!opts.quiet) {
+    console.log(`open-charts Office.js add-in built in ${out} (manifest for ${base})`);
+    if (base !== normalizeBase(DEFAULT_BASE)) console.log(`Upload everything in ${out} to ${base}, then deploy ${join(out, 'manifest.xml')} (docs/OFFICEJS-HOSTING.md).`);
+  }
   return out;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const i = process.argv.indexOf('--base');
-  await buildOfficeJs({ base: i > 0 ? process.argv[i + 1] : undefined });
+  const arg = (k: string) => {
+    const i = process.argv.indexOf(k);
+    if (i < 0) return undefined;
+    const v = process.argv[i + 1];
+    if (!v || v.startsWith('--')) { console.error(`${k} needs a value`); process.exit(1); }
+    return v;
+  };
+  try {
+    await buildOfficeJs({ base: arg('--base'), out: arg('--out') && resolve(arg('--out')!) });
+  } catch (e) { console.error((e as Error).message); process.exit(1); }
 }

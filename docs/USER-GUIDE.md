@@ -202,7 +202,7 @@ Access). On Windows: `certutil -user -addstore Root localhost.crt`.
 | PowerPoint for Mac | `npm run officejs:sideload` copies it to `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/`. If macOS asks whether Terminal may access data from other apps, click **Allow** (or copy the file there in Finder). Restart PowerPoint. |
 | PowerPoint for Windows | Put the manifest in a shared folder, add the folder's `\\machine\share` path under *File › Options › Trust Center › Trust Center Settings › Trusted Add-in Catalogs* (tick *Show in Menu*), restart PowerPoint, then *Insert › My Add-ins › Shared Folder*. |
 | PowerPoint on the web | *Insert › Add-ins › My Add-ins › Upload My Add-in*, pick the manifest. The browser must trust the certificate. |
-| A whole organisation | Microsoft 365 admin centre › *Integrated apps* › upload the manifest, after `npm run build:officejs -- --base https://your-host/path` and hosting `dist/officejs/` there (any static https host). |
+| A whole organisation | Microsoft 365 admin centre › *Integrated apps* › upload the manifest, after `npm run build:officejs -- --base https://your-host/path/` and hosting `dist/officejs/` there (any static https host; [OFFICEJS-HOSTING.md](OFFICEJS-HOSTING.md)). |
 
 Then **Home › open-charts** opens the pane.
 

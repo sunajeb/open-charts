@@ -3,7 +3,7 @@
 // The task pane itself runs against a mocked PowerPoint in test/e2e/officejs.spec.ts.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { inflateRawSync } from 'node:zlib';
@@ -13,7 +13,7 @@ import type { ChartSpec, Scene } from '../src/core/types.ts';
 import { buildChart, chartDeck, CHART_FRAME, resolveFrame, toBase64, fromBase64 } from '../src/officejs/engine.ts';
 import { hostCaps, NO_CAPS, planScene, type Op } from '../src/officejs/plan.ts';
 import { patchSlide } from '../src/officejs/slide-patch.ts';
-import { manifestXml, ADDIN_ID } from '../src/officejs/manifest.ts';
+import { manifestXml, normalizeBase, ADDIN_ID } from '../src/officejs/manifest.ts';
 import { writePptx } from '../src/render/pptx.ts';
 import { chartContent } from '../src/deck.ts';
 import { unzip } from '../src/ooxml/unzip.ts';
@@ -221,6 +221,24 @@ test('manifest: PowerPoint task pane, one ribbon button, PowerPointApi 1.4 floor
   assert.deepEqual(order, ['Id', 'Version', 'ProviderName', 'DefaultLocale', 'DisplayName', 'Description', 'IconUrl', 'HighResolutionIconUrl', 'SupportUrl', 'AppDomains', 'Hosts', 'Requirements', 'DefaultSettings', 'Permissions', 'VersionOverrides']);
 });
 
+test('manifest for a production host: every URL under the base path, the origin as app domain', () => {
+  for (const base of ['https://example.org/open-charts/', 'https://example.org/open-charts']) {
+    const xml = manifestXml(base);
+    const app = parseXml(xml).children.find((c) => c.name === 'OfficeApp')!;
+    assert.equal(path(app, 'DefaultSettings', 'SourceLocation')!.attrs.DefaultValue, 'https://example.org/open-charts/taskpane.html?host=office');
+    assert.equal(path(app, 'SupportUrl')!.attrs.DefaultValue, 'https://example.org/open-charts/support.html');
+    assert.equal(path(app, 'AppDomains', 'AppDomain')!.text, 'https://example.org');
+    const urls = [...xml.matchAll(/DefaultValue="(http[^"]+)"/g)].map((x) => x[1]);
+    assert.ok(urls.length >= 8);
+    for (const u of urls) assert.ok(u.startsWith('https://example.org/open-charts/') && !u.includes('//', 8), u);
+    assert.equal(path(app, 'Id')!.text, ADDIN_ID, 'the same add-in id as the sideloaded one');
+  }
+  assert.equal(normalizeBase('https://Example.org:8443'), 'https://example.org:8443/');
+  for (const bad of ['http://example.org/', 'example.org/open-charts', 'https://example.org/?v=1', 'https://example.org/#x', 'https://u:p@example.org/']) {
+    assert.throws(() => manifestXml(bad), /--base/, bad);
+  }
+});
+
 test('element overrides: dotted lines, start arrowheads, turned text; patterns and theme fonts need Path A', () => {
   const [dotted, head0, head1] = opsOf(scene([{ kind: 'line', x1: 0, y1: 10, x2: 40, y2: 10, color: '222222', width: 1, dash: 'dot', arrowEnd: true, arrowStart: true }]));
   assert.deepEqual((dotted as { line: object }).line, { color: '#222222', weight: 1, dash: 'SystemDot' });
@@ -257,7 +275,20 @@ test('build:officejs bundles the engine for the browser (no Node built-ins) and 
     const office = html.indexOf('appsforoffice.microsoft.com/lib/1/hosted/office.js'), pane = html.indexOf('src="taskpane.js"'), boot = html.indexOf('window.OC_SPEC =');
     assert.ok(office > 0 && office < pane && pane < boot, 'office.js, then taskpane.js, then the editor');
     assert.match(readFileSync(join(out, 'fonts/LiberationSans.LICENSE'), 'utf8'), /SIL OPEN FONT LICENSE Version 1\.1/);
+    // A production build into the same folder: the manifest points at the host.
+    await buildOfficeJs({ out, quiet: true, base: 'https://example.org/open-charts' });
+    assert.match(readFileSync(join(out, 'manifest.xml'), 'utf8'), /<SourceLocation DefaultValue="https:\/\/example\.org\/open-charts\/taskpane\.html\?host=office"\/>/);
   } finally {
     rmSync(out, { recursive: true, force: true });
+  }
+  // A folder with other files in it is never emptied; a bad base fails before anything is touched.
+  const other = mkdtempSync(join(tmpdir(), 'oc-officejs-'));
+  try {
+    writeFileSync(join(other, 'keep.txt'), 'x');
+    await assert.rejects(buildOfficeJs({ out: other, quiet: true }), /not an add-in build/);
+    await assert.rejects(buildOfficeJs({ out: other, quiet: true, base: 'http://example.org/' }), /https/);
+    assert.ok(existsSync(join(other, 'keep.txt')));
+  } finally {
+    rmSync(other, { recursive: true, force: true });
   }
 });

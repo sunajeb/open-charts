@@ -21,6 +21,15 @@
   deck holding one chart of each type. Shown once (`"welcomed"` in settings.json); **Help ›
   Welcome** shows it again.
 
+### IT deployment and Office.js hosting
+
+- `docs/IT-DEPLOYMENT.md`: what each installer puts where, network use, silent install and removal,
+  Intune and SCCM detection rules, Office macro policy, Mac deployment as the user, the Automation
+  prompts and a PPPC example.
+- `npm run build:officejs -- --base https://host/path/ [--out dir]` builds the Office.js add-in for a
+  static https host. The base must be https; the manifest's app domain is its origin.
+  `docs/OFFICEJS-HOSTING.md` covers hosting and Microsoft 365 centralized deployment.
+
 ### Live tests
 
 - `npm run live -- <scenario...>` (`tools/live/`) replaces the 10-minute `e2e:powerpoint` script and the
