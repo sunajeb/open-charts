@@ -14,7 +14,7 @@
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkScene, defaultStyle, layoutChart, migrate, type ChartSpec } from '../src/core/index.ts';
+import { appliesTo, checkScene, defaultStyle, layoutChart, migrate, type ChartSpec } from '../src/core/index.ts';
 import { createMeasurer } from '../src/fonts.ts';
 import { CHART_FRAME, type DeckSpec } from '../src/deck.ts';
 import { allowedHidden } from '../test/bench/harness.ts';
@@ -32,10 +32,12 @@ function decks(dir: string, bench: boolean): Slide[] {
     const deck = JSON.parse(readFileSync(join(root, dir, f), 'utf8')) as DeckSpec;
     const style = { ...defaultStyle, ...deck.style };
     const name = basename(f, '.json');
-    return deck.slides.map((s, i) => ({
-      source: `${dir}/${f}#${i + 1}`, name: deck.slides.length > 1 ? `${name}-${i + 1}` : name,
-      spec: migrate(s.chart), style, bench, allow: bench ? allowedHidden(name) : [],
-    }));
+    // A slide with several charts (`charts`) counts each chart (named <slide>.<k>).
+    return deck.slides.flatMap((s, i) => (s.charts?.map((c) => c.chart) ?? [s.chart!]).map((chart, k, all) => ({
+      source: `${dir}/${f}#${i + 1}${all.length > 1 ? `.${k + 1}` : ''}`,
+      name: `${deck.slides.length > 1 ? `${name}-${i + 1}` : name}${all.length > 1 ? `.${k + 1}` : ''}`,
+      spec: migrate(chart), style, bench, allow: bench ? allowedHidden(name) : [],
+    })));
   });
 }
 
@@ -55,9 +57,12 @@ const rows = slides.map((sl) => {
   const resized = sl.bench ? RESIZED.flatMap((f) => checkScene(layoutChart(sl.spec, f, m, sl.style), { measurer: m }).map((i) => `${f.w}×${f.h} ${i.kind}: ${i.detail}`)) : [];
   const strict = checkScene(scene, { measurer: m, strict: true, allowHidden: sl.allow }).filter((i) => i.kind === 'hidden');
   const count = (k: string) => issues.filter((i) => i.kind === k).length;
+  // The checks read labels in the chart's locale: the style's number defaults count where the type reads them.
+  const numbers = Object.fromEntries(Object.entries(sl.style.numbers ?? {}).filter(([k, v]) => v !== undefined && appliesTo(k, sl.spec.type)));
+  const spec = { ...sl.spec, options: { ...numbers, ...sl.spec.options } };
   const checks: Record<string, Check[]> = {
-    hundred: hundredChecks(sl.spec, scene), stack: stackChecks(sl.spec, scene), cagr: cagrChecks(sl.spec, scene),
-    waterfall: waterfallChecks(sl.spec, scene), mekko: mekkoChecks(sl.spec, scene), type: typeChecks(scene),
+    hundred: hundredChecks(spec, scene), stack: stackChecks(spec, scene), cagr: cagrChecks(spec, scene),
+    waterfall: waterfallChecks(spec, scene), mekko: mekkoChecks(spec, scene), type: typeChecks(scene),
   };
   return {
     slide: sl.name, source: sl.source, type: sl.spec.type, bench: sl.bench,
