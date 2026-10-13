@@ -6,7 +6,14 @@
 // When the editor applies a session (docs/ux-editor.md), it tells PowerPoint to re-lay out the
 // chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro via AppleScript
 // and records the outcome on the session ("drawn" or "error" with a message) for the editor to show.
-import { execFile, spawn } from 'node:child_process';
+//
+// The server belongs to the PowerPoint that started it (the bridge spawns it): macOS attributes the
+// server, and so every osascript it runs, to that PowerPoint process. Once that PowerPoint has quit,
+// an Apple event from the server to a new PowerPoint is held by PowerPoint's own permission check and
+// freezes it (no reply, ApplyEdit never runs). So a server that outlived its PowerPoint never sends
+// one: it answers the new PowerPoint's ping and engine calls with 503 and exits, and the bridge
+// starts a fresh server from the new PowerPoint.
+import { execFile, execFileSync, spawn } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
@@ -99,6 +106,26 @@ export function editorPage(id: string, chart: unknown): string | undefined {
   return at < 0 ? html + boot : html.slice(0, at) + boot + html.slice(at);
 }
 
+/** PowerPoint's process id while it is running (pgrep: no Apple event, no permission prompt). */
+export function powerPointPid(): number | undefined {
+  try {
+    return Number(execFileSync('pgrep', ['-x', 'Microsoft PowerPoint'], { encoding: 'utf8' }).trim().split('\n')[0]) || undefined;
+  } catch { return undefined; }
+}
+
+const alive = (pid: number) => {
+  try { process.kill(pid, 0); return true; } catch (err) { return (err as NodeJS.ErrnoException).code === 'EPERM'; }
+};
+
+/**
+ * True when the PowerPoint that started the server (`owner`) has quit and another PowerPoint is
+ * running: the server must not send that one Apple events (see the top of this file).
+ */
+export const outlivedPowerPoint = (owner: number | undefined, running = powerPointPid): boolean =>
+  owner !== undefined && !alive(owner) && running() !== undefined;
+
+export const RESTARTED_MESSAGE = 'PowerPoint was restarted after this editor window opened. Close this window, select the chart and click Edit data again.';
+
 /** How long an Apply may take in PowerPoint before the editor is told it did not get through. */
 export const APPLY_TIMEOUT_MS = 20_000;
 
@@ -135,7 +162,7 @@ const osascriptRun: Run = (script, timeoutMs) =>
  * shapes are drawn), that becomes "drawn". If the macro failed, timed out or found no chart, the
  * session becomes "error" with what to do. A newer Apply or a Cancel meanwhile is left alone.
  */
-export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run = osascriptRun): Promise<void> {
+export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run = osascriptRun, outlived = () => false): Promise<void> {
   const ours = () => {
     const now = getSession(s.id);
     return now && ((now.state === 'applied' && now.rev === s.rev) || (now.state === 'open' && now.rev === s.rev + 1)) ? now : undefined;
@@ -146,6 +173,10 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   if (!prefix) {
     log(`APPLY ${s.id} skipped: add-in not installed`, home);
     return fail(`The open-charts add-in is not installed. In Terminal, run: ${reinstallCommand(home)}`);
+  }
+  if (outlived()) {
+    log(`APPLY ${s.id} skipped: this server was started by a PowerPoint that has quit`, home);
+    return fail(RESTARTED_MESSAGE);
   }
   const t = Date.now();
   const err = await run(applyScript(prefix, s.id), APPLY_TIMEOUT_MS);
@@ -160,9 +191,19 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   else fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
 }
 
-export function addinRoutes(m: () => Measurer, sessions: Sessions) {
+/**
+ * The add-in's own routes. `outlived` (see outlivedPowerPoint) retires the server: the new
+ * PowerPoint's ping and engine calls get 503, so the bridge starts a fresh server, and `retire` stops
+ * this one.
+ */
+export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = () => false, retire = () => process.exit(0)) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = req.url ?? '';
+    if ((url === '/api/addin/ping' || url === '/api/addin/run') && outlived()) {
+      res.writeHead(503, { connection: 'close' }).end('open-charts: restarting for the new PowerPoint');
+      setImmediate(retire);
+      return true;
+    }
     if (req.method === 'GET' && url === '/api/addin/ping') {
       res.writeHead(200).end('open-charts');
       return true;
@@ -199,10 +240,14 @@ export function serveAddin(port = ADDIN_PORT) {
   let timer: NodeJS.Timeout | undefined;
   const idle = () => { clearTimeout(timer); timer = setTimeout(() => process.exit(0), 60 * 60 * 1000); };
   idle();
-  const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`));
+  const owner = powerPointPid();
+  const outlived = () => outlivedPowerPoint(owner);
+  log(`SERVER started (pid ${process.pid}, PowerPoint ${owner ?? 'not running'})`);
+  const retire = () => { log(`SERVER retired: PowerPoint ${owner} has quit, a new one is running`); process.exit(0); };
+  const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`), outlived, retire);
   return serve(port, {}, {
     routes: (req, res) => { idle(); return routes(req, res); },
-    onSession: (s) => { if (s.state === 'applied') void applyInPowerPoint(s); },
+    onSession: (s) => { if (s.state === 'applied') void applyInPowerPoint(s, undefined, undefined, outlived); },
     confirmsApply: true,
   });
 }

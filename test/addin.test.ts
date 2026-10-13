@@ -9,7 +9,7 @@ import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { DEFAULT_FRAME, handleRequest, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { applyErrorMessage, applyInPowerPoint, applyScript, editorPage } from '../src/addin/server.ts';
+import { addinRoutes, applyErrorMessage, applyInPowerPoint, applyScript, editorPage, outlivedPowerPoint, RESTARTED_MESSAGE } from '../src/addin/server.ts';
 import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
@@ -348,4 +348,39 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('a server that outlived the PowerPoint that started it never sends Apple events and hands over', async () => {
+  // A process id that is gone: a child that has exited.
+  const gone = Number(execFileSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).trim());
+  assert.equal(outlivedPowerPoint(undefined, () => 1), false, 'started without PowerPoint: nothing to outlive');
+  assert.equal(outlivedPowerPoint(process.pid, () => 1), false, 'its PowerPoint is still running');
+  assert.equal(outlivedPowerPoint(gone, () => undefined), false, 'PowerPoint closed: Apply says it is not running');
+  assert.equal(outlivedPowerPoint(gone, () => 1), true, 'another PowerPoint is running');
+
+  // Apply: no osascript (it would freeze the new PowerPoint), an error that says what to do.
+  const home = mkdtempSync(join(tmpdir(), 'oc-outlived-'));
+  try {
+    writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
+    const s = setSession('ap2', { chart: { type: 'stacked', categories: ['a'], series: [{ name: 'S', values: [1] }] }, state: 'applied' });
+    await applyInPowerPoint(s, home, async () => assert.fail('must not send an Apple event'), () => true);
+    assert.deepEqual([getSession('ap2')!.state, getSession('ap2')!.message], ['error', RESTARTED_MESSAGE]);
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+
+  // The new PowerPoint's ping (startServer) and engine calls get 503, so the bridge starts a fresh
+  // server; then this one stops. Other routes (the editor's session polls) still answer.
+  const call = async (outlived: boolean, method: string, url: string) => {
+    let code = 0, retired = false;
+    const res = { writeHead: (c: number) => { code = c; return { end: () => undefined }; } };
+    const handled = await addinRoutes(() => m, {} as Sessions, () => outlived, () => { retired = true; })(
+      Object.assign((async function* () { yield Buffer.from('types'); })(), { method, url }) as never, res as never);
+    await new Promise((r) => setImmediate(r));
+    return { handled, code, retired };
+  };
+  assert.deepEqual(await call(true, 'GET', '/api/addin/ping'), { handled: true, code: 503, retired: true });
+  assert.deepEqual(await call(true, 'POST', '/api/addin/run'), { handled: true, code: 503, retired: true });
+  assert.deepEqual(await call(false, 'GET', '/api/addin/ping'), { handled: true, code: 200, retired: false });
+  assert.deepEqual(await call(true, 'GET', '/api/session/x'), { handled: false, code: 0, retired: false });
 });
