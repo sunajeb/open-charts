@@ -47,6 +47,11 @@ Rules for this plan
       agenda, handles, restart, popup); each < 2 min, fail fast, one report; full set only per release
       (`npm run live -- <scenario...>`, tools/live/; unit-tested and dry-run only: first live run is D2)
 - [ ] D2 Mac live run of all scenarios (one approved window)
+      (first full run 2026-10-13: install, insert-all, resize, directions, agenda, popup, theme, fill
+      PASS; an update now reloads in a running PowerPoint. Fixed after it: edit-apply and cli-compare
+      (charts carry the deck font), chart-tools (pop-up left open took the Cmd+Z presses; label checks).
+      Rerun chart-tools, handles, edit-apply, cli-compare while the Mac is idle; handles showed
+      "no trusted view" while another app was in front)
 - [ ] D3 Windows live run on the owner's think-cell laptop (script → zip) and fixes
 - [ ] D4 Office.js live self-test (Mac) + Windows + PowerPoint on the web
 - [ ] D5 Test matrix: older PowerPoint 16.x, Intel Mac, non-English Office, two monitors / scaling,
