@@ -67,6 +67,7 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 ## Review
 
 ## Questions for the owner (collected overnight, 2026-10-13)
+- Difference-arrow default: kept `absolute` (signed difference) so existing specs keep their numbers; the reference inserts `relative` (%) by default. Switch before 1.0? (one line)
 - **Scope beyond P1:** the goal says "complete the master plan" (P1–P5), but you cut the first build to "every chart type into PowerPoint, no AI or other apps". P1 (chart quality parity) is being finished now. Should P2 (AI, data inputs, template fill), P3 (Office.js for Windows/web), P4 (native Windows) and P5 (Excel links, agenda) be built next, or stay out?
 - Optional: grant Accessibility permission to the terminal app (System Settings → Privacy & Security → Accessibility) so live PowerPoint tests can click their own "Enable Macros"/"OK" dialogs.
 - Old test entries vA–vD may still be listed in PowerPoint → Tools → PowerPoint Add-ins (files deleted); remove them with "−".
