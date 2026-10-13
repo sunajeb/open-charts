@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { ChartSpec, Frame, LineShape, PathShape, RectShape, Scene, Shape, TextShape } from '../src/core/index.ts';
-import { defaultStyle, layoutChart, minimumSize } from '../src/core/index.ts';
+import { defaultStyle, layoutChart, layoutGroup, minimumSize, resolveStyle } from '../src/core/index.ts';
 import { formatValue, localeOf, niceTicks } from '../src/core/numbers.ts';
 import { parseCategoryDate } from '../src/core/dates.ts';
 import { breakPieces, measurerFromMetrics, wrap } from '../src/core/text.ts';
@@ -25,6 +25,8 @@ const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextSha
 const rectsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is RectShape => x.kind === 'rect');
 const linesOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is LineShape => x.kind === 'line');
 const M = '−';
+/** The default style as a scene shows it: theme slots resolved ("1F3A5F@accent1"). */
+const DS = resolveStyle(defaultStyle);
 
 // ---- Numbers ------------------------------------------------------------------------------------
 
@@ -172,10 +174,10 @@ test('LBL-9: a boxed label never covers a neighbouring segment whose own label p
 
 test('WF-5: single-series colours: totals palette[0], increases positive, decreases negative', () => {
   const s = lay({ type: 'waterfall', categories: ['S', 'Up', 'Down', 'E'], series: [{ name: 'v', values: [100, 20, -30, 'e'] }] });
-  assert.equal(rectsOf(s, /^bar:s0:c0$/)[0].fill, defaultStyle.palette[0]);
+  assert.equal(rectsOf(s, /^bar:s0:c0$/)[0].fill, DS.palette[0]);
   assert.equal(rectsOf(s, /^bar:s0:c1$/)[0].fill, defaultStyle.positive);
   assert.equal(rectsOf(s, /^bar:s0:c2$/)[0].fill, defaultStyle.negative);
-  assert.equal(rectsOf(s, /^bar:s0:c3$/)[0].fill, defaultStyle.palette[0]);
+  assert.equal(rectsOf(s, /^bar:s0:c3$/)[0].fill, DS.palette[0]);
 });
 
 test('WF-3: the value of a later total is ignored: totals show the running sum', () => {
@@ -295,14 +297,14 @@ test('HB-5: balls use the series colour, else the first palette colour', () => {
   spec.series[0].color = 'C0504D';
   const s = lay(spec);
   assert.ok(byRole(s, /^ball:s0:/).every((x) => (x as RectShape).stroke === 'C0504D' || x.kind === 'path'));
-  assert.ok(byRole(s, /^ball:s1:/).every((x) => (x as RectShape).stroke === defaultStyle.palette[0] || x.kind === 'path'));
+  assert.ok(byRole(s, /^ball:s1:/).every((x) => (x as RectShape).stroke === DS.palette[0] || x.kind === 'path'));
 });
 
 test('CB-3: lines default to dark greys over a white halo; a series colour wins', () => {
   const spec: ChartSpec = { type: 'combo', categories: ['A', 'B', 'C'], series: [{ name: 'Col', values: [10, 12, 14] }, { name: 'L1', values: [5, 6, 7], as: 'line' }, { name: 'L2', values: [3, 4, 5], as: 'line', color: 'C0504D' }] };
   const s = lay(spec);
   const l1 = linesOf(s, /^line:s1$/);
-  assert.deepEqual(new Set(l1.map((l) => `${l.color}/${l.width}`)), new Set([`${defaultStyle.background}/4`, `${defaultStyle.text}/2`]));
+  assert.deepEqual(new Set(l1.map((l) => `${l.color}/${l.width}`)), new Set([`${DS.background}/4`, `${DS.text}/2`]));
   assert.ok(linesOf(s, /^line:s2$/).some((l) => l.color === 'C0504D' && l.width === 2));
 });
 
@@ -454,6 +456,17 @@ test('RES-4: at the default frame the last-resort pass hides nothing in any samp
 });
 
 // ---- The spec itself ----------------------------------------------------------------------------
+
+// ---- Theme and same scale -----------------------------------------------------------------------
+
+test('THM-7: a chart with a value axis break keeps its own scale in a same-scale group', () => {
+  const broken: ChartSpec = { type: 'stacked', categories: ['A', 'B', 'C'], series: [{ name: 'v', values: [20, 30, 400] }], options: { axisBreak: { from: 40, to: 330 }, scaleGroup: 'g' } };
+  const small: ChartSpec = { type: 'stacked', categories: ['A', 'B', 'C'], series: [{ name: 'v', values: [2, 3, 4] }], options: { scaleGroup: 'g' } };
+  const half = (i: number) => ({ ...F, x: F.x + i * (F.w / 2), w: F.w / 2 - 12 });
+  const [sb, ss] = layoutGroup([{ spec: broken, frame: half(0) }, { spec: small, frame: half(1) }], m);
+  assert.equal(sb.valueScale, undefined, 'no linear scale to share');
+  assert.equal(ss.valueScale!.ptPerUnit, ss.valueScale!.own, 'the other chart keeps its own scale');
+});
 
 test('docs/behaviour-spec.md: unique rule ids, the count is right, and every test it names exists', () => {
   const doc = readFileSync(new URL('../docs/behaviour-spec.md', import.meta.url), 'utf8');

@@ -9,7 +9,7 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 (often a bug id `Bn` from [plan/02](plan/02-engine-and-quality.md) §1). Paths are relative to
 `src/core/`; tests to `test/`.
 
-**Count: 205 rules** in 26 areas. Change a rule → change its row and its test in the same commit.
+**Count: 214 rules** in 27 areas. Change a rule → change its row and its test in the same commit.
 
 - [1 Spec and validation](#1-spec-and-validation) · [2 Hidden rows](#2-hidden-rows)
 - [3 Numbers and locales](#3-numbers-and-locales) · [4 Rounding](#4-rounding) · [5 Dates and 30/360](#5-dates-and-30360)
@@ -20,6 +20,7 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 - [18 Pie and doughnut](#18-pie-and-doughnut) · [19 Scatter and bubble](#19-scatter-and-bubble) · [20 Harvey balls](#20-harvey-balls)
 - [21 Table](#21-table) · [22 Gantt](#22-gantt)
 - [23 Text, contrast and minimum sizes](#23-text-contrast-and-minimum-sizes) · [24 Resizing and collision resolution](#24-resizing-and-collision-resolution) · [25 Quality gate](#25-quality-gate)
+- [26 Theme colours, style and same scale](#26-theme-colours-style-and-same-scale)
 
 ## 1 Spec and validation
 
@@ -29,7 +30,7 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | SPEC-2 | Every error is path-addressed (JSON Pointer) and all errors are reported at once; `layoutChart` throws one `InvalidSpecError` listing them | `spec.ts: validateSpec, InvalidSpecError, prepareSpec` | House rule (B15) | engine › "B15: validation is path-addressed…", "B15: layoutChart throws one error…" |
 | SPEC-3 | Unknown keys anywhere (chart, series, options, sub-objects, deck, style) are errors | `spec.ts: Errors.unknown` | House rule (B15) | engine › "B15: validation…"; engine › "JSON Schema files stay in sync…" |
 | SPEC-4 | Values must be finite numbers or `null`; `"e"` only in a waterfall; `[x,y]`/`[x,y,size]` (size ≥ 0) in scatter/bubble; dates in Gantt; text in tables; Mekko XY widths ≥ 0 | `spec.ts: validateSpec, checkPoint` | House rule (B15); DATA-FORMAT.md | engine › "B15…"; charts-b › "gantt: validation of dates, bars and shades" |
-| SPEC-5 | Each series has as many values as there are categories; series names are unique; colours are 6-digit hex | `spec.ts: validateSpec, checkColor` | House rule (B15) | engine › "B15: validation…" |
+| SPEC-5 | Each series has as many values as there are categories; series names are unique; colours are 6-digit hex or theme slots (THM-1) | `spec.ts: validateSpec, checkColor` | House rule (B15) | engine › "B15: validation…" |
 | SPEC-6 | An option on a chart type that does not read it is an error; `OPTIONS[k].types` is the one applicability table (validator, schema, editor, docs) | `spec.ts: OPTIONS, appliesTo, validateOptions` | House rule | engine › "options: every option on a type that does not read it…"; docs › "options table is the one generated…" |
 | SPEC-7 | Numeric limits (`decimals` 0–10 whole, `gap` 0–10) are defined once | `spec.ts: LIMITS` | House rule | engine › "options: limits are defined once…" |
 | SPEC-8 | `cagr`/`difference`: indices in range, `from` < `to`, `years` > 0 | `spec.ts: validateOptions` | Manual en-chartdecorations § CAGR arrows (start and end categories) | engine › "B15…" |
@@ -354,3 +355,16 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | QG-1 | Gate v2: text×text, text×frame, text over another owner's mark (except a boxed label on its own column and a line label inside a column), any shape out of frame, arrows through labels, glyph overflow with a measurer | `quality.ts: checkScene, coversMark` | House rule (B12) | engine › "B12: gate v2 catches…", "B8: the gate reports glyph overflow…"; labels › "quality gate: a boxed segment label may cover its own column only" |
 | QG-2 | Strict mode reports every hidden label, with an allow-list for declared stress fixtures | `quality.ts: checkScene (strict)` | House rule (B13) | engine › "B13: hidden labels are issues in strict mode…" |
 | QG-3 | Numeric checks: 100% columns sum to 100, segments add to totals, CAGR recomputed, waterfall balances, Mekko widths follow totals, typography ≥ 8 pt and one size per role | `scripts/quality.ts`, `src/report.ts` | MASTER-PLAN §4.3 P1 (2) | quality › all |
+
+## 26 Theme colours, style and same scale
+
+| ID | Rule | Where | Source | Tests |
+|---|---|---|---|---|
+| THM-2 | The default style follows the presentation: series `accent1`… `accent6`, text `tx1`, separators `bg1`; greys and the waterfall green/red stay fixed | `index.ts: defaultStyle` | Manual en-default-theme (theme colours for text, axes, annotations); en-format-and-style-charts § Chart fill scheme ("PowerPoint Theme" by default) | theme › "theme: the default style draws series in theme accents…" |
+| THM-3 | The writer emits `schemeClr` for a slot and `srgbClr` for hex; a CLI deck's theme1.xml holds the style's theme colours; the SVG preview draws the resolved hex | `render/pptx.ts: clrXml, theme`; `render/svg.ts` | Manual en-style-files (`schemeClr` = PowerPoint theme colour) | theme › "theme: the writer emits schemeClr…" |
+| THM-4 | The add-in gets slot names in the line format and sets `ObjectThemeColor`; slots resolve against the slide's own theme colours (request `theme=`), which win over `style.theme` | `addin/format.ts`; `addin/engine.ts: parseRequest, layout`; VBA `SetColor`, `ThemeLine` | House rule (label contrast matches what PowerPoint draws) | theme › "theme: the add-in line format carries…", "theme: the add-in resolves slots in the slide…" |
+| THM-5 | A chart's own `style` wins over the deck's; `style.numbers` (locale, decimals, scale) applies where the type reads the option and a chart's options win; style errors are path-addressed (`/style/numbers/decimals`) | `index.ts: layoutChart`; `common.ts: makeCtx`; `spec.ts: validateStyle` | House rule | theme › "style.numbers: number defaults…", "style validation: colours are hex or theme slots…" |
+| THM-6 | Same scale: charts on one slide with the same `scaleGroup` draw one value unit equally long — the smallest of their own scales; the others stretch their domain away from the baseline (ticks inside it, axis width reserved for them); a group of one is unchanged | `index.ts: layoutGroup`; `common.ts: sharedScale, axisWidth` | Manual en-axes § Match the scales of different axes ("resize smaller scales to match the largest one") | theme › "same scale: charts in one group draw one unit equally long…", "same scale: works with value axes on and both orientations…" |
+| THM-7 | Same scale applies to stacked, clustered, waterfall, line, area and combination charts (primary axis); a chart with a value axis break has no linear scale and keeps its own | `spec.ts: OPTIONS.scaleGroup`; `charts/column.ts` | Manual en-axes § Match the scales of different axes | theme › "same scale: line, area and combo charts take part…"; behaviour › "THM-7" |
+| THM-8 | A slide holds one `chart` or several `charts` (`{frame?, chart}`, never both); without frames they split the chart area into equal columns 24 pt apart; import gives them back with their frames | `deck.ts: slideCharts, buildDeck`; `spec.ts: validateDeck`; `ooxml/pptx-read.ts: importDeck` | House rule (MASTER-PLAN §4.1 P1 "two charts/slide") | theme › "deck: a slide holds several charts…", "deck: chart and charts together…" |
+| THM-9 | Grouped charts carry `OC_SGROUP` and `OC_SCALE` (own pt per unit, plain digits); in PowerPoint, Update chart, Apply and resizing re-lay out the group's other charts with the smallest partner scale (`scale=`) | `deck.ts: chartContent, scaleText`; `addin/engine.ts`; VBA `ScaleLine`, `SyncGroup` | Manual en-axes § Match the scales ("the scales of all other charts set to the same scale are then adjusted as well") | theme › "deck: a slide holds several charts…"; live `npm run e2e:powerpoint` step 10 |

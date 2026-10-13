@@ -100,6 +100,15 @@ test('theme: the add-in resolves slots in the slide\'s theme (request line theme
   assert.equal(parseRequest(['update', '', '', '', spec].join('\n')).spec, spec);
 });
 
+test('theme: a hidden row leaves the others on their own theme colours', () => {
+  const spec: ChartSpec = { type: 'stacked', categories: ['a', 'b'], series: [
+    { name: 'A', values: [1, 2] }, { name: 'B', values: [1, 2], hidden: true }, { name: 'C', values: [1, 2] }, { name: 'D', values: [1, 1], color: 'accent6' }] };
+  const s = layoutChart(spec, F, m);
+  assert.equal(barOf(s, 'bar:s0:c0').fill, '1F3A5F@accent1');
+  assert.equal(barOf(s, 'bar:s2:c0').fill, '7FA3CC@accent3', 'row 3 keeps accent3');
+  assert.equal(barOf(s, 'bar:s3:c0').fill, 'D9D9D9@accent6');
+});
+
 // ---- Validation --------------------------------------------------------------------------------
 
 test('style validation: colours are hex or theme slots; theme and numbers are checked', () => {
@@ -193,7 +202,7 @@ test('deck: a slide holds several charts; without frames they share the chart ar
   assert.deepEqual(back.slides[1].chart, deck.slides[1].chart);
 });
 
-test('deck: "chart" and "charts" together, empty charts and bad frames are errors', () => {
+test('deck: chart and charts together, empty charts and bad frames are errors', () => {
   const errs = validateDeck({ slides: [
     { chart: stacked(), charts: [{ chart: stacked() }] },
     { charts: [] },
