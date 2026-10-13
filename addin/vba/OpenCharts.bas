@@ -60,6 +60,9 @@ Private gCollect As Boolean
 Private gCollected As String
 ' The deck as the automatic agenda update last saw it (AgendaSignature).
 Private gAgendaSig As String
+' Agenda slides: the layout new ones use when the deck has it, and their title.
+Private Const AGENDA_LAYOUT As String = "open-charts agenda"
+Private Const AGENDA_TITLE As String = "Agenda"
 
 ' ---- Loading --------------------------------------------------------------------------------
 
@@ -1430,8 +1433,6 @@ End Function
 ' to insert, move or delete (X records). Slides are found by their tags: OC_KIND, OC_CHAPTER,
 ' OC_SPLIT; the element by OC_AGENDA, each heading by OC_ROLE "chapter:<id>".
 
-Private Const AGENDA_LAYOUT As String = "open-charts agenda"
-Private Const AGENDA_TITLE As String = "Agenda"
 
 Private Sub AgendaCommand(ByVal cmd As String)
     Dim sld As Object, engineCmd As String, response As String, newId As String, moved As Boolean
