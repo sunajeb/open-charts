@@ -667,7 +667,9 @@ End Function
 ' Starts the engine's server unless it answers; waits up to waitMs for it (0: does not wait).
 Private Function WinStartServer(ByVal waitMs As Long) As Boolean
     Dim ok As Boolean, exe As String, waited As Long
-    WinHttp "ping", "", 1000, ok
+    ' A running server accepts at once; a closed port takes Windows about a second to refuse, so the
+    ' first check gives up after 300 ms (it runs as the ribbon loads).
+    WinHttp "ping", "", 300, ok
     If ok Then WinStartServer = True: Exit Function
     exe = Environ("LOCALAPPDATA") & ENGINE_EXE
     If Dir(exe) = "" Then Exit Function
@@ -693,7 +695,7 @@ Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeo
     On Error Resume Next
     http.setProxy 1 ' SXH_PROXY_SET_DIRECT
     On Error GoTo Failed
-    http.setTimeouts 1000, 1000, timeoutMs, timeoutMs
+    http.setTimeouts 1000, IIf(timeoutMs < 1000, timeoutMs, 1000), timeoutMs, timeoutMs
     If path = "ping" Then
         http.Open "GET", ENGINE_URL & path, False
         http.send
