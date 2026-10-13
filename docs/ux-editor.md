@@ -95,3 +95,24 @@ Flow:
    also calls `Office.context.ui.messageParent(JSON.stringify({ type: "open-charts:apply" | "open-charts:cancel", id, rev }))`,
    and posts the same object to `window.opener` / `window.parent` when present, so the add-in can
    react without polling.
+
+## Pop-up mode (`?session=<id>&popup=1`, or `?popup=1` preloaded)
+
+The add-in's Edit data window over PowerPoint (src/addin/popup.ts: Mac helper panel, Edge app mode on
+Windows). Same session API; differences from the session page above:
+
+- Layout: datasheet only (no preview: the slide is the preview), compact toolbar with status,
+  **Options** (type and option sections as an overlay), **Cancel**, **Done ⌘↵**.
+- Live apply: each edit schedules `POST { chart, state: "applied" }` 400 ms after the last change;
+  while one is in flight (until `drawn`/`error` at a higher `rev`) later edits set a flag and the
+  latest chart is sent once it returns. Nothing is sent while the engine reports an error, or when the
+  chart equals the last one sent.
+- **Esc / Cancel**: if anything was sent, `POST { chart: <the chart the pop-up opened with>, state:
+  "applied" }`, then `{ state: "cancelled" }` (the host draws applies in order, so the revert lands
+  last). **⌘↵ / Done / close button**: sends the last edit if needed, keeps the slide.
+- Host hooks: `window.ocPopupOpen(id)` loads a session into the preloaded page (state reset);
+  `window.ocPopupClose("done" | "cancel")`. The page posts `{type: "ready", title}` once the session is
+  drawn and `{type: "close", reason}` to `window.webkit.messageHandlers.openCharts` (the Mac helper);
+  without that handler (Edge) it calls `window.close()`.
+- `body.dataset.live` (`idle`/`busy`), `body.dataset.applies` and `body.dataset.closed` expose the
+  state to tests (`test/e2e/popup.spec.ts`).

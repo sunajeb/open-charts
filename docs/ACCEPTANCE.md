@@ -22,6 +22,7 @@ exported decks and PNGs). The images below are copied into `docs/acceptance/`.
 | 6 | Interop: CLI decks open in PowerPoint; add-in deck imports | **Pass** |
 | 7 | Timings vs targets | Insert **pass** (cold 1.8 s → 1.3 s after O5); update **pass** in VBA, about 1 s by wall clock including AppleScript |
 | 8 | Every ribbon control incl. nothing selected | **Pass** |
+| 9 | Edit data pop-up: open < 300 ms, live updates, Esc reverts; element toolbar | See [§9](#9-edit-data-pop-up-and-element-toolbar) |
 
 Bugs fixed on this branch: 3 (see [Bugs](#bugs)). Open items: see [Open](#open-items).
 
@@ -171,6 +172,40 @@ Wall clock includes AppleScript `run VB macro` (about 0.3–0.4 s that a real ri
   - Insert with no slide → "Click a slide (Normal view) first, then insert the chart."
 - Unsupported-type path: every gallery type is available in 0.2.0, so the e2e "not available" branch
   had nothing to test.
+
+## 9. Edit data pop-up and element toolbar
+
+**What:** Edit data opens the datasheet in a floating panel next to the chart (Mac: the resident
+helper `OpenChartsPopup.app`, an NSPanel with a preloaded WKWebView; Windows: Edge app mode), edits
+reach the slide live (400 ms after the last keystroke, one apply in flight, later edits coalesced),
+Esc reverts to the chart the pop-up opened with, ⌘↵ keeps. Selecting elements of a chart shows the
+element mini toolbar (fill, text size, text direction → per-element overrides). Fallback: the
+browser, as before. Code: `src/addin/popup.ts`, `src/addin/toolbar.ts`, `addin/popup-mac/main.swift`,
+`src/web/editor.html` (`?popup=1`), `src/web/toolbar.html`.
+
+**Timings (helper, measured; `OPEN_CHARTS_POPUP_TEST=1 node … --test test/popup-helper.test.ts`,
+three opens per run, off screen):**
+
+| Step | Time | Target |
+|---|---|---|
+| Helper start + datasheet page preload (once per server, in the background) | 2.1–3.1 s | — (hidden) |
+| `show` → page has the session drawn → panel ordered front | 61 / 33 / 12 ms; 82 / 19 / 19 ms; 138 / 40 / 16 ms | < 300 ms |
+| `ocPopupOpen` in the preloaded page (Playwright, Chromium) | < 300 ms asserted; the next chart reuses the page | < 300 ms |
+| Edit → apply sent to the host | 400 ms after the last keystroke (E2E asserts ≥ 350, < 1500 ms) | ~400 ms |
+| Edit data click → pop-up visible in PowerPoint | AppleScriptTask + engine `edit` (0.36 s VBA, §7) then the show above, in parallel with VBA returning | — |
+
+Build: `npm run build:popup` 26 s first (`-O`), 5 s after; `addin install` copies the build from
+`dist/` or builds it into `~/Library/Application Support/open-charts/`. Signature: `codesign -dv` →
+`Signature=adhoc`, `codesign -vv` valid; `spctl -a` rejects (expected for an ad-hoc app), but a locally
+built app carries no quarantine flag, so Gatekeeper never assesses it (USER-GUIDE "Editing data").
+
+**Tests:** `test/popup.test.ts` (placement maths, screen-rect trust, request lines, Edge args,
+browser fallback, helper protocol against a stand-in), `test/toolbar.test.ts` (controls from the
+property table, overrides merge, toolbar placement, routes end to end), `test/e2e/popup.spec.ts`
+(compact layout, debounce, coalescing, Esc revert, ⌘↵, page reuse, invalid cell, toolbar page),
+`test/popup-helper.test.ts` (the real helper, opt-in).
+
+**Live in PowerPoint:** LIVE_RESULT
 
 ## Bugs
 
