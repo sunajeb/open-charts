@@ -9,7 +9,7 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [The datasheet](#the-datasheet)
 - [Chart types](#chart-types)
 - [Numbers: units, decimals, magnitudes, separators](#numbers-units-decimals-magnitudes-separators)
-- [Decorations: totals, CAGR and difference arrows](#decorations-totals-cagr-and-difference-arrows)
+- [Decorations: totals, arrows, value lines, gaps and breaks](#decorations-totals-arrows-value-lines-gaps-and-breaks)
 - [Resizing](#resizing)
 - [Hidden labels and why](#hidden-labels-and-why)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -300,7 +300,7 @@ stay whole. Shares in 100%, Mekko and pie charts are rounded together so they al
 exactly 100%, and stacked segment labels add up exactly to their total. Negative numbers use a real
 minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail of format codes.
 
-## Decorations: totals, CAGR and difference arrows
+## Decorations: totals, arrows, value lines, gaps and breaks
 
 - **Totals**: the sum above each column. On by default for stacked, Mekko and Mekko XY charts;
   available on 100%, combination (stacked), stacked area and doughnut (in the hole).
@@ -309,7 +309,28 @@ minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail 
   `Jan 2024`, `2025E` all work), or, if the labels aren't dates, the number of columns between them.
   **Years** overrides that number (e.g. `2.5`); empty = automatic. Both totals must be positive;
   otherwise the arrow is left out and reported.
-- **Difference arrow** (stacked and 100%): the signed difference between two column totals.
+- **Difference arrow** (stacked and 100%): a bracket between two column totals. **Mode**: *Absolute*
+  (↔, the signed difference; the default), *Relative* (→, the change in percent) or *Reverse* (←, the
+  change in percent the other way).
+- **Level arrows** (stacked, clustered, 100%, line): **+ Level arrow** adds a row: the two ends (a
+  category and a series — the top of that segment, bar or point — or *Total* for the column total),
+  the mode (relative by default) and where it sits: *Beside* the later column or *Between* the two.
+  Dotted guides run from each level to the arrow; a short arrow gets its bubble beside it.
+- **Value lines** (stacked, clustered, line): **+ Value line** adds a dashed line at a value or at
+  *mean* (the average column total; a clustered chart's bars), labelled on the right or left, e.g.
+  `Ø 27.8`, or with your own label (`{value}` inserts the number).
+- **100% indicator** (100%): the "← 100%" marker beside the chart, on by default; right, left or none.
+- **100%=** (100%): the datasheet's optional **100%=** row (*Data layout ▸ 100%= row*): the value each
+  column's shares are taken of. With **Values are %**, it is the absolute value behind 100%, and the
+  totals show it.
+- **Category gaps** and **Category breaks** (column, bar, waterfall, combination): tick the categories
+  after which an extra gap of one column slot, or a break symbol on the baseline, goes.
+- **Axis break** (stacked, clustered): compress the value range *from*–*to* so a few very tall columns
+  don't flatten the rest; *Straight* or *Wiggle*. No segment may end inside the range.
+- **Secondary axis** (combination): tick the lines read against a second value axis on the right.
+
+Decorations never cover a label: an arrow, value line label or indicator that finds no free room is
+left out and listed under hidden labels.
 - **Total columns** (waterfall): which categories stand on the baseline.
 
 ## Resizing
