@@ -135,6 +135,12 @@ node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o o
 | `  --strict` | Exit code 1 if any label had to be hidden (the deck is still written). |
 | `  --report report.json` | Writes the layout issues per slide as JSON. |
 | `  --font Arial.ttf --bold-font "Arial Bold.ttf"` | Measure text with these font files. |
+| `  --style style.json` | Apply a style file: a client deck's fonts, colours, number defaults and element styles ([style files](docs/DATA-FORMAT.md#style-files)). |
+| `open-charts fill <template.pptx> <data.json> [-o out.pptx]` | Fills your own template: shapes named `chart:<name>` become charts laid out in that shape's frame, `{{name}}` in any text becomes a value; slides can be picked, reordered and repeated per item. Untouched parts stay byte-identical ([fill a template](docs/USER-GUIDE.md#fill-a-template)). |
+| `  --dry-run` | Reports every slot, frame and missing value; writes nothing. |
+| `  --strict` | Exit code 1 on any missing value, chart error or layout issue. |
+| `  --each items.json` | One deck per item of a JSON array, its values over the data's; put a field in `-o`, e.g. `-o "out/{client}.pptx"`. |
+| `  --style style.json`, `--report report.json`, `--font` | As for build. |
 | `open-charts inspect <deck.pptx> [--json]` | Lists the open-charts charts in a deck: frame, type, sizes. |
 | `open-charts import <deck.pptx> [-o deck.json]` | Recovers the deck JSON from the charts in a .pptx. |
 | `open-charts serve [--port 4173]` | Starts the web editor. |

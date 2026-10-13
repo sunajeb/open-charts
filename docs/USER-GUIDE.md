@@ -11,6 +11,8 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [Numbers: units, decimals, magnitudes, separators](#numbers-units-decimals-magnitudes-separators)
 - [Decorations: totals, arrows, value lines, gaps and breaks](#decorations-totals-arrows-value-lines-gaps-and-breaks)
 - [Colours and your deck's theme](#colours-and-your-decks-theme)
+- [A client's look: style files](#a-clients-look-style-files)
+- [Fill a template](#fill-a-template)
 - [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
 - [Resizing](#resizing)
 - [Hidden labels and why](#hidden-labels-and-why)
@@ -359,6 +361,80 @@ theme too; one you pick as a hex colour stays exactly that colour.
 Decks written by the command line come with the open-charts theme (navy to grey, near-black text).
 A `style` in the deck can change that theme, the palette, fonts and default number formats for every
 chart — see [DATA-FORMAT.md › Style](DATA-FORMAT.md#style).
+
+## A client's look: style files
+
+A **style file** is one JSON file that reproduces a client deck's look for every chart type: fonts and
+sizes, the series palette, text and axis colours, number defaults, and the formatting of kinds of
+elements, such as dotted gridlines, a darker axis, totals in the brand colour or decoration arrows in
+an accent. Give it to the command line with `--style`:
+
+```sh
+open-charts examples/deck.json --style examples/styles/ember.json -o out/deck
+open-charts fill template.pptx data.json --style brand.json -o out.pptx
+```
+
+A style changes how charts look, never what they say: the same data gives the same bars, labels and
+arrows in the same places, in other colours. Another font or font size can move labels, because
+text is measured in that font. A deck's own `style` and a chart's own formatting override the style
+file. `examples/styles/` has two styles: `ember.json` (Georgia, rust to sand) and `brand.json`
+(theme accents, so charts follow the client template). The keys are listed in
+[DATA-FORMAT.md › Style files](DATA-FORMAT.md#style-files).
+
+## Fill a template
+
+`open-charts fill` puts charts and text into **your own** PowerPoint template. It edits a copy of the
+file and does not touch the masters, layouts, pictures or any slide that has nothing to fill.
+
+**1. Mark the template in PowerPoint.**
+
+- **Charts.** Draw a rectangle (or use a content placeholder) where the chart goes. Open the
+  Selection Pane (Home › Arrange › Selection Pane) and rename the shape `chart:revenue`. Instead of
+  renaming it, you can type `{{chart:revenue}}` as its only text. The chart is laid out to fill
+  that shape's frame. A placeholder that you never resized takes its frame from the layout.
+- **Text.** Type `{{client}}`, `{{date}}` and so on anywhere: titles, text boxes, table cells and
+  speaker notes. A field keeps the formatting of the text it sits in, even when PowerPoint has
+  split it into several pieces internally.
+
+**2. Write the data:** values by name, plus an optional list of slides.
+
+```jsonc
+{
+  "values": {
+    "client": "Northwind Traders",
+    "date": "October 2026",
+    "revenue": { "type": "stacked", "categories": ["2024", "2025"], "series": [{ "name": "Sales", "values": [80, 95] }] }
+  },
+  "slides": [
+    { "slide": 1 },
+    { "slide": 3 },
+    { "slide": 5, "each": [ { "region": "EMEA", "sales": { "type": "clustered", "...": "..." } },
+                           { "region": "Americas", "sales": { "type": "clustered", "...": "..." } } ] }
+  ]
+}
+```
+
+Without `slides`, every template slide is filled once, in template order. With `slides` you choose
+the slides and their order. Slides you leave out are dropped, and `each` repeats a slide once per item
+(here, one regional slide per region). Sections follow their slides. If the new order would split a
+section, the sections are removed and you get a warning.
+
+**3. Check it, then fill it.**
+
+```sh
+open-charts fill template.pptx data.json --dry-run       # what would be filled, where, and what is missing
+open-charts fill template.pptx data.json -o out.pptx --strict
+open-charts fill template.pptx data.json --each clients.json -o "out/{client}.pptx"   # one deck per client
+```
+
+The report lists each output slide with its charts (frame and status) and its fields, followed by any
+value that no slot used. `--strict` exits with code 1 if a value is missing, a chart is invalid or a label
+had to be hidden.
+
+Charts take the template's theme. Series use Accent 1, 2, 3 … of the template's colour scheme, and the
+text uses its body font. You can edit each chart with the add-in like any other. Running `fill` again
+on a filled deck finds the charts by name and replaces them in place. A full worked example, with
+an 8-slide template, is in `examples/template/` (`template.pptx`, `data.json`, `clients.json`).
 
 ## Two charts on a slide, same scale
 
