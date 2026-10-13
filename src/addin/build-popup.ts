@@ -14,17 +14,31 @@ export function canBuildPopup(): boolean {
   try { execFileSync('xcrun', ['--find', 'swiftc'], { stdio: 'ignore' }); return true; } catch { return false; }
 }
 
-/** Builds the helper app at `out` (default dist/OpenChartsPopup.app); returns its path. */
-export function buildPopup(out = join(ROOT, 'dist', 'OpenChartsPopup.app')): string {
+/**
+ * Builds the helper app at `out` (default dist/OpenChartsPopup.app); returns its path. `archs`
+ * ['arm64', 'x64'] makes a universal app (the package build); `sign` false leaves it unsigned for
+ * the caller to sign.
+ */
+export function buildPopup(out = join(ROOT, 'dist', 'OpenChartsPopup.app'), archs: string[] = [process.arch], sign = true): string {
   if (process.platform !== 'darwin') throw new Error('The pop-up helper is built on a Mac.');
   rmSync(out, { recursive: true, force: true });
   const macos = join(out, 'Contents', 'MacOS');
   mkdirSync(macos, { recursive: true });
   copyFileSync(join(SRC, 'Info.plist'), join(out, 'Contents', 'Info.plist'));
-  execFileSync('xcrun', ['swiftc', '-O', '-swift-version', '5', '-target', `${process.arch === 'arm64' ? 'arm64' : 'x86_64'}-apple-macos12.0`,
-    '-framework', 'Cocoa', '-framework', 'WebKit', join(SRC, 'main.swift'), '-o', join(macos, 'open-charts-popup')], { stdio: ['ignore', 'inherit', 'inherit'] });
+  const exe = join(macos, 'open-charts-popup');
+  const slices = archs.map((arch) => {
+    const target = arch === 'arm64' ? 'arm64' : 'x86_64';
+    const file = archs.length === 1 ? exe : `${exe}-${target}`;
+    execFileSync('xcrun', ['swiftc', '-O', '-swift-version', '5', '-target', `${target}-apple-macos12.0`,
+      '-framework', 'Cocoa', '-framework', 'WebKit', join(SRC, 'main.swift'), '-o', file], { stdio: ['ignore', 'inherit', 'inherit'] });
+    return file;
+  });
+  if (slices.length > 1) {
+    execFileSync('lipo', ['-create', '-output', exe, ...slices]);
+    for (const f of slices) rmSync(f);
+  }
   // Ad-hoc signature over the whole bundle (Info.plist sealed): enough to run on this Mac; see
   // docs/USER-GUIDE.md "Editing data" for Gatekeeper.
-  execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', out], { stdio: ['ignore', 'inherit', 'inherit'] });
+  if (sign) execFileSync('codesign', ['--force', '--sign', '-', '--timestamp=none', out], { stdio: ['ignore', 'inherit', 'inherit'] });
   return out;
 }

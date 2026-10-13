@@ -55,11 +55,54 @@ bubble and Gantt charts have no direction. In the data format it is one option,
 
 ## Install
 
+The add-in runs in PowerPoint for Mac (Microsoft 365 / version 16; tested on 16.105) and PowerPoint
+for Windows (Microsoft 365 / Office 2016 or newer). The installers need **no Node, no Terminal and
+no administrator rights**: download the file for your computer from the
+[latest release](https://github.com/sunajeb/open-charts/releases/latest) and double-click it.
+
+### Mac
+
+1. Download **`open-charts-<version>.pkg`** and double-click it.
+2. Click through the installer (*Install for me only*). PowerPoint may stay open.
+3. The **open-charts** tab appears in PowerPoint: a few seconds after the install if PowerPoint is
+   running, otherwise the next time you start it. When macOS asks whether open-charts may control
+   PowerPoint, click **OK**; if PowerPoint asks about macros for `open-charts.ppam`, click
+   **Enable Macros**.
+
+To remove it, open **Uninstall open-charts** in the *Applications* folder of your home folder.
+To update, install the newer `.pkg` over it.
+
+The package contains the chart engine as one program (Node built in, for Apple silicon and Intel
+Macs), the add-in, the Edit data window and the uninstaller. It puts them exactly where the install
+from source below does (`~/Library/Application Support/open-charts`, ...). If the `.pkg` is not
+signed yet (see [docs/release.md](docs/release.md)), macOS refuses to open it the first time:
+right-click it › **Open**, or on macOS 15 and later *System Settings › Privacy & Security* ›
+**Open Anyway**.
+
+### Windows
+
+Download **`open-charts-<version>.msi`**, quit PowerPoint and double-click the file. That is all:
+start PowerPoint and the **open-charts** tab is before Home. Remove it in *Settings › Apps*.
+Silent install: `msiexec /i open-charts-<version>.msi /quiet` (no admin rights needed). Details and
+the folder-based install are in [Install on Windows](#install-on-windows).
+
+### IT deployment
+
+- **Windows / Intune:** `open-charts-<version>-machine.msi` installs for every user of a PC from
+  SYSTEM (an Intune line-of-business app, or Win32 app with install command
+  `msiexec /i open-charts-<version>-machine.msi /quiet`). The per-user MSI also works as an Intune
+  app assigned to users in *user* install context.
+- **Mac / Jamf:** the `.pkg` installs per user, so run it as the user (for example from Self
+  Service).
+
+Both are described in [docs/release.md](docs/release.md#it-deployment).
+
+### From source (developers, and the web editor and command line)
+
 You need:
 
-- **A Mac with PowerPoint for Mac** (Microsoft 365 / version 16; tested on 16.105) for the add-in.
-  On a Windows PC, skip to [Install on Windows](#install-on-windows): no Node needed there.
-  The web editor and the command line run anywhere Node runs.
+- **A Mac with PowerPoint for Mac** for the add-in. The web editor and the command line run anywhere
+  Node runs.
 - **Node.js 22.6 or newer.** Check with `node --version`; install it from
   [nodejs.org](https://nodejs.org) if needed.
 - **This repository**, downloaded or cloned to your Mac.
@@ -99,6 +142,7 @@ Options and related commands:
 | `open-charts addin uninstall` | Unload the add-in and remove the installed files and the `open-charts` command. |
 | `open-charts addin build [-o dist/open-charts.ppam]` | Only build the `.ppam` file. |
 | `open-charts addin types` | List the chart types in the ribbon menu and whether each is available. |
+| `open-charts addin update [on\|off]` | Check for a newer release now; `on` lets the add-in check once a day (off by default; it only tells, never downloads). |
 
 Run `open-charts addin install` again after you update open-charts or move or upgrade Node. If
 `open-charts` is not on your PATH, the full form always works (this is what the add-in's messages
@@ -117,6 +161,16 @@ README says `open-charts`, or run `npm link` there once to put `open-charts` on 
 The same add-in runs in PowerPoint for Windows (Microsoft 365 / Office 2016 or newer, 32- or 64-bit).
 Charts move freely between Mac and PC. **The PC needs no Node and no admin rights:** the engine is
 one program, `open-charts.exe`.
+
+**With the installer** (`open-charts-<version>.msi` from the
+[latest release](https://github.com/sunajeb/open-charts/releases/latest), or built with
+`npm run build:win && npm run build:msi` on Windows): quit PowerPoint, double-click it, start
+PowerPoint. It installs for the current user only and needs no admin rights; `/quiet` installs
+silently. It puts exactly the files and registry entries `install.ps1` below does, and *Settings ›
+Apps › open-charts › Uninstall* (or `msiexec /x open-charts-<version>.msi /quiet`) removes them all.
+If Windows SmartScreen warns about an unsigned build, click *More info › Run anyway*.
+
+**From the folder** (no installer):
 
 1. Get the **open-charts-win** folder: download the `open-charts-win` artifact from the latest CI
    run on GitHub (*Actions › test › Artifacts*), or build it on any machine with

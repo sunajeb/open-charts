@@ -1,0 +1,4 @@
+#!/bin/sh
+# open-charts package preinstall: stops a running engine, so the new one serves the next request.
+/usr/bin/curl -sf --connect-timeout 0.5 --max-time 3 -X POST http://127.0.0.1:4174/api/addin/quit >/dev/null 2>&1
+exit 0

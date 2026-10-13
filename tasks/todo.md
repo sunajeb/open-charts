@@ -28,13 +28,16 @@ Rules for this plan
       font): unit + goldens; one live scenario comparing PowerPoint's rendering
 
 ## C. Install, sign, deploy, update
-- [ ] C1 Mac: bundled engine binary (no Node; arm64 + x64) + pop-up helper + .ppam in one per-user .pkg; uninstaller
-- [ ] C2 Windows: per-user installer (no admin) with the exe + .ppam; silent mode; enterprise MSI for Intune
+- [x] C1 Mac: bundled engine binary (no Node; arm64 + x64) + pop-up helper + .ppam in one per-user .pkg; uninstaller
+      (npm run build:mac + check:mac-pkg; first real Installer.app run and PowerPoint registration: live window)
+- [x] C2 Windows: per-user installer (no admin) with the exe + .ppam; silent mode; enterprise MSI for Intune
+      (npm run build:msi, WiX v5; validated in CI only: first CI run pending)
 - [ ] C3 Signing pipeline in CI: Apple Developer ID + notarization (Mac), Azure Trusted Signing (Windows exe,
       installer, VBA project) — needs owner accounts (Q3)
 - [ ] C4 Office.js production: static https hosting, production manifest, M365 admin-center deployment guide;
       AppSource submission later
 - [ ] C5 Updates: version check + update download (signed packages only)
+      (done: client check behind `addin update on`, design in docs/release.md; todo: add-in UI, verified download)
 - [ ] C6 IT deployment guide: Intune / Jamf / M365 admin center, coexistence with think-cell, macro trust settings
 
 ## D. Verification (live runs in approved windows only)

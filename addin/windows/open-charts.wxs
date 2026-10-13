@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  open-charts Windows Installer packages (WiX Toolset v5), built by scripts/build-msi.ts from dist\win:
+
+  Scope=perUser     open-charts-<version>.msi: double-click or `msiexec /i open-charts-<version>.msi /quiet`.
+                    No admin rights. Puts exactly what install.ps1 puts where install.ps1 puts it:
+                      %LOCALAPPDATA%\open-charts\open-charts.exe, addin.json, uninstall.ps1
+                      %APPDATA%\Microsoft\AddIns\open-charts.ppam
+                      HKCU\...\Office\16.0\PowerPoint\AddIns\open-charts (Path, AutoLoad=1)
+                      HKCU\...\Office\16.0\PowerPoint\Security\Trusted Locations\open-charts
+                    and removes all of it on uninstall (Settings > Apps, or msiexec /x ... /quiet).
+
+  Scope=perMachine  open-charts-<version>-machine.msi, for IT (Intune, SCCM) as SYSTEM: puts the
+                    package in %ProgramFiles%\open-charts and an Active Setup entry that runs
+                    install.ps1 for each user at their next sign-in (docs/release.md, "IT deployment").
+
+  A running engine (open-charts.exe addin serve) is stopped before its file is replaced or removed.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+<?if $(var.Scope) = "perUser" ?>
+  <?define UpgradeCode = "024EF72E-ED82-4CCD-96FD-71CB7F1016A0" ?>
+  <?define ProductName = "open-charts" ?>
+<?else?>
+  <?define UpgradeCode = "6D0AAB2E-9713-43D8-BA9F-59167A265548" ?>
+  <?define ProductName = "open-charts (all users)" ?>
+<?endif?>
+  <Package Name="$(var.ProductName)" Manufacturer="open-charts" Version="$(var.Version)"
+           UpgradeCode="$(var.UpgradeCode)" Scope="$(var.Scope)" Language="1033" Compressed="yes">
+    <SummaryInformation Description="open-charts: consulting-quality charts for PowerPoint" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of open-charts is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/sunajeb/open-charts" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Start PowerPoint (restart it if it is open): the open-charts tab is next to Home." />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
+    <ui:WixUI Id="WixUI_Minimal" />
+
+    <!-- The engine must not hold its file open: end it (it has no window to close). -->
+    <util:CloseApplication Id="StopEngine" Target="open-charts.exe" CloseMessage="no" TerminateProcess="1" RebootPrompt="no" />
+
+<?if $(var.Scope) = "perUser" ?>
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ENGINEDIR" Name="open-charts" />
+    </StandardDirectory>
+    <StandardDirectory Id="AppDataFolder">
+      <Directory Id="MICROSOFTDIR" Name="Microsoft">
+        <Directory Id="ADDINSDIR" Name="AddIns" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- Where the engine folder is, for removing what the engine wrote there (log, unpacked resources). -->
+    <Property Id="ENGINEDIR_SAVED">
+      <RegistrySearch Id="EngineDirSearch" Root="HKCU" Key="Software\open-charts" Name="engineDir" Type="raw" />
+    </Property>
+
+    <Component Id="Engine" Directory="ENGINEDIR" Guid="F8B77376-A3D8-48C9-B38C-59C5378F33FA">
+      <File Id="EngineExe" Source="$(var.Src)\open-charts.exe" />
+      <File Id="AddinJson" Source="$(var.Src)\addin.json" />
+      <File Id="UninstallPs1" Source="$(var.Src)\uninstall.ps1" />
+      <RegistryValue Root="HKCU" Key="Software\open-charts" Name="engineDir" Type="string" Value="[ENGINEDIR]" KeyPath="yes" />
+      <RemoveFolder Id="RemoveEngineDir" On="uninstall" />
+      <util:RemoveFolderEx On="uninstall" Property="ENGINEDIR_SAVED" />
+      <RemoveRegistryKey Action="removeOnUninstall" Root="HKCU" Key="Software\open-charts" />
+    </Component>
+
+    <Component Id="AddIn" Directory="ADDINSDIR" Guid="8549FD4B-21C1-47E4-9C88-A4BBA4AB67B8">
+      <File Id="Ppam" Source="$(var.Src)\open-charts.ppam" />
+      <RegistryValue Root="HKCU" Key="Software\Microsoft\Office\16.0\PowerPoint\AddIns\open-charts" Name="Path" Type="string" Value="[ADDINSDIR]open-charts.ppam" KeyPath="yes" />
+      <RegistryValue Root="HKCU" Key="Software\Microsoft\Office\16.0\PowerPoint\AddIns\open-charts" Name="AutoLoad" Type="integer" Value="1" />
+      <RegistryValue Root="HKCU" Key="Software\Microsoft\Office\16.0\PowerPoint\Security\Trusted Locations\open-charts" Name="Path" Type="string" Value="[ADDINSDIR]" />
+      <RegistryValue Root="HKCU" Key="Software\Microsoft\Office\16.0\PowerPoint\Security\Trusted Locations\open-charts" Name="Description" Type="string" Value="open-charts add-in" />
+      <RemoveRegistryKey Action="removeOnUninstall" Root="HKCU" Key="Software\Microsoft\Office\16.0\PowerPoint\AddIns\open-charts" />
+      <RemoveRegistryKey Action="removeOnUninstall" Root="HKCU" Key="Software\Microsoft\Office\16.0\PowerPoint\Security\Trusted Locations\open-charts" />
+      <!-- Only removed when empty (they are PowerPoint's and Office's folders). -->
+      <RemoveFolder Id="RemoveAddInsDir" On="uninstall" />
+      <RemoveFolder Id="RemoveMicrosoftDir" Directory="MICROSOFTDIR" On="uninstall" />
+    </Component>
+<?else?>
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="open-charts" />
+    </StandardDirectory>
+
+    <Component Id="Machine" Directory="INSTALLDIR" Guid="6A0EF478-C7B7-44E2-9D7B-5405E2A192F7">
+      <File Id="EngineExe" Source="$(var.Src)\open-charts.exe" KeyPath="yes" />
+      <File Id="Ppam" Source="$(var.Src)\open-charts.ppam" />
+      <File Id="AddinJson" Source="$(var.Src)\addin.json" />
+      <File Id="InstallPs1" Source="$(var.Src)\install.ps1" />
+      <File Id="UninstallPs1" Source="$(var.Src)\uninstall.ps1" />
+      <!-- Active Setup: Windows runs StubPath once per user at sign-in, again when Version grows. -->
+      <RegistryKey Root="HKLM" Key="Software\Microsoft\Active Setup\Installed Components\open-charts">
+        <RegistryValue Type="string" Value="open-charts" />
+        <RegistryValue Name="StubPath" Type="string" Value="powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -WindowStyle Hidden -File &quot;[INSTALLDIR]install.ps1&quot; -SkipEngineCheck" />
+        <RegistryValue Name="Version" Type="string" Value="$(var.ActiveSetupVersion)" />
+        <RegistryValue Name="IsInstalled" Type="integer" Value="1" />
+      </RegistryKey>
+    </Component>
+<?endif?>
+  </Package>
+</Wix>

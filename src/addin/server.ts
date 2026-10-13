@@ -3,6 +3,7 @@
 //   POST /api/addin/run    the warm engine: a request in, the line format out (no node start-up)
 //   GET  /api/addin/ping   liveness
 //   POST /api/addin/quit   stop (install restarts it with the new engine)
+//   GET  /api/addin/update the last "update available" check (null unless turned on, src/update.ts)
 // When the editor applies a session (docs/ux-editor.md), it tells PowerPoint to re-lay out the
 // chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro through its
 // long-lived AppleScript helper (runner.ts; on Windows a PowerShell helper calling it through COM,
@@ -30,6 +31,7 @@ import { helperPath, openPopup, popupHelper, type ChartWhere } from './popup.ts'
 import { toolbarRoutes } from './toolbar.ts';
 import { handlesController } from './handles.ts';
 import { ensureToken, readToken, tokenHeaders, withToken } from './token.ts';
+import { lastUpdateCheck, maybeCheckForUpdate } from '../update.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
@@ -345,6 +347,8 @@ export function serveAddin(port = ADDIN_PORT) {
   const owner = powerPointPid();
   const outlived = () => outlivedPowerPoint(owner);
   log(`SERVER started (pid ${process.pid}, PowerPoint ${owner ?? 'not running'})`);
+  // "Update available" (off unless the user turned it on: src/update.ts).
+  void maybeCheckForUpdate(addinHome()).then((u) => { if (u?.available) log(`UPDATE open-charts ${u.latest} is available: ${u.url}`); });
   helper.warm(); // starts the AppleScript helper (no Apple event yet), so the first Apply does not wait for it
   const retire = () => { log(`SERVER retired: PowerPoint ${owner} has quit, a new one is running`); process.exit(0); };
   // Edit data: the user is about to Apply, so open the helper's connection to PowerPoint now (one
@@ -378,6 +382,10 @@ export function serveAddin(port = ADDIN_PORT) {
   return serve(port, {}, {
     routes: async (req, res) => {
       idle();
+      if (req.method === 'GET' && req.url === '/api/addin/update') {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(lastUpdateCheck(addinHome()) ?? null));
+        return true;
+      }
       if (req.method === 'GET' && req.url === '/api/addin/handles') {
         res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(await handles.state()));
         return true;

@@ -27,7 +27,6 @@ import { buildAddin } from '../src/addin/package.ts';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const OUT = join(ROOT, 'dist', 'win');
-const BUNDLE = join(OUT, 'open-charts.cjs');
 const args = new Set(process.argv.slice(2));
 export const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 
@@ -35,7 +34,7 @@ export const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 export function assetFiles(root = ROOT): string[] {
   const walk = (dir: string): string[] => readdirSync(join(root, dir), { withFileTypes: true })
     .flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-  return [...walk('src/web'), ...walk('addin/vba'), ...walk('addin/icons')].map((p) => p.split(sep).join('/')).sort();
+  return [...walk('src/web'), ...walk('addin/vba'), ...walk('addin/icons'), ...walk('addin/applescript')].map((p) => p.split(sep).join('/')).sort();
 }
 
 /** The repo-relative path of a source file, '/'-separated: what its import.meta.url stands for. */
@@ -59,7 +58,7 @@ export function banner(assets: string[], assetHash: string): string {
   return `"use strict";
 // open-charts engine bundle (scripts/build-win.ts). Resources (by import.meta.url) resolve under
 // the repo for the plain bundle, and for the single executable under the folder its assets are
-// unpacked into: %LOCALAPPDATA%\\open-charts\\res\\<hash>.
+// unpacked into: %LOCALAPPDATA%\\open-charts\\res\\<hash> (Mac: ~/Library/Caches/open-charts/res/<hash>).
 var __ocSea = (() => { try { return require('node:sea').isSea() ? require('node:sea') : null; } catch { return null; } })();
 if (!__ocSea) globalThis.__OC_BUNDLE__ = __filename;
 var __ocRootDir;
@@ -67,7 +66,9 @@ function __ocRoot() {
   if (__ocRootDir) return __ocRootDir;
   const path = require('node:path'), fs = require('node:fs');
   if (!__ocSea) return (__ocRootDir = path.resolve(__dirname, '..', '..'));
-  const root = path.join(process.env.LOCALAPPDATA || require('node:os').tmpdir(), 'open-charts', 'res', ${JSON.stringify(assetHash)});
+  const os = require('node:os');
+  const base = process.env.LOCALAPPDATA || (process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Caches') : os.tmpdir());
+  const root = path.join(base, 'open-charts', 'res', ${JSON.stringify(assetHash)});
   if (!fs.existsSync(path.join(root, '.complete'))) {
     const tmp = root + '.' + process.pid + '.tmp';
     for (const key of ${JSON.stringify(assets)}) {
@@ -84,11 +85,19 @@ function __ocUrl(rel) { return require('node:url').pathToFileURL(require('node:p
 `;
 }
 
-async function bundle(assets: string[], assetHash: string) {
+/** The files to embed and their hash (which names the folder they are unpacked into). */
+export function engineAssets(): { assets: string[]; assetHash: string } {
+  const assets = assetFiles();
+  const assetHash = createHash('sha256').update(assets.map((a) => `${a}\0${sha256(join(ROOT, a))}`).join('\n')).digest('hex').slice(0, 16);
+  return { assets, assetHash };
+}
+
+/** esbuild bundle of the engine at `outfile` (two folders below the repo, e.g. dist/win/open-charts.cjs). */
+export async function bundle(outfile: string, assets: string[], assetHash: string) {
   const esbuild = await import('esbuild');
   await esbuild.build({
     entryPoints: [join(ROOT, 'src', 'cli.ts')],
-    outfile: BUNDLE,
+    outfile,
     bundle: true,
     platform: 'node',
     format: 'cjs',
@@ -140,22 +149,25 @@ async function download(url: string): Promise<Buffer> {
   }
 }
 
-/** The official node.exe of this Node version, verified against nodejs.org's SHASUMS256.txt (cached). */
-async function officialNodeExe(version = process.version): Promise<string> {
+/**
+ * A file of the official Node release of this version (e.g. 'win-x64/node.exe',
+ * 'node-v24.1.0-darwin-arm64.tar.gz'), verified against nodejs.org's SHASUMS256.txt and cached.
+ */
+export async function officialNodeFile(name: string, version = process.version): Promise<string> {
   const base = `https://nodejs.org/dist/${version}`;
   const cacheDir = join(process.env.OPEN_CHARTS_CACHE || join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'open-charts'), 'node');
-  const file = join(cacheDir, `node-${version}-win-x64.exe`);
+  const file = join(cacheDir, name === 'win-x64/node.exe' ? `node-${version}-win-x64.exe` : name);
   const sums = (await download(`${base}/SHASUMS256.txt`)).toString('utf8');
-  const expected = shasumFor(sums, 'win-x64/node.exe');
-  if (!expected) throw new Error(`no win-x64/node.exe in ${base}/SHASUMS256.txt`);
+  const expected = shasumFor(sums, name);
+  if (!expected) throw new Error(`no ${name} in ${base}/SHASUMS256.txt`);
   if (existsSync(file) && sha256(file) === expected) return file;
-  console.log(`Downloading ${base}/win-x64/node.exe`);
-  const bytes = await download(`${base}/win-x64/node.exe`);
+  console.log(`Downloading ${base}/${name}`);
+  const bytes = await download(`${base}/${name}`);
   const got = createHash('sha256').update(bytes).digest('hex');
-  if (got !== expected) throw new Error(`node.exe checksum mismatch: got ${got}, SHASUMS256.txt says ${expected}`);
+  if (got !== expected) throw new Error(`${name} checksum mismatch: got ${got}, SHASUMS256.txt says ${expected}`);
   mkdirSync(cacheDir, { recursive: true });
   writeFileSync(file, bytes);
-  console.log(`node.exe ${version} verified (sha256 ${got})`);
+  console.log(`${name} ${version} verified (sha256 ${got})`);
   return file;
 }
 
@@ -177,7 +189,7 @@ export function stripSignature(pe: Buffer): Buffer {
   return offset + size >= pe.length - 7 ? pe.subarray(0, offset) : pe; // the table is at the end (8-byte aligned)
 }
 
-async function seaBlob(main: string, blob: string, assets: string[]) {
+export async function seaBlob(main: string, blob: string, assets: string[]) {
   const config = join(dirname(blob), 'sea-config.json');
   writeFileSync(config, JSON.stringify({
     main, output: blob, disableExperimentalSEAWarning: true, useSnapshot: false, useCodeCache: false,
@@ -186,7 +198,7 @@ async function seaBlob(main: string, blob: string, assets: string[]) {
   execFileSync(process.execPath, ['--experimental-sea-config', config], { stdio: 'inherit' });
 }
 
-async function inject(exe: string, blob: string, macho = false) {
+export async function inject(exe: string, blob: string, macho = false) {
   const { inject: postject } = await import('postject');
   await postject(exe, 'NODE_SEA_BLOB', readFileSync(blob), { sentinelFuse: SEA_FUSE, ...(macho ? { machoSegmentName: 'NODE_SEA' } : {}) });
 }
@@ -194,9 +206,9 @@ async function inject(exe: string, blob: string, macho = false) {
 async function main() {
   rmSync(OUT, { recursive: true, force: true });
   mkdirSync(OUT, { recursive: true });
-  const assets = assetFiles();
-  const assetHash = createHash('sha256').update(assets.map((a) => `${a}\0${sha256(join(ROOT, a))}`).join('\n')).digest('hex').slice(0, 16);
-  await bundle(assets, assetHash);
+  const { assets, assetHash } = engineAssets();
+  const BUNDLE = join(OUT, 'open-charts.cjs');
+  await bundle(BUNDLE, assets, assetHash);
   console.log(`Bundled ${rel(BUNDLE)} (${statSync(BUNDLE).size} bytes, ${assets.length} assets)`);
 
   const built = buildAddin();
@@ -212,7 +224,7 @@ async function main() {
   await seaBlob(BUNDLE, blob, assets);
   const exe = join(OUT, 'open-charts.exe');
   // Unsigned before injecting too: postject (LIEF) otherwise warns that the signature is corrupted.
-  writeFileSync(exe, stripSignature(readFileSync(await officialNodeExe())));
+  writeFileSync(exe, stripSignature(readFileSync(await officialNodeFile('win-x64/node.exe'))));
   await inject(exe, blob);
   writeFileSync(exe, stripSignature(readFileSync(exe)));
   console.log(`Wrote ${rel(exe)} (${statSync(exe).size} bytes, Node ${process.version})`);

@@ -19,7 +19,7 @@ Install steps are in the [README](../README.md#install-on-windows). Troubleshoot
 | Edit data window | the resident pop-up helper (`OpenChartsPopup.app`), next to the chart | Microsoft Edge in app mode (a window without tabs or address bar) next to the chart; the default browser if Edge is missing |
 | Element mini toolbar | a panel of the pop-up helper | not yet: on Windows, selecting a chart element makes no call, so it never slows PowerPoint down |
 | Add-in log | `~/Library/Application Support/open-charts/addin.log` | `%LOCALAPPDATA%\open-charts\addin.log` |
-| Install | `open-charts addin install` | `install.ps1` (per user, no admin rights) |
+| Install | `open-charts-<version>.pkg` (per user), or `open-charts addin install` from source | `open-charts-<version>.msi` (per user, no admin rights; `-machine.msi` for IT), or `install.ps1` |
 
 The VBA picks its path with `#If Mac Then … #Else … #End If`. The Mac compiles exactly the code it
 compiled before Windows support was added (`test/windows.test.ts` checks this). The Windows branch
@@ -49,6 +49,8 @@ This runs on macOS, Linux or Windows, and writes `dist/win/`:
 | `addin.json` | Its callback prefix, which the server needs to run `ApplyEdit`. |
 | `install.ps1`, `uninstall.ps1` | Per-user install and removal. |
 | `e2e-powerpoint-win.ps1` | The acceptance run for a real PC (below). |
+
+On Windows, `npm run build:msi` then wraps this folder into the MSIs ([release.md](release.md#windows-the-msis-scriptsbuild-msits-addinwindowsopen-chartswxs)).
 
 How `open-charts.exe` is made (`scripts/build-win.ts`):
 
