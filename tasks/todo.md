@@ -58,6 +58,8 @@ Rules for this plan
       Mac VBA `Not` on a PowerPoint True of 1 (label commands saw no label), PowerPoint relaunched by
       a re-measure as it quit, AppleScriptTask returning "" now and then, updates needing a restart
 - [ ] D3 Windows live run on the owner's think-cell laptop (script → zip) and fixes
+      (DEFERRED by the owner 2026-10-13 until a Windows laptop is available. Ready: CI artifact
+      open-charts-win + tools/e2e-powerpoint-win.ps1; README "Install on Windows" has the steps)
 - [ ] D4 Office.js live self-test (Mac) + Windows + PowerPoint on the web
       (DEFERRED by the owner 2026-10-13: the beta ships the .pkg/.msi add-in; Office.js is not part of it.
       When resumed: copy dist/officejs/manifest.xml into PowerPoint's wef folder with Finder, then
@@ -90,7 +92,7 @@ Rules for this plan
 - Q4 Which fonts do target decks use? Share one typical client template if possible.
 - Q5 (answered 2026-10-13: relative % default, freeze now)
 - Q6 (answered 2026-10-13: keep "open-charts", publish now)
-- Q7 When can the Windows laptop run the test script; can it install unsigned software today?
+- Q7 (answered 2026-10-13: unsigned is OK; run deferred until a Windows laptop is available)
 
 ## Questions for the reference session
 - How is it installed on Windows in companies (per-user vs per-machine MSI, COM add-in + .ppam, LoadBehavior,
