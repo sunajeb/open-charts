@@ -15,9 +15,10 @@
 //   session's chart, state "applied" → applyInPowerPoint → ApplyEdit draws it.
 //
 // The controls come from the property-applicability table (ELEMENT_PROPERTIES / propertiesFor in
-// src/core/overrides.ts). Until that module is on this branch a small built-in table with the same
-// names stands in (FALLBACK), so the toolbar works the same once it lands: the page renders the
-// properties it has a control for (fill, size, rotate today) and ignores the rest.
+// src/core/overrides.ts): the page renders the properties it has a control for (fill, size, bold,
+// text colour, rotate today; one renderer each in src/web/toolbar.html CONTROLS) and skips the rest.
+// To add a control: add a renderer there keyed by the property name. A built-in table with the same
+// names (FALLBACK) stands in if that module cannot be loaded (an older engine copy).
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getSession, setSession, type Session } from '../server.ts';

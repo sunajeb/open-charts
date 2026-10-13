@@ -91,7 +91,7 @@ PowerPoint runs.
 
 **Selecting part of a chart.** Click a chart once to select it, then click a label or a bar inside
 it: a small toolbar appears above the selection with the formatting that piece takes (today fill
-colour, text size and text direction; more as per-element formatting grows). A click there restyles
+colour, text size, bold, text colour and text direction, as each piece allows; more to come). A click there restyles
 just those elements and redraws the chart; the change is stored in the chart's data, so it survives
 Update chart, resizing and Edit data. The toolbar steps aside while you drag and hides when nothing
 in a chart is selected. Telling the toolbar about a selection costs PowerPoint one short call (about

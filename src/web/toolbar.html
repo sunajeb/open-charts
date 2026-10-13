@@ -62,6 +62,18 @@ const CONTROLS = {
     const plus = Object.assign(document.createElement('button'), { textContent: 'A+', title: 'Larger text', onclick: step(1) });
     return [minus, out, plus];
   },
+  bold: () => {
+    const b = Object.assign(document.createElement('button'), { textContent: 'B', title: 'Bold', onclick: () => format({ bold: !style.bold }) });
+    b.style.fontWeight = '700';
+    b.setAttribute('aria-pressed', String(!!style.bold));
+    return [b];
+  },
+  color: () => ['#1C2330', '#FFFFFF', '#1F3A5F', '#A8461A', '#2F6B45'].map((c) => {
+    const b = Object.assign(document.createElement('button'), { textContent: 'A', title: `Text colour ${c}`, onclick: () => format({ color: c }) });
+    Object.assign(b.style, { color: c, fontWeight: '700', textShadow: c === '#FFFFFF' ? '0 0 1px #000' : '' });
+    b.setAttribute('aria-pressed', String((style.color ?? '').toUpperCase() === c));
+    return b;
+  }),
   rotate: () => [[-90, '⟲', 'Text turned 90° left'], [0, '—', 'Horizontal text'], [90, '⟳', 'Text turned 90° right']].map(([v, t, title]) => {
     const b = Object.assign(document.createElement('button'), { textContent: t, title, onclick: () => format({ rotate: v }) });
     b.setAttribute('aria-pressed', String((style.rotate ?? 0) === v));
