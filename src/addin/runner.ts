@@ -61,7 +61,7 @@ export function macroRunner(command = 'osascript', args = ['-l', 'JavaScript', '
   const start = () => {
     if (child && child.exitCode === null && !child.killed) return child;
     buffer = '';
-    const c = spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'] });
+    const c = spawn(command, args, { stdio: ['pipe', 'pipe', 'ignore'], windowsHide: true });
     c.stdout!.setEncoding('utf8');
     c.stdout!.on('data', (d: string) => {
       buffer += d;

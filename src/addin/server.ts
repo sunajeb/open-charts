@@ -5,7 +5,8 @@
 //   POST /api/addin/quit   stop (install restarts it with the new engine)
 // When the editor applies a session (docs/ux-editor.md), it tells PowerPoint to re-lay out the
 // chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro through its
-// long-lived AppleScript helper (runner.ts) and records the outcome on the session ("drawn" or
+// long-lived AppleScript helper (runner.ts; on Windows a PowerShell helper calling it through COM,
+// win.ts) and records the outcome on the session ("drawn" or
 // "error" with a message) for the editor to show.
 //
 // The server belongs to the PowerPoint that started it (the bridge spawns it): macOS attributes the
@@ -24,6 +25,7 @@ import { createMeasurer } from '../fonts.ts';
 import type { Measurer } from '../core/index.ts';
 import { contextOf, handleRequest, layoutForApply, parseRequest, rememberContext, type Sessions } from './engine.ts';
 import { macroRunner, type MacroResult } from './runner.ts';
+import { openUrl, powershellRunner, selfCommand } from './win.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
@@ -45,7 +47,8 @@ const ping = (base = BASE) => fetch(`${base}/api/addin/ping`, { signal: AbortSig
 /** Starts the server in the background unless it is already up. */
 export async function ensureServer(base = BASE): Promise<boolean> {
   if (await ping(base)) return true;
-  spawn(process.execPath, ['--experimental-strip-types', '--no-warnings', CLI.pathname, 'addin', 'serve'], { detached: true, stdio: 'ignore' }).unref();
+  const [command, args] = selfCommand(CLI, ['addin', 'serve']);
+  spawn(command, args, { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   for (let i = 0; i < 60; i++) {
     await new Promise((r) => setTimeout(r, 100));
     if (await ping(base)) return true;
@@ -54,7 +57,7 @@ export async function ensureServer(base = BASE): Promise<boolean> {
 }
 
 /** Edit sessions over HTTP (works from the server itself and from a one-off `addin run`). */
-export function httpSessions(base = BASE, open = (url: string) => { spawn('open', [url], { stdio: 'ignore', detached: true }).unref(); }): Sessions {
+export function httpSessions(base = BASE, open = (url: string) => openUrl(url)): Sessions {
   return {
     async get(id) {
       try {
@@ -110,6 +113,7 @@ export function editorPage(id: string, chart: unknown): string | undefined {
 
 /** PowerPoint's process id while it is running (pgrep: no Apple event, no permission prompt). */
 export function powerPointPid(): number | undefined {
+  if (process.platform === 'win32') return undefined; // no Apple events on Windows: nothing to outlive
   try {
     return Number(execFileSync('pgrep', ['-x', 'Microsoft PowerPoint'], { encoding: 'utf8' }).trim().split('\n')[0]) || undefined;
   } catch { return undefined; }
@@ -156,8 +160,11 @@ export function parseApplyAnswer(out: string): { lines: string[]; context?: stri
 const sinceMidnight = (ms: number) => { const d = new Date(ms); return (ms - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 1000; };
 
 /** What the user should be told when `run VB macro` failed (the Apple event's error, or a timeout). */
-export function applyErrorMessage(err: { message: string; killed?: boolean }): string {
+export function applyErrorMessage(err: { message: string; killed?: boolean }, platform = process.platform): string {
   const text = err.message;
+  if (platform === 'win32' && (err.killed || /timed out/i.test(text))) {
+    return 'PowerPoint did not respond. Close any open dialog in PowerPoint (and leave text editing), then Apply again.';
+  }
   if (err.killed || /-1712\b|timed out/i.test(text)) {
     return 'PowerPoint did not respond. If macOS is asking whether PowerPoint may control PowerPoint, click Allow in that dialog, then Apply again.';
   }
@@ -171,7 +178,8 @@ export function applyErrorMessage(err: { message: string; killed?: boolean }): s
 
 /** Runs a macro of the add-in in PowerPoint (`run VB macro`): its return value, or the error. */
 export type Run = (macro: string, args: string[], timeoutMs: number) => Promise<MacroResult>;
-const helper = macroRunner();
+// Windows: PowerShell + COM (win.ts); Mac: JavaScript for Automation.
+const helper = process.platform === 'win32' ? powershellRunner() : macroRunner();
 const helperRun: Run = (macro, args, timeoutMs) => helper.run(macro, args, timeoutMs);
 
 /** Lays an applied session's chart out for a chart context (layoutForApply with the server's measurer). */

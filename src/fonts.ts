@@ -12,17 +12,19 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { fontMetrics, measurerFromMetrics, type FontMetrics, type Measurer } from './core/text.ts';
 
+// Windows keeps its fonts in %WINDIR%\Fonts (C:\Windows\Fonts on almost every PC).
+const WINDOWS_FONTS = `${process.env.WINDIR ?? process.env.SystemRoot ?? 'C:\\Windows'}\\Fonts`;
 // Arial or a metric-compatible substitute (Liberation Sans, Arimo) gives widths that match PowerPoint.
 const REGULAR = [
   '/System/Library/Fonts/Supplemental/Arial.ttf',
-  'C:\\Windows\\Fonts\\arial.ttf',
+  `${WINDOWS_FONTS}\\arial.ttf`,
   '/usr/share/fonts/truetype/msttcorefonts/Arial.ttf',
   '/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf',
   '/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf',
 ];
 const BOLD = [
   '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
-  'C:\\Windows\\Fonts\\arialbd.ttf',
+  `${WINDOWS_FONTS}\\arialbd.ttf`,
   '/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf',
   '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf',
   '/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf',
