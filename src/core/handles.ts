@@ -191,7 +191,12 @@ export function resetSpec(spec: ChartSpec, h: DragHandle): ChartSpec {
       if (!a || a.position === undefined) return spec;
       return withOptions(spec, { levelArrows: arrows!.map((x, i) => { if (i !== h.index) return x; const { position: _, ...rest } = x; return rest; }) });
     }
-    case 'label': return h.role ? unpinElement(spec, h.role) : spec;
+    case 'label': {
+      if (!h.role) return spec;
+      const out = unpinElement(spec, h.role);
+      if (out !== spec && out.overrides && !Object.keys(out.overrides).length) delete out.overrides;
+      return out;
+    }
   }
 }
 
