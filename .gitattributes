@@ -1,0 +1,3 @@
+# LF everywhere, also in Windows checkouts: tests compare text, the VBA source is hashed into the
+# add-in build, and PowerShell reads LF scripts fine.
+* text=auto eol=lf

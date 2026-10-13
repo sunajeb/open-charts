@@ -32,7 +32,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
         .then((out) => { process.stdout.write(out); });
     }
     case 'serve':
-      serveAddin();
+      serveAddin(Number(process.env.OPEN_CHARTS_PORT) || undefined); // another port: tests only (the add-in uses 4174)
       return;
     case 'types':
       for (const g of galleryItems()) {
