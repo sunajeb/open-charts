@@ -30,9 +30,9 @@ test('every shape of every chart type has a role in the shared format', () => {
     base('stacked', { cagr: { from: 0, to: 3 }, difference: { from: 1, to: 3 }, valueAxis: true }),
     base('clustered', { valueAxis: true }),
     base('percent', { seriesLabels: 'legend' }),
-    base('stacked', { orientation: 'horizontal', cagr: { from: 0, to: 3 }, valueAxis: true }),
-    base('clustered', { orientation: 'horizontal' }),
-    base('percent', { orientation: 'horizontal' }),
+    base('stacked', { direction: 'right', cagr: { from: 0, to: 3 }, valueAxis: true }),
+    base('clustered', { direction: 'right' }),
+    base('percent', { direction: 'right' }),
     base('line', { seriesLabels: 'legend' }),
     base('line'),
     { ...base('waterfall', { valueAxis: true }), series: [{ name: 'A', values: [10, 3, -2, null] }] },
@@ -42,7 +42,7 @@ test('every shape of every chart type has a role in the shared format', () => {
   for (const spec of specs) {
     const scene = layoutChart(spec, F, m);
     assert.equal(scene.roles!.length, scene.shapes.length, spec.type);
-    for (const r of scene.roles!) assert.match(r, ROLE, `${spec.type} ${spec.options?.orientation ?? ''}`);
+    for (const r of scene.roles!) assert.match(r, ROLE, `${spec.type} ${spec.options?.direction ?? ''}`);
   }
   const s = layoutChart(base('stacked', { cagr: { from: 0, to: 3 } }), F, m);
   assert.ok(s.roles!.includes('bar:s1:c3') && s.roles!.includes('label:total:c0') && s.roles!.includes('arrow:cagr'));
@@ -107,7 +107,7 @@ test('B5: null in a clustered chart draws no bar and no label', () => {
   assert.equal(byRole(scene, /^label:value:s0:c1$/).length, 0);
   assert.equal(byRole(scene, /^bar:/).length, 3);
   assert.ok(!textsOf(scene, /^label:value:/).includes('0'));
-  const h = layoutChart({ type: 'clustered', categories: ['a', 'b'], series: [{ name: 'x', values: [5, null] }], options: { orientation: 'horizontal' } }, F, m);
+  const h = layoutChart({ type: 'clustered', categories: ['a', 'b'], series: [{ name: 'x', values: [5, null] }], options: { direction: 'right' } }, F, m);
   assert.equal(byRole(h, /^bar:/).length, 1);
 });
 
@@ -256,7 +256,7 @@ test('B15: validation is path-addressed and catches bad numbers, names, colours 
       { name: 'x', values: [1, '2', Infinity, 4] },
       { name: 'y', values: [1, 2, 'e'] },
     ],
-    options: { cagr: { from: 1, to: 1 }, decimals: 1.5, bogus: true, orientation: 'sideways', unit: { text: '$', position: 'left' } },
+    options: { cagr: { from: 1, to: 1 }, decimals: 1.5, bogus: true, direction: 'sideways', unit: { text: '$', position: 'left' } },
   });
   const paths = Object.fromEntries(errs.map((e) => [e.path, e.message]));
   assert.match(paths['/categories/2'], /string/);
@@ -270,11 +270,12 @@ test('B15: validation is path-addressed and catches bad numbers, names, colours 
   assert.match(paths['/options/cagr/to'], /different/);
   assert.match(paths['/options/decimals'], /whole number/);
   assert.match(paths['/options/bogus'], /unknown property/);
-  assert.match(paths['/options/orientation'], /vertical, horizontal/);
+  assert.match(paths['/options/direction'], /up, down, left, right for stacked charts, got string "sideways"/);
   assert.match(paths['/options/unit/position'], /prefix/);
   assert.deepEqual(validateSpec(base('stacked')), []);
   assert.deepEqual(validateSpec({ ...base('waterfall'), series: [{ name: 'a', values: [1, 2, -1, 'e'] }] }), []);
-  assert.deepEqual(validateSpec({ ...base('line', { orientation: 'horizontal' }) }), [{ path: '/options/orientation', message: 'not used by line charts (only stacked, clustered, percent)' }]);
+  assert.deepEqual(validateSpec({ ...base('line', { direction: 'down' }) }), [{ path: '/options/direction', message: 'must be one of up, left, right for line charts, got string "down"' }]);
+  assert.match(validateSpec({ ...base('pie', { direction: 'right' }) })[0].message, /not used by pie charts/);
 });
 
 test('B15: layoutChart throws one error listing every "/path: message"', () => {
@@ -325,7 +326,7 @@ test('spec v1: migrate stamps v0 losslessly; decks too; newer versions are rejec
 
 /** A valid value for each option on a chart whose categories are dates, for applicability tests. */
 const SAMPLE_OPTION: Record<string, unknown> = {
-  unit: 'm', decimals: 1, format: '#,##0', locale: 'de-DE', scale: 'k', orientation: 'horizontal',
+  unit: 'm', decimals: 1, format: '#,##0', locale: 'de-DE', scale: 'k', direction: 'right',
   valueAxis: true, zeroBased: true, gap: 0.3, seriesLabels: 'legend', totals: true,
   cagr: { from: 0, to: 1 }, difference: { from: 0, to: 1 }, totalsAt: [0], step: true, percentData: true,
   combo: 'clustered', mekko: 'unit', sort: 'reverse', axisTitles: { x: 'x' }, sizeLegend: true,
@@ -436,7 +437,7 @@ test('horizontal stacked bars: categories on the left, bars grow right, totals b
   const scene = layoutChart({
     type: 'stacked', categories: ['North America', 'Europe', 'Asia Pacific'],
     series: [{ name: 'Enterprise', values: [40, 30, 20] }, { name: 'SMB', values: [10, 12, 8] }],
-    options: { orientation: 'horizontal', difference: { from: 0, to: 2 } },
+    options: { direction: 'right', difference: { from: 0, to: 2 } },
   }, F, m);
   const bars = byRole(scene, /^bar:/) as RectShape[];
   const cats = byRole(scene, /^label:category:/) as TextShape[];
@@ -455,13 +456,13 @@ test('horizontal clustered and percent bars pass the strict gate', () => {
   const clustered = layoutChart({
     type: 'clustered', categories: ['North America', 'Europe', 'Asia Pacific', 'Latin America'],
     series: [{ name: 'Enterprise', values: [38, 31, -5, 22] }, { name: 'Mid-market', values: [29, 26, 24, null] }],
-    options: { orientation: 'horizontal', unit: '%', valueAxis: true },
+    options: { direction: 'right', unit: '%', valueAxis: true },
   }, F, m);
   assert.deepEqual(checkScene(clustered, { strict: true, measurer: m }), []);
   const neg = byRole(clustered, /^bar:s0:c2$/)[0] as RectShape;
   const negLabel = byRole(clustered, /^label:value:s0:c2$/)[0] as TextShape;
   assert.ok(negLabel.x + negLabel.w <= neg.x + 0.01, 'negative label sits left of its bar');
-  const pct = layoutChart({ ...base('percent', { orientation: 'horizontal' }) }, F, m);
+  const pct = layoutChart({ ...base('percent', { direction: 'right' }) }, F, m);
   const shares = textsOf(pct, /^label:value:s\d+:c0$/).map((t) => parseFloat(t));
   assert.equal(shares.reduce((a, b) => a + b, 0), 100);
   assert.deepEqual(checkScene(pct, { strict: true, measurer: m }).filter((i) => i.kind !== 'hidden'), []);

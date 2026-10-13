@@ -36,10 +36,10 @@ export const DIRECTIONS = {
   percent: ['up', 'down', 'left', 'right'],
   waterfall: ['up', 'down', 'left', 'right'],
   mekko: ['up', 'down', 'left', 'right'],
-  combo: ['up', 'down', 'left', 'right'],
   line: ['up', 'left', 'right'],
   area: ['up', 'left', 'right'],
   area100: ['up', 'left', 'right'],
+  combo: ['up', 'down', 'left', 'right'],
 } as const satisfies Partial<Record<ChartTypeName, readonly Direction[]>>;
 export type Direction = 'up' | 'down' | 'left' | 'right';
 /** Directions a chart type can be drawn in (`['up']` for the types without arrows). */

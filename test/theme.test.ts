@@ -153,16 +153,16 @@ test('same scale: charts in one group draw one unit equally long; the largest sc
   assert.deepEqual(bars(alone).map((b) => b.h), bars(sa).map((b) => b.h));
 });
 
-test('same scale: works with value axes on and both orientations; other groups are independent', () => {
-  for (const orientation of ['vertical', 'horizontal'] as const) {
-    const a = stacked([20, 30, 47], { options: { scaleGroup: 'g', valueAxis: true, orientation } });
-    const b = stacked([2, 3, 4], { options: { scaleGroup: 'g', valueAxis: true, orientation } });
-    const c = stacked([2, 3, 4], { options: { scaleGroup: 'other', orientation } });
+test('same scale: works with value axes on and in every direction; other groups are independent', () => {
+  for (const direction of ['up', 'down', 'left', 'right'] as const) {
+    const a = stacked([20, 30, 47], { options: { scaleGroup: 'g', valueAxis: true, direction } });
+    const b = stacked([2, 3, 4], { options: { scaleGroup: 'g', valueAxis: true, direction } });
+    const c = stacked([2, 3, 4], { options: { scaleGroup: 'other', direction } });
     const [sa, sb, sc] = layoutGroup([{ spec: a, frame: half(0) }, { spec: b, frame: half(1) }, { spec: c, frame: half(1) }], m);
-    assert.ok(Math.abs(sa.valueScale!.ptPerUnit - sb.valueScale!.ptPerUnit) < 1e-6, orientation);
+    assert.ok(Math.abs(sa.valueScale!.ptPerUnit - sb.valueScale!.ptPerUnit) < 1e-6, direction);
     assert.equal(sc.valueScale!.ptPerUnit, sc.valueScale!.own, 'a group of one keeps its own scale');
-    const len = (r: RectShape) => (orientation === 'vertical' ? r.h : r.w);
-    assert.ok(Math.abs(len(barOf(sb, 'bar:s0:c0')) / len(barOf(sa, 'bar:s0:c0')) - 2 / 20) < 0.01, orientation);
+    const len = (r: RectShape) => (direction === 'up' || direction === 'down' ? r.h : r.w);
+    assert.ok(Math.abs(len(barOf(sb, 'bar:s0:c0')) / len(barOf(sa, 'bar:s0:c0')) - 2 / 20) < 0.01, direction);
   }
 });
 
