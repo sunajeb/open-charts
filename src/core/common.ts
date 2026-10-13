@@ -6,7 +6,7 @@ import { spread } from './place.ts';
 import { parseCategoryDate } from './dates.ts';
 import { TooSmall } from './minsize.ts';
 import { appliesTo, optionDefaults } from './spec.ts';
-import { styleMark, styleText, labelContent, type ContentSource, type ElementStyle, type OverrideCtx } from './overrides.ts';
+import { pinText, styleMark, styleText, labelContent, type ContentSource, type ElementStyle, type OverrideCtx } from './overrides.ts';
 
 /** Inputs to one layout that come from outside the chart's spec. */
 export interface LayoutHints {
@@ -85,7 +85,6 @@ export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer
     color: (i) => (spec.series[i]?.color ?? style.palette[i % style.palette.length]).replace('#', ''),
     add(role, ...list) {
       const st = ov?.get(role);
-      if (st?.detach) return; // converted to plain text: the host owns it now
       for (const s of list) { shapes.push(st ? styleMark(s, st, role, ov!) : s); roles.push(role); }
     },
     fmt: (v, opts = {}) => formatValue(opts.scaled ? v : v / scale.div, {
@@ -105,10 +104,10 @@ export function text(ctx: Ctx, role: string, t: TextInput) {
   };
   const st = ctx.ov?.get(role);
   if (!st) { ctx.add(role, shape); return; }
-  if (st.detach) return;
   const hasMark = ctx.roles.some((r, i) => r === role && (ctx.shapes[i].kind === 'rect' || ctx.shapes[i].kind === 'path'));
   // Pushed directly: ctx.add would apply the role's fill / outline to the text a second time.
-  ctx.shapes.push(styleText(shape, st, role, contentSource(ctx), ctx.ov!, ctx.m, hasMark));
+  const styled = styleText(shape, st, role, contentSource(ctx), ctx.ov!, ctx.m, hasMark);
+  ctx.shapes.push(st.pin ? pinText(styled, st.pin, ctx.frame) : styled);
   ctx.roles.push(role);
 }
 

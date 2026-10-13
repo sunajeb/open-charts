@@ -22,8 +22,8 @@
 // optionally with a tint / shade ("accent1-lighter40", "accent1-darker25": TintAndShade ±0.4); "" = none.
 // Per-element overrides (core/overrides.ts) arrive as: `font` per shape (a font name, or the theme's
 // "+mj-lt" / "+mn-lt"), `dash` 0 | 1 | dot, `rotate` -90 | 90 | "" (text direction: TextFrame
-// Orientation upward / downward), `arrowStart` 0 | 1, and `plain` 1 for an element converted to
-// plain text: VBA draws it outside the chart group, without OC_ROLE (the `detach` op).
+// Orientation upward / downward), `arrowStart` 0 | 1, and `pattern`: an OOXML preset pattern
+// (dkUpDiag, narVert, …) VBA draws with Fill.Patterned in the fill colour on the background.
 import type { PathCmd, Shape, TextShape } from '../core/types.ts';
 import { flattenPath } from '../core/path.ts';
 import { colorHex, colorSlot } from '../core/theme.ts';
@@ -33,7 +33,7 @@ export const FORMAT_VERSION = '2';
 export const SHAPE_COLUMNS = [
   'kind', 'x', 'y', 'w', 'h', 'fill', 'lineColor', 'lineWidth', 'dash', 'arrowEnd',
   'text', 'font', 'size', 'bold', 'color', 'align', 'valign', 'wrap', 'autosize',
-  'role', 'name', 'points', 'textGeom', 'rotate', 'arrowStart', 'plain',
+  'role', 'name', 'points', 'textGeom', 'rotate', 'arrowStart', 'pattern',
 ] as const;
 
 export type ShapeRecord = Record<(typeof SHAPE_COLUMNS)[number], string>;
@@ -76,17 +76,17 @@ const ALIGN = { left: 'l', center: 'c', right: 'r' } as const;
 const VALIGN = { top: 't', middle: 'm', bottom: 'b' } as const;
 
 /** One S record. Unknown shape kinds throw, so a newer engine never silently drops shapes. */
-export function shapeRecord(s: Shape, font: string, role = '', name = '', plain = false): string {
+export function shapeRecord(s: Shape, font: string, role = '', name = ''): string {
   const any = s as Shape & Record<string, unknown>;
   const base: ShapeRecord = Object.fromEntries(SHAPE_COLUMNS.map((c) => [c, ''])) as ShapeRecord;
-  Object.assign(base, { dash: '0', arrowEnd: '0', bold: '0', wrap: '0', autosize: '0', arrowStart: '0', plain: flag(plain), role, name });
+  Object.assign(base, { dash: '0', arrowEnd: '0', bold: '0', wrap: '0', autosize: '0', arrowStart: '0', role, name });
   switch (any.kind) {
     case 'rect': {
       const r = s as Extract<Shape, { kind: 'rect' }> & { geom?: string };
       const kind = r.geom && r.geom !== 'rect' ? r.geom : r.ellipse ? 'ellipse' : 'rect';
       Object.assign(base, {
         kind, x: num(r.x), y: num(r.y), w: num(r.w), h: num(r.h), fill: hex(r.fill),
-        lineColor: hex(r.stroke), lineWidth: r.stroke ? num(r.strokeWidth ?? 0.75) : '', dash: dash(r.dash),
+        lineColor: hex(r.stroke), lineWidth: r.stroke ? num(r.strokeWidth ?? 0.75) : '', dash: dash(r.dash), pattern: r.pattern ?? '',
       });
       break;
     }
@@ -116,7 +116,7 @@ export function shapeRecord(s: Shape, font: string, role = '', name = '', plain 
       Object.assign(base, {
         kind: 'path', x: num(b.x0), y: num(b.y0), w: num(b.x1 - b.x0), h: num(b.y1 - b.y0),
         fill: hex(p.fill), lineColor: hex(p.stroke), lineWidth: p.stroke ? num(p.strokeWidth ?? 0.75) : '',
-        dash: dash(p.dash as boolean | 'dot' | undefined),
+        dash: dash(p.dash as boolean | 'dot' | undefined), pattern: (any.pattern as string | undefined) ?? '',
         // "x,y x,y ...", sub-paths separated by "|", a trailing "z" marks a closed sub-path.
         points: subs.map((sp) => sp.points.map((p) => `${num(p.x)},${num(p.y)}`).join(' ') + (sp.closed ? ' z' : '')).join('|'),
       });

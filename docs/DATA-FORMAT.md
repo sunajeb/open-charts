@@ -900,6 +900,7 @@ Which properties an element takes depends on its kind, read from the first part 
 | `align` | label, axis | `left` `center` `right` |
 | `rotate` | label, axis | `-90` (90° left) `0` `90` (90° right) |
 | `fill` | segment, marker, label, legend, decoration | colour or `none` |
+| `pattern` | segment | OOXML preset pattern (`dkUpDiag`, `narVert`, `lgConfetti`, `zigZag`, …) or `none` |
 | `outline` | segment, marker, label, decoration | colour or `none` |
 | `outlineWidth` | segment, marker, label, decoration | points 0–20 |
 | `outlineDash` | segment, marker | `solid` `dash` `dot` |
@@ -908,7 +909,8 @@ Which properties an element takes depends on its kind, read from the first part 
 | `dash` | line, decoration, axis | `solid` `dash` `dot` |
 | `arrowheads` | line, decoration | `none` `start` `end` `both` |
 | `marker` | marker | `circle` `square` `diamond` `triangle` `none` |
-| `detach` | label | `true`: convert to plain text |
+| `pin` | label | `{x, y}`: centre as fractions 0–1 of the frame |
+| `detach` | label | `true`: converted to plain text (static `content`) |
 
 **Content.** Fields are shown in their order, joined by `separator`: `value` (the element's value;
 a category / series label: its total), `percent` (share of the category; pie and doughnut: of the
@@ -927,10 +929,24 @@ checked for collisions at its overridden content, size and direction (turned cat
 taller axis), so they survive data edits, resizing and Update. The editor's datasheet renames keys
 when you insert or delete a series or category, so an override stays on its element; a key that
 matches nothing drawn (say a category deleted elsewhere) is reported as a warning, never an error.
-Formatting made with PowerPoint's own tools on a chart's shapes is redrawn from the spec on the next
-update — put it in `overrides` instead. `"detach": true` ("convert to plain text") is the exception:
-the engine stops drawing that label and the add-in leaves a plain copy outside the chart group that
-is yours to edit.
+**Patterns** are the OOXML preset patterns (`pct5`…`pct90`, `horz` `vert` `ltHorz` `dkVert` `narVert`
+`dashHorz` `cross` `upDiag` `dkDnDiag` `wdUpDiag` `dashUpDiag` `diagCross` `smCheck` `lgGrid` `dotGrid`
+`lgConfetti` `horzBrick` `diagBrick` `solidDmnd` `plaid` `sphere` `weave` `divot` `shingle` `wave`
+`trellis` `zigZag`, …), drawn in the segment's fill colour on the theme background.
+
+**Moved labels.** `pin` is what dragging a label writes: its centre as fractions of the chart's
+frame. A pinned label keeps its place through data edits and resizes (inside the frame) and is
+never hidden for overlapping; removing `pin` ("reset label position") hands it back to automatic
+placement.
+
+**Convert to plain text.** `"detach": true` with `content: [{"text": "…"}]` freezes a label's text:
+data edits no longer rewrite it, but it stays in the chart and moves and resizes with it. The
+add-in's convert command writes both from the text the label shows.
+
+**Formatting done in PowerPoint is kept.** Every chart carries `OC_BASE`, the formatting it was
+drawn with, per element. When the add-in updates a chart it reads the shapes back, and whatever you
+changed with PowerPoint's own tools — a fill, a font, a size, a label's text, a line — becomes an
+override in the spec, so the next layout draws it again instead of drawing over it.
 
 ## Validation and errors
 
@@ -979,4 +995,5 @@ below 70 are 20xx. Gantt `shades`, `brackets` and `today` accept the same forms.
 Each chart is written as one PowerPoint group of ordinary shapes, with tags (contract version 1):
 `OC_V` (contract version), `OC_ENGINE` (engine version), `OC_SPEC` (this JSON; split into
 `OC_SPEC_0…n` plus `OC_SPEC_N` if it is very long), `OC_FRAME` (the chart's box in points) and
-`OC_FONT`. `open-charts import deck.pptx` turns those tags back into a deck JSON.
+`OC_FONT`, plus `OC_BASE` (the formatting each element was drawn with, chunked like `OC_SPEC`; see
+[Overrides](#overrides)). `open-charts import deck.pptx` turns those tags back into a deck JSON.

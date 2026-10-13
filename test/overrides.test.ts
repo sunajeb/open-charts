@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   checkScene, defaultStyle, layoutChart, validateSpec, compileOverrides, kindOf, propertiesFor, ELEMENT_PROPERTIES, ELEMENT_STYLE_KEYS,
-  remapOverrides, detachElement, baseOf, mergeNativeEdits, renderedOf, sceneEntries, resolveElementColor, themeOf, tintHex,
+  remapOverrides, detachElement, unpinElement, baseOf, mergeNativeEdits, renderedOf, sceneEntries, resolveElementColor, themeOf, tintHex,
   type ChartSpec, type ChartType, type Scene, type TextShape,
 } from '../src/core/index.ts';
 import { samples } from '../src/core/samples.ts';
@@ -221,7 +221,7 @@ test('the add-in format carries font, rotation, tint, dash and arrowheads', () =
   const bar = recs.find((r) => r.role === 'bar:s0:c0')!;
   assert.deepEqual([bar.fill, bar.dash], ['accent1-lighter40', 'dot']);
   const arrow = parseResponse(shapeRecord({ kind: 'line', x1: 0, y1: 0, x2: 9, y2: 9, color: 'hlink', width: 1, arrowStart: true, dash: true }, 'Arial')).shapes[0];
-  assert.deepEqual([arrow.arrowStart, arrow.dash, arrow.plain], ['1', '1', '0']);
+  assert.deepEqual([arrow.arrowStart, arrow.dash, arrow.pattern], ['1', '1', '']);
 });
 
 test('VBA reads the new columns and draws them', () => {
@@ -229,29 +229,56 @@ test('VBA reads the new columns and draws them', () => {
   assert.match(vba, /AddTextbox\(Orientation\(Col\(f, 24\)\)/);
   assert.match(vba, /BeginArrowheadStyle/);
   assert.match(vba, /TintAndShade = shade/);
-  assert.match(vba, /Col\(f, 26\) = "1"/);
+  assert.match(vba, /SetPattern s, f\(6\), Col\(f, 26\)/);
+  assert.match(vba, /Case "dkUpDiag": PatternType = 16/);
   assert.match(vba, /NativeLines\(old\)/);
 });
 
 // ---- Convert to plain text -----------------------------------------------------------------------
 
-test('detach: the engine stops drawing the label; the add-in gets it once as plain text', async () => {
+test('detach (convert to plain text): the label keeps its text through data edits, in the chart', async () => {
   const sc = lay(stacked);
-  const { spec, shapes } = detachElement(stacked, sc, 'label:total:c1');
-  assert.equal(shapes.length, 1);
-  assert.deepEqual(spec.overrides, { 'label:total:c1': { detach: true } });
-  const after = lay(spec);
-  assert.equal(at(after, 'label:total:c1').length, 0);
-  assert.equal(after.warnings, undefined);
+  const spec = detachElement(stacked, sc, 'label:total:c1')!;
+  assert.deepEqual(spec.overrides, { 'label:total:c1': { content: [{ text: '70' }], detach: true } });
+  assert.deepEqual(validateSpec(spec), []);
+  const edited = lay({ ...spec, series: [{ ...spec.series[0], values: [40, 90, 47] }, spec.series[1]] });
+  assert.equal((at(edited, 'label:total:c1')[0] as TextShape).text, '70', 'static text');
+  assert.equal((at(edited, 'label:total:c2')[0] as TextShape).text, '80', 'other labels follow the data');
+  assert.equal(detachElement(stacked, sc, 'label:total:c9'), null);
+  assert.ok(validateSpec({ ...stacked, overrides: { 'label:total:c1': { detach: true } } }).some((e) => e.path === '/overrides/label:total:c1/detach'));
   const res = parseResponse(await handleRequest({ op: 'detach', arg: 'label:total:c1', frame: F, spec: JSON.stringify(stacked) }, m));
   assert.deepEqual(res.errors, []);
-  const plain = res.shapes.filter((r) => r.plain === '1');
-  assert.equal(plain.length, 1);
-  assert.equal(plain[0].role, '');
-  assert.ok(!res.shapes.some((r) => r.role === 'label:total:c1'));
-  assert.match(res.tags.find(([k]) => k === 'OC_SPEC')![1], /"detach":true/);
+  assert.ok(res.shapes.some((r) => r.role === 'label:total:c1'), 'stays in the group');
+  assert.match(res.tags.find(([k]) => k === 'OC_SPEC')![1], /"label:total:c1":\{"content":\[\{"text":"70"\}\],"detach":true\}/);
   const bad = parseResponse(await handleRequest({ op: 'detach', arg: 'bar:s0:c0', frame: F, spec: JSON.stringify(stacked) }, m));
   assert.equal(bad.errors.length, 1);
+});
+
+test('patterns: OOXML presets on segments, in every renderer', () => {
+  const spec: ChartSpec = { ...stacked, overrides: { 'bar:s1:*': { pattern: 'dkUpDiag' }, 'bar:s1:c2': { pattern: 'none' } } };
+  const sc = lay(spec);
+  assert.equal((at(sc, 'bar:s1:c0')[0] as { pattern?: string }).pattern, 'dkUpDiag');
+  assert.equal((at(sc, 'bar:s1:c2')[0] as { pattern?: string }).pattern, undefined);
+  const xml = groupXml({ scene: sc, name: 'c', altText: '' }, new Ids(), 'Arial');
+  assert.match(xml, /<a:pattFill prst="dkUpDiag"><a:fgClr><a:schemeClr val="accent2"\/><\/a:fgClr><a:bgClr><a:schemeClr val="bg1"\/><\/a:bgClr><\/a:pattFill>/);
+  assert.match(sceneToSvg([sc], { w: 960, h: 540 }), /<pattern id="p-dkUpDiag-[0-9A-F]{6}"[^>]*>.*fill="url\(#p-dkUpDiag-/s);
+  const rec = parseResponse(shapeRecord(at(sc, 'bar:s1:c0')[0], 'Arial', 'bar:s1:c0')).shapes[0];
+  assert.equal(rec.pattern, 'dkUpDiag');
+  assert.ok(validateSpec({ ...stacked, overrides: { 'bar:s0:c0': { pattern: 'stripes' } } }).length);
+  assert.ok(validateSpec({ ...stacked, overrides: { 'label:value:s0:c0': { pattern: 'upDiag' } } }).length, 'labels take no pattern');
+});
+
+test('pin: a moved label keeps its place (in the frame) through resizes; unpin resets it', () => {
+  const spec: ChartSpec = { ...stacked, overrides: { 'label:total:c0': { pin: { x: 0.5, y: 0.5 } } } };
+  for (const f of [F, { x: 0, y: 0, w: 500, h: 300 }]) {
+    const t = at(lay(spec, f), 'label:total:c0')[0] as TextShape;
+    assert.ok(t.pinned);
+    assert.ok(Math.abs(t.x + t.w / 2 - (f.x + f.w / 2)) < 0.01 && Math.abs(t.y + t.h / 2 - (f.y + f.h / 2)) < 0.01, 'centred where pinned');
+  }
+  const edge = at(lay({ ...stacked, overrides: { 'label:total:c0': { pin: { x: 1, y: 0 } } } }), 'label:total:c0')[0] as TextShape;
+  assert.ok(edge.x + edge.w <= F.x + F.w + 0.01 && edge.y >= F.y - 0.01, 'kept inside the frame');
+  assert.deepEqual(unpinElement(spec, 'label:total:c0').overrides, {});
+  assert.ok(validateSpec({ ...stacked, overrides: { 'label:total:c0': { pin: { x: 2, y: 0 } } } }).some((e) => e.path === '/overrides/label:total:c0/pin/x'));
 });
 
 // ---- OC_BASE: native edits ------------------------------------------------------------------------

@@ -11,7 +11,23 @@ const dashAttr = (d?: boolean | 'dot') => (d ? ` stroke-dasharray="${d === 'dot'
 /** An element's font: its own (an override; the theme fonts "+mj-lt" / "+mn-lt" preview as the chart's), else the chart's. */
 const faceOf = (f: string | undefined, chart: string) => (f && !f.startsWith('+') ? f : chart);
 
+/**
+ * A preview of an OOXML preset pattern (an override) as an SVG pattern in the fill colour on white:
+ * diagonal, vertical, horizontal and cross hatches by name, dots for the rest. Returns [defs, paint].
+ */
+function patternPaint(fillColor: string, prst: string): [string, string] {
+  const col = c(fillColor), id = `p-${prst}-${col.slice(1)}`;
+  const d = /diagCross|Check|plaid/.test(prst) ? 'M0,0 L6,6 M6,0 L0,6' : /[uU]pDiag|diagBrick|zigZag|wave/.test(prst) ? 'M0,6 L6,0' : /[dD]nDiag|shingle/.test(prst) ? 'M0,0 L6,6'
+    : /[vV]ert/.test(prst) ? 'M3,0 L3,6' : /[hH]orz|Brick/.test(prst) ? 'M0,3 L6,3' : /cross|Grid|weave|trellis/.test(prst) ? 'M3,0 L3,6 M0,3 L6,3' : '';
+  const body = d ? `<path d="${d}" stroke="${col}" stroke-width="${/^(dk|wd)/.test(prst) ? 2 : 1}"/>` : `<circle cx="3" cy="3" r="1" fill="${col}"/>`;
+  return [`<defs><pattern id="${id}" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#FFFFFF"/>${body}</pattern></defs>`, `url(#${id})`];
+}
+
 function shape(s: Shape, font: string): string {
+  if ((s.kind === 'rect' || s.kind === 'path') && s.pattern && s.fill) {
+    const [defs, paint] = patternPaint(s.fill, s.pattern);
+    return defs + shape({ ...s, pattern: undefined }, font).replace(`fill="${c(s.fill)}"`, `fill="${paint}"`);
+  }
   if (s.kind === 'rect') {
     const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"${dashAttr(s.dash)}` : '';
     const g = rectGeom(s);

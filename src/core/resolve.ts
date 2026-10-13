@@ -49,7 +49,9 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
   // A grouped role without text (e.g. a stray leader) is not a unit.
   for (const [k, idx] of units) if (!idx.some((i) => shapes[i].kind === 'text')) units.delete(k);
 
-  const order = [...units.entries()].sort((a, b) => priority(roles[b[1][0]]) - priority(roles[a[1][0]]) || a[1][0] - b[1][0]);
+  // A label placed by hand (pinned) keeps its place first; everything else yields to it.
+  const rank = (idx: number[]) => (idx.some((i) => (shapes[i] as TextShape).pinned) ? 1000 : priority(roles[idx[0]]));
+  const order = [...units.entries()].sort((a, b) => rank(b[1]) - rank(a[1]) || a[1][0] - b[1][0]);
   const marks = shapes.map((s, i) => i).filter((i) => shapes[i].kind === 'rect' && /^(bar|marker):/.test(roles[i]));
   const dataLines = shapes.map((s, i) => i).filter((i) => shapes[i].kind === 'line' && roles[i].startsWith('line:'));
   const lineOwners = new Set(dataLines.map((i) => roleOwner(roles[i])));
@@ -84,7 +86,7 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
   };
 
   for (const [, idx] of order) {
-    const why = problem(idx);
+    const why = idx.some((i) => (shapes[i] as TextShape).pinned) ? null : problem(idx);
     if (!why) { for (const i of idx) if (shapes[i].kind === 'text') kept.push(i); continue; }
     for (const i of idx) drop.add(i);
     const t = idx.map((i) => shapes[i]).find((s): s is TextShape => s.kind === 'text')!;

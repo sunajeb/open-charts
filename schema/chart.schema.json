@@ -42,6 +42,7 @@
         "align": {"enum": ["left", "center", "right"]},
         "rotate": {"description": "Text direction: -90 (90 degrees left), 0, 90 (90 degrees right).", "enum": [-90, 0, 90]},
         "fill": {"anyOf": [{"$ref": "#/$defs/elementColor"}, {"const": "none"}]},
+        "pattern": {"description": "Segments: OOXML preset pattern in the fill colour on the theme background, or none.", "enum": ["pct5", "pct10", "pct20", "pct25", "pct30", "pct40", "pct50", "pct60", "pct70", "pct75", "pct80", "pct90", "horz", "vert", "ltHorz", "ltVert", "dkHorz", "dkVert", "narHorz", "narVert", "dashHorz", "dashVert", "cross", "dnDiag", "upDiag", "ltDnDiag", "ltUpDiag", "dkDnDiag", "dkUpDiag", "wdDnDiag", "wdUpDiag", "dashDnDiag", "dashUpDiag", "diagCross", "smCheck", "lgCheck", "smGrid", "lgGrid", "dotGrid", "smConfetti", "lgConfetti", "horzBrick", "diagBrick", "solidDmnd", "openDmnd", "dotDmnd", "plaid", "sphere", "weave", "divot", "shingle", "wave", "trellis", "zigZag", "none"]},
         "outline": {"anyOf": [{"$ref": "#/$defs/elementColor"}, {"const": "none"}]},
         "outlineWidth": {"type": "number", "minimum": 0, "maximum": 20},
         "outlineDash": {"enum": ["solid", "dash", "dot"]},
@@ -50,7 +51,8 @@
         "dash": {"enum": ["solid", "dash", "dot"]},
         "arrowheads": {"enum": ["none", "start", "end", "both"]},
         "marker": {"enum": ["circle", "square", "diamond", "triangle", "none"]},
-        "detach": {"description": "Labels: converted to plain text; the engine no longer draws it.", "type": "boolean"}
+        "pin": {"description": "Labels: placed by hand; centre as fractions of the frame, kept until reset.", "type": "object", "additionalProperties": false, "required": ["x", "y"], "properties": {"x": {"type": "number", "minimum": 0, "maximum": 1}, "y": {"type": "number", "minimum": 0, "maximum": 1}}},
+        "detach": {"description": "Labels: converted to plain text; content holds the static text.", "type": "boolean"}
       }
     },
     "color": {

@@ -197,6 +197,8 @@ export interface RectShape {
   geom?: 'rect' | 'ellipse' | 'diamond' | 'roundRect' | 'triangle';
   /** Dashed ('dot': dotted) outline (an override). */
   dash?: boolean | 'dot';
+  /** OOXML preset pattern in `fill` on the background (an override). */
+  pattern?: string;
 }
 
 /**
@@ -218,6 +220,8 @@ export interface PathShape {
   strokeWidth?: number;
   /** Dashed outline; 'dot': dotted. */
   dash?: boolean | 'dot';
+  /** OOXML preset pattern in `fill` on the background (an override). */
+  pattern?: string;
 }
 
 export interface LineShape {
@@ -256,6 +260,8 @@ export interface TextShape {
    * x y w h are then the turned text's footprint on the slide, not the unrotated box.
    */
   rotate?: -90 | 90;
+  /** Placed by hand (an override's `pin`): collisions never hide it. */
+  pinned?: boolean;
   /** Coarse label kind (kept for compatibility; `Scene.roles` is the precise role). */
   role?: 'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration' | 'title';
 }

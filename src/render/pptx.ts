@@ -48,7 +48,9 @@ export const clrXml = (c: string) => {
   return mod ? `<a:schemeClr val="${t.slot}">${mod}</a:schemeClr>` : `<a:schemeClr val="${t.slot}"/>`;
 };
 const dashXml = (d?: boolean | 'dot') => (d ? `<a:prstDash val="${d === 'dot' ? 'sysDot' : 'dash'}"/>` : '');
-const fill = (c?: string) => (c ? `<a:solidFill>${clrXml(c)}</a:solidFill>` : '<a:noFill/>');
+const fill = (c?: string, pattern?: string) => (c
+  ? pattern ? `<a:pattFill prst="${pattern}"><a:fgClr>${clrXml(c)}</a:fgClr><a:bgClr><a:schemeClr val="bg1"/></a:bgClr></a:pattFill>` : `<a:solidFill>${clrXml(c)}</a:solidFill>`
+  : '<a:noFill/>');
 const ln = (c?: string, w = 0.75, extra = '') =>
   c ? `<a:ln w="${e(w)}">${fill(c)}${extra}</a:ln>` : '<a:ln><a:noFill/></a:ln>';
 const nvPr = (tagsRel?: string) =>
@@ -86,7 +88,7 @@ function shapeXml(s: Shape, ids: Ids, font: string, role?: string, addTags?: Add
   const name = esc(shapeName(s, id, role));
   const nv = nvPr(role && addTags ? addTags([['OC_ROLE', role]]) : undefined);
   if (s.kind === 'rect') {
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${rectGeom(s)}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth, dashXml(s.dash))}</p:spPr></p:sp>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${rectGeom(s)}"><a:avLst/></a:prstGeom>${fill(s.fill, s.pattern)}${ln(s.stroke, s.strokeWidth, dashXml(s.dash))}</p:spPr></p:sp>`;
   }
   if (s.kind === 'path') return pathXml(s, id, name, nv);
   if (s.kind === 'line') {
@@ -107,7 +109,7 @@ function pathXml(s: PathShape, id: number, name: string, nv: string): string {
     `<a:path w="${w}" h="${h}"${s.fill && closed ? '' : ' fill="none"'}><a:moveTo>${pt(points[0])}</a:moveTo>${points.slice(1).map((p) => `<a:lnTo>${pt(p)}</a:lnTo>`).join('')}${closed ? '<a:close/>' : ''}</a:path>`,
   ).join('');
   const dash = dashXml(s.dash);
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(b.x)}" y="${e(b.y)}"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst>${paths}</a:pathLst></a:custGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth, dash)}</p:spPr></p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(b.x)}" y="${e(b.y)}"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst>${paths}</a:pathLst></a:custGeom>${fill(s.fill, s.pattern)}${ln(s.stroke, s.strokeWidth, dash)}</p:spPr></p:sp>`;
 }
 
 function textXml(t: TextShape, id: number, chartFont: string, name: string, nv = '<p:nvPr/>'): string {

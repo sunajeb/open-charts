@@ -325,8 +325,8 @@ Private Sub EditData()
     End If
 End Sub
 
-' Convert to plain text: the selected label of a chart is left on the slide as a plain text box
-' PowerPoint owns (outside the group), and the chart no longer draws it (engine op "detach").
+' Convert to plain text: the selected label keeps the text it shows now, which data edits no longer
+' rewrite; it stays in the chart and moves with it (engine op "detach").
 Private Sub ConvertToPlainText()
     Dim chart As Object, sel As Object, shp As Object, role As String, response As String
     Set chart = SelectedChart()
@@ -644,18 +644,12 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
                     n = n + 1
                 Case "S"
                     Set shp = DrawShape(sld, f)
-                    If Col(f, 26) = "1" Then
-                        ' Converted to plain text: stays on the slide, outside the chart group.
-                        shp.Name = Unescape(f(21))
-                        GoTo NextLine
-                    End If
                     names(n) = stamp & n: shp.Name = names(n)
                     roles(n) = Unescape(f(20))
                     finalNames(n) = Unescape(f(21))
                     n = n + 1
             End Select
         End If
-NextLine:
     Next i
     If n = 0 Then Exit Function
     Phase "shapes", t: tp = Timer
@@ -709,7 +703,7 @@ End Function
 ' Columns (src/addin/format.ts SHAPE_COLUMNS), f(0) = "S":
 '  1 kind 2 x 3 y 4 w 5 h 6 fill 7 lineColor 8 lineWidth 9 dash 10 arrowEnd 11 text 12 font
 '  13 size 14 bold 15 color 16 align 17 valign 18 wrap 19 autosize 20 role 21 name 22 points
-'  23 textGeom 24 rotate 25 arrowStart 26 plain (per-element overrides; absent from older engines)
+'  23 textGeom 24 rotate 25 arrowStart 26 pattern (per-element overrides; absent from older engines)
 Private Function DrawShape(ByVal sld As Object, f() As String) As Object
     Dim kind As String, x As Single, y As Single, w As Single, h As Single, s As Object
     kind = f(1)
@@ -740,11 +734,86 @@ Private Function DrawShape(ByVal sld As Object, f() As String) As Object
         Case "path"
             Set s = DrawPath(sld, f(22))
             FillAndLine s, f(6), f(7), f(8), f(9)
+            If Col(f, 26) <> "" Then SetPattern s, f(6), Col(f, 26)
         Case Else
             Set s = sld.Shapes.AddShape(AutoShapeType(kind), x, y, w, h)
             FillAndLine s, f(6), f(7), f(8), f(9)
+            If Col(f, 26) <> "" Then SetPattern s, f(6), Col(f, 26)
     End Select
     Set DrawShape = s
+End Function
+
+' A pattern fill (an override): OOXML preset `prst` in colour `fillHex` on the theme background.
+Private Sub SetPattern(ByVal s As Object, ByVal fillHex As String, ByVal prst As String)
+    Dim n As Long
+    n = PatternType(prst)
+    If n = 0 Or fillHex = "" Then Exit Sub
+    On Error Resume Next
+    With s.Fill
+        .Patterned n
+        SetColor .ForeColor, fillHex
+        .BackColor.ObjectThemeColor = 14 ' msoThemeColorBackground1
+    End With
+End Sub
+
+' msoPatternType of an OOXML preset pattern (DrawingML ST_PresetPatternVal), 0 if unknown.
+Private Function PatternType(ByVal prst As String) As Long
+    Select Case prst
+        Case "pct5": PatternType = 1
+        Case "pct10": PatternType = 2
+        Case "pct20": PatternType = 3
+        Case "pct25": PatternType = 4
+        Case "pct30": PatternType = 5
+        Case "pct40": PatternType = 6
+        Case "pct50": PatternType = 7
+        Case "pct60": PatternType = 8
+        Case "pct70": PatternType = 9
+        Case "pct75": PatternType = 10
+        Case "pct80": PatternType = 11
+        Case "pct90": PatternType = 12
+        Case "dkHorz": PatternType = 13
+        Case "dkVert": PatternType = 14
+        Case "dkDnDiag": PatternType = 15
+        Case "dkUpDiag": PatternType = 16
+        Case "smCheck": PatternType = 17
+        Case "trellis": PatternType = 18
+        Case "ltHorz": PatternType = 19
+        Case "ltVert": PatternType = 20
+        Case "ltDnDiag": PatternType = 21
+        Case "ltUpDiag": PatternType = 22
+        Case "smGrid": PatternType = 23
+        Case "dotDmnd": PatternType = 24
+        Case "wdDnDiag": PatternType = 25
+        Case "wdUpDiag": PatternType = 26
+        Case "dashUpDiag": PatternType = 27
+        Case "dashDnDiag": PatternType = 28
+        Case "narVert": PatternType = 29
+        Case "narHorz": PatternType = 30
+        Case "dashVert": PatternType = 31
+        Case "dashHorz": PatternType = 32
+        Case "lgConfetti": PatternType = 33
+        Case "lgGrid": PatternType = 34
+        Case "horzBrick": PatternType = 35
+        Case "lgCheck": PatternType = 36
+        Case "smConfetti": PatternType = 37
+        Case "zigZag": PatternType = 38
+        Case "solidDmnd": PatternType = 39
+        Case "diagBrick": PatternType = 40
+        Case "openDmnd": PatternType = 41
+        Case "plaid": PatternType = 42
+        Case "sphere": PatternType = 43
+        Case "weave": PatternType = 44
+        Case "dotGrid": PatternType = 45
+        Case "divot": PatternType = 46
+        Case "shingle": PatternType = 47
+        Case "wave": PatternType = 48
+        Case "horz": PatternType = 49
+        Case "vert": PatternType = 50
+        Case "cross": PatternType = 51
+        Case "dnDiag": PatternType = 52
+        Case "upDiag": PatternType = 53
+        Case "diagCross": PatternType = 54
+    End Select
 End Function
 
 ' Column i of a record, "" when an older engine did not send it.

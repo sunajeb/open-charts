@@ -24,9 +24,9 @@
 // update   re-lays the chart out where it now is, with the applied edit session if there is one
 // relayout the same, but answers "N" (nothing to do) when neither the frame nor the data changed
 // edit     opens the chart in the editor (an edit session, docs/ux-editor.md)
-// detach   converts one label to plain text ("Convert to plain text"): the chart comes back with
-//          `detach: true` on that role in its spec (re-layouts no longer draw it), plus the label as
-//          last drawn, flagged `plain`, for VBA to leave on the slide outside the group
+// detach   converts one label to plain text ("Convert to plain text"): its text as drawn now is
+//          frozen in the spec (custom content, `detach: true`), so data edits no longer rewrite it;
+//          it stays in the chart group and moves with the chart
 import { createHash } from 'node:crypto';
 import { defaultStyle, detachElement, kindOf, layoutChart, mergeNativeEdits, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
 import { chartContent } from '../deck.ts';
@@ -194,8 +194,9 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const frame = resolveFrame(chart, style, req.frame, req.bounds, m, env);
         const before = layout(chart, style, frame, m, env);
         if (!before.roles?.includes(role)) return error('This label is not drawn any more; update the chart and try again.');
-        const { spec, shapes } = detachElement(chart, before, role);
-        return respond(spec, style, frame, m, env, shapes.map((sh) => ({ shape: sh, role })));
+        const spec = detachElement(chart, before, role);
+        if (!spec) return error('This label is not drawn any more; update the chart and try again.');
+        return respond(spec, style, frame, m, env);
       }
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
@@ -261,7 +262,7 @@ export function resolveFrame(chart: ChartSpec, style: Partial<Style> | undefined
   return { x: current.x + (f0.x - b0.x) * sx, y: current.y + (f0.y - b0.y) * sy, w: f0.w * sx, h: f0.h * sy };
 }
 
-function respond(chart: ChartSpec, style: Partial<Style> | undefined, frame: Frame, m: Measurer, env?: Env, plain: { shape: Scene['shapes'][number]; role: string }[] = []): string {
+function respond(chart: ChartSpec, style: Partial<Style> | undefined, frame: Frame, m: Measurer, env?: Env): string {
   const scene = layout(chart, style, frame, m, env);
   const font = style?.font ?? defaultStyle.font;
   const content = chartContent(chart, scene, font, style);
@@ -271,7 +272,5 @@ function respond(chart: ChartSpec, style: Partial<Style> | undefined, frame: Fra
     const role = scene.roles?.[i] ?? '';
     lines.push(shapeRecord(s, font, role, shapeName(s, i + 1, role || undefined)));
   });
-  // Elements converted to plain text: drawn once, outside the group, no longer the chart's.
-  for (const p of plain) lines.push(shapeRecord(p.shape, font, '', 'Plain text', true));
   return lines.join('\n') + '\n';
 }

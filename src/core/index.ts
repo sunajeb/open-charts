@@ -27,10 +27,10 @@ export type { Measurer, FontMetrics } from './text.ts';
 export { checkScene } from './quality.ts';
 export {
   LABEL_FIELDS, ELEMENT_PROPERTIES, ELEMENT_STYLE_KEYS, ELEMENT_KINDS, ROLE_KINDS, kindOf, propertiesFor,
-  compileOverrides, matches as roleMatches, specificity, detachElement, remapOverrides,
+  compileOverrides, matches as roleMatches, specificity, detachElement, unpinElement, remapOverrides, PATTERNS,
   baseOf, mergeNativeEdits, rendered as renderedOf, sceneEntries, colorName,
 } from './overrides.ts';
-export type { ElementKind, ElementProperty, PropertyInfo, Dash, Arrowheads, MarkerStyle, RenderedProps, RenderedMap, RenderedEntry } from './overrides.ts';
+export type { ElementKind, ElementProperty, PropertyInfo, Dash, Arrowheads, MarkerStyle, Pattern, RenderedProps, RenderedMap, RenderedEntry } from './overrides.ts';
 export { minimumSize, TooSmall } from './minsize.ts';
 export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';

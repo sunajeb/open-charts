@@ -22,6 +22,15 @@ export interface NumberField { field: 'value' | 'percent' | 'total'; decimals?: 
 export type ContentField = LabelField | NumberField | { text: string };
 
 export type Dash = 'solid' | 'dash' | 'dot';
+/** OOXML preset patterns (DrawingML a:pattFill prst), drawn in the fill colour on the theme background. */
+export const PATTERNS = [
+  'pct5', 'pct10', 'pct20', 'pct25', 'pct30', 'pct40', 'pct50', 'pct60', 'pct70', 'pct75', 'pct80', 'pct90',
+  'horz', 'vert', 'ltHorz', 'ltVert', 'dkHorz', 'dkVert', 'narHorz', 'narVert', 'dashHorz', 'dashVert', 'cross',
+  'dnDiag', 'upDiag', 'ltDnDiag', 'ltUpDiag', 'dkDnDiag', 'dkUpDiag', 'wdDnDiag', 'wdUpDiag', 'dashDnDiag', 'dashUpDiag', 'diagCross',
+  'smCheck', 'lgCheck', 'smGrid', 'lgGrid', 'dotGrid', 'smConfetti', 'lgConfetti', 'horzBrick', 'diagBrick',
+  'solidDmnd', 'openDmnd', 'dotDmnd', 'plaid', 'sphere', 'weave', 'divot', 'shingle', 'wave', 'trellis', 'zigZag',
+] as const;
+export type Pattern = typeof PATTERNS[number];
 export type Arrowheads = 'none' | 'start' | 'end' | 'both';
 export type MarkerStyle = 'circle' | 'square' | 'diamond' | 'triangle' | 'none';
 
@@ -45,6 +54,8 @@ export interface ElementStyle {
   rotate?: -90 | 0 | 90;
   /** Fill: a segment, bar, area, slice or marker; the swatch of a legend entry; the box behind a label. "none" = no fill. */
   fill?: string;
+  /** Pattern / stripe fill of a segment: an OOXML preset, in the fill colour on the theme background; "none" = solid. */
+  pattern?: Pattern | 'none';
   /** Outline / border colour, or "none". */
   outline?: string;
   outlineWidth?: number;
@@ -56,7 +67,16 @@ export interface ElementStyle {
   arrowheads?: Arrowheads;
   /** Marker shape of a line / scatter point. */
   marker?: MarkerStyle;
-  /** Convert to plain text: the engine stops drawing the element; the host leaves a plain copy that PowerPoint owns. */
+  /**
+   * A label moved by hand (a drag handle): its centre, as fractions of the chart's frame (0–1), kept
+   * through data edits and resizes until "reset label position" removes it. The label is never hidden
+   * for overlapping; it is only kept inside the frame.
+   */
+  pin?: { x: number; y: number };
+  /**
+   * Converted to plain text: the label shows static text (`content` holds it as custom text) that data
+   * edits never rewrite; it stays in the chart's group and moves with the chart.
+   */
   detach?: boolean;
 }
 export type Overrides = Record<string, ElementStyle>;
@@ -77,7 +97,7 @@ export interface PropertyInfo {
   /** Element kinds that read the property; on any other it is a validation error. */
   kinds: readonly ElementKind[];
   /** Toolbar group (the reference's MiniToolbarInfo factory the control belongs to). */
-  group: 'content' | 'precision' | 'font' | 'fontColor' | 'alignment' | 'rotation' | 'fill' | 'outline' | 'lineStyle' | 'marker' | 'plainText';
+  group: 'content' | 'precision' | 'font' | 'fontColor' | 'alignment' | 'rotation' | 'fill' | 'pattern' | 'outline' | 'lineStyle' | 'marker' | 'position' | 'plainText';
   /** The value's shape, as documented. */
   value: string;
 }
@@ -98,6 +118,7 @@ export const ELEMENT_PROPERTIES = {
   align: { kinds: ['label', 'axis'], group: 'alignment', value: '`left` `center` `right`' },
   rotate: { kinds: ['label', 'axis'], group: 'rotation', value: '`-90` (90° left) `0` `90` (90° right)' },
   fill: { kinds: ['segment', 'marker', 'label', 'legend', 'decoration'], group: 'fill', value: 'colour or `none`' },
+  pattern: { kinds: ['segment'], group: 'pattern', value: 'OOXML preset pattern (`dkUpDiag`, `narVert`, `lgConfetti`, `zigZag`, …) or `none`' },
   outline: { kinds: ['segment', 'marker', 'label', 'decoration'], group: 'outline', value: 'colour or `none`' },
   outlineWidth: { kinds: ['segment', 'marker', 'label', 'decoration'], group: 'outline', value: 'points 0–20' },
   outlineDash: { kinds: ['segment', 'marker'], group: 'outline', value: '`solid` `dash` `dot`' },
@@ -106,7 +127,8 @@ export const ELEMENT_PROPERTIES = {
   dash: { kinds: ['line', 'decoration', 'axis'], group: 'lineStyle', value: '`solid` `dash` `dot`' },
   arrowheads: { kinds: ['line', 'decoration'], group: 'lineStyle', value: '`none` `start` `end` `both`' },
   marker: { kinds: ['marker'], group: 'marker', value: '`circle` `square` `diamond` `triangle` `none`' },
-  detach: { kinds: ['label'], group: 'plainText', value: '`true`: convert to plain text' },
+  pin: { kinds: ['label'], group: 'position', value: '`{x, y}`: centre as fractions 0–1 of the frame' },
+  detach: { kinds: ['label'], group: 'plainText', value: '`true`: converted to plain text (static `content`)' },
 } as const satisfies Record<keyof ElementStyle, PropertyInfo>;
 export type ElementProperty = keyof typeof ELEMENT_PROPERTIES;
 export const ELEMENT_STYLE_KEYS = Object.keys(ELEMENT_PROPERTIES) as ElementProperty[];
@@ -184,6 +206,16 @@ export function checkOverrides(o: unknown): OverrideProblem[] {
     for (const k of ['dash', 'outlineDash']) if (st[k] !== undefined && !DASHES.includes(st[k] as string)) add(p(k), `must be solid, dash or dot, got ${describe(st[k])}`);
     if (st.arrowheads !== undefined && !['none', 'start', 'end', 'both'].includes(st.arrowheads as string)) add(p('arrowheads'), `must be none, start, end or both, got ${describe(st.arrowheads)}`);
     if (st.marker !== undefined && !['circle', 'square', 'diamond', 'triangle', 'none'].includes(st.marker as string)) add(p('marker'), `must be circle, square, diamond, triangle or none, got ${describe(st.marker)}`);
+    if (st.pattern !== undefined && st.pattern !== 'none' && !(PATTERNS as readonly string[]).includes(st.pattern as string)) add(p('pattern'), `must be "none" or an OOXML preset pattern (${PATTERNS.slice(0, 6).join(', ')}, …), got ${describe(st.pattern)}`);
+    if (st.pin !== undefined) {
+      const pin = st.pin;
+      if (!isObj(pin)) add(p('pin'), 'must be {x, y}, fractions 0–1 of the frame');
+      else {
+        for (const k of Object.keys(pin)) if (k !== 'x' && k !== 'y') add(p('pin', k), `unknown property "${k}"`);
+        for (const k of ['x', 'y']) if (typeof pin[k] !== 'number' || !(pin[k] as number >= 0 && pin[k] as number <= 1)) add(p('pin', k), `must be a number 0–1, got ${describe(pin[k])}`);
+      }
+    }
+    if (st.detach === true && !(Array.isArray(st.content) && st.content.every((f) => isObj(f) && 'text' in f))) add(p('detach'), 'a label converted to plain text keeps its text as content: [{"text": "…"}]');
   }
   return out;
 }
@@ -350,6 +382,13 @@ export function styleText(t: TextShape, st: ElementStyle, role: string, src: Con
   return out;
 }
 
+/** A pinned label (ElementStyle.pin) moved to its place in `frame`, kept inside it, and marked so collisions never hide it. */
+export function pinText(t: TextShape, pin: { x: number; y: number }, frame: { x: number; y: number; w: number; h: number }): TextShape {
+  const x = Math.min(Math.max(frame.x + pin.x * frame.w - t.w / 2, frame.x), frame.x + frame.w - t.w);
+  const y = Math.min(Math.max(frame.y + pin.y * frame.h - t.h / 2, frame.y), frame.y + frame.h - t.h);
+  return { ...t, x, y, pinned: true };
+}
+
 const GEOM: Record<Exclude<MarkerStyle, 'none'>, 'ellipse' | 'rect' | 'diamond' | 'triangle'> = { circle: 'ellipse', square: 'rect', diamond: 'diamond', triangle: 'triangle' };
 
 /**
@@ -378,6 +417,7 @@ export function styleMark(s: Shape, st: ElementStyle, role: string, ov: Override
   }
   if (st.outlineWidth !== undefined && out.stroke) out.strokeWidth = st.outlineWidth;
   if (st.outlineDash !== undefined) { if (st.outlineDash === 'solid') delete out.dash; else out.dash = st.outlineDash === 'dot' ? 'dot' : true; }
+  if (st.pattern !== undefined && role.split(':')[0] !== 'marker') { if (st.pattern === 'none') delete out.pattern; else out.pattern = st.pattern; }
   if (out.kind === 'rect' && st.marker !== undefined && role.startsWith('marker:')) {
     if (st.marker === 'none') { out.fill = ''; delete out.stroke; delete out.strokeWidth; }
     else { out.geom = GEOM[st.marker]; delete out.ellipse; }
@@ -394,7 +434,7 @@ export function unmatched(o: Overrides | undefined, seen: Set<string>, spec: Cha
   const out: string[] = [];
   const roles = [...seen];
   for (const [key, st] of Object.entries(o ?? {})) {
-    if (st?.detach || roles.some((r) => matches(key, r))) continue;
+    if (roles.some((r) => matches(key, r))) continue;
     const s = idx(key, 's'), c = idx(key, 'c');
     if (s != null && spec.series[s]?.hidden) continue;
     const why = s != null && s >= spec.series.length ? `there is no series ${s} (the chart has ${spec.series.length})`
@@ -406,14 +446,25 @@ export function unmatched(o: Overrides | undefined, seen: Set<string>, spec: Cha
 }
 
 /**
- * Convert an element to plain text: the spec with `detach: true` on the role (the engine no longer
- * draws it, so re-layouts leave the plain copy alone), plus the element's shapes as last drawn in
- * `scene`, for the host to place outside the chart group once. The input spec is not changed.
+ * Convert a label to plain text: the spec with the label's text as last drawn in `scene` frozen as
+ * custom content, marked `detach`. It stays in the chart (laid out, moving and resizing with it) but
+ * data edits no longer rewrite it. The input spec is not changed; null when the scene has no such label.
  */
-export function detachElement<T extends ChartSpec>(spec: T, scene: { shapes: Shape[]; roles?: string[] }, role: string): { spec: T; shapes: Shape[] } {
-  const shapes = scene.shapes.filter((_, i) => scene.roles?.[i] === role);
-  const overrides = { ...(spec.overrides ?? {}), [role]: { ...(spec.overrides?.[role] ?? {}), detach: true } };
-  return { spec: { ...spec, overrides }, shapes };
+export function detachElement<T extends ChartSpec>(spec: T, scene: { shapes: Shape[]; roles?: string[] }, role: string): T | null {
+  const t = scene.shapes.find((s, i) => scene.roles?.[i] === role && s.kind === 'text') as TextShape | undefined;
+  if (!t) return null;
+  const overrides = { ...(spec.overrides ?? {}), [role]: { ...(spec.overrides?.[role] ?? {}), content: [{ text: t.text }], detach: true } };
+  return { ...spec, overrides };
+}
+
+/** "Reset label position": the spec without the label's pin (the input is not changed). */
+export function unpinElement<T extends ChartSpec>(spec: T, role: string): T {
+  const st = spec.overrides?.[role];
+  if (!st?.pin) return spec;
+  const { pin: _, ...rest } = st;
+  const overrides = { ...spec.overrides };
+  if (Object.keys(rest).length) overrides[role] = rest; else delete overrides[role];
+  return { ...spec, overrides };
 }
 
 /**
