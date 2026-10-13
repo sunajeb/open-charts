@@ -615,6 +615,10 @@ Verdana or a corporate font alike. Set the font in the editor's style, in a deck
 open-charts examples/deck.json --font Georgia -o out/deck
 ```
 
+**In PowerPoint**, a chart you insert takes the deck's body font (the theme's *Body* font, e.g. Aptos or
+your corporate font) and follows it if the theme changes; pick another font for the chart or one element
+any time.
+
 **Theme fonts.** `+mn-lt` (body) and `+mj-lt` (headings) stand for the presentation's theme fonts,
 like PowerPoint's "Body" and "Headings" entries. The add-in reads them from the deck it draws in;
 the command line and `fill` take them from the template's theme or from `style.themeFonts`.
