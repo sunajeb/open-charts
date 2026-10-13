@@ -14,6 +14,7 @@
 // one: it answers the new PowerPoint's ping and engine calls with 503 and exits, and the bridge
 // starts a fresh server from the new PowerPoint.
 import { execFile, execFileSync, spawn } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
@@ -139,8 +140,12 @@ if application "Microsoft PowerPoint" is not running then error "PowerPoint is n
 tell application "Microsoft PowerPoint" to return run VB macro macro name "${prefix}_ApplyEdit" list of parameters {item 1 of argv, item 2 of argv, item 3 of argv}
 end run`;
 
-/** The apply script compiled for add-in build `prefix` (osascript then skips compiling it, which loads PowerPoint's dictionary). */
-export const compiledApplyScript = (prefix: string, home = addinHome()) => join(home, `apply-${prefix}.scpt`);
+/**
+ * The apply script compiled for add-in build `prefix` (osascript then skips compiling it, which loads
+ * PowerPoint's dictionary). Named by the script's own text, so a changed script is never run stale.
+ */
+export const compiledApplyScript = (prefix: string, home = addinHome()) =>
+  join(home, `apply-${createHash('sha1').update(applyScript(prefix)).digest('hex').slice(0, 16)}.scpt`);
 
 /** Compiles the apply script for the installed add-in in the background (server start); drops other builds'. */
 export function precompileApply(home = addinHome()) {

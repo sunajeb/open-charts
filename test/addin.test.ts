@@ -318,7 +318,8 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     writeFileSync(compiledApplyScript('oc123', home), '');
     s = setSession('ap1', { chart, state: 'applied' });
     await applyInPowerPoint(s, home, async (script) => { scripts.push(script); setSession('ap1', { state: 'open' }); return undefined; });
-    assert.equal(scripts.at(-1), join(home, 'apply-oc123.scpt'));
+    assert.equal(scripts.at(-1), compiledApplyScript('oc123', home));
+    assert.notEqual(compiledApplyScript('oc123', home), compiledApplyScript('oc124', home));
     rmSync(compiledApplyScript('oc123', home));
 
     // The macro ran but drew nothing (no chart found).
