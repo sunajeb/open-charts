@@ -9,7 +9,7 @@ import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { contextOf, DEFAULT_FRAME, handleRequest, layoutForApply, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { addinRoutes, applyErrorMessage, applyInPowerPoint, applyScript, editorPage, outlivedPowerPoint, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
+import { addinRoutes, applyErrorMessage, applyInPowerPoint, applyScript, compiledApplyScript, editorPage, outlivedPowerPoint, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
 import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
@@ -314,6 +314,12 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     assert.match(scripts[0], /^on run argv\nif application "Microsoft PowerPoint" is not running then error/, 'never starts PowerPoint');
     assert.match(scripts[0], /return run VB macro macro name "oc123_ApplyEdit" list of parameters \{item 1 of argv, item 2 of argv, item 3 of argv\}/);
     assert.deepEqual(argv[0], ['ap1', '', ''], 'no layout of its own without prepare');
+    // Once the server has compiled the script for this build, osascript runs that file.
+    writeFileSync(compiledApplyScript('oc123', home), '');
+    s = setSession('ap1', { chart, state: 'applied' });
+    await applyInPowerPoint(s, home, async (script) => { scripts.push(script); setSession('ap1', { state: 'open' }); return undefined; });
+    assert.equal(scripts.at(-1), join(home, 'apply-oc123.scpt'));
+    rmSync(compiledApplyScript('oc123', home));
 
     // The macro ran but drew nothing (no chart found).
     s = setSession('ap1', { chart, state: 'applied' });
