@@ -527,3 +527,34 @@ test('a server that outlived the PowerPoint that started it never sends Apple ev
   }
   assert.equal(edits, 1);
 });
+
+test('VBA hygiene: test-only entry points are marked, grouped last and unreachable from the ribbon', () => {
+  const built = buildAddin();
+  const src = built.source;
+  const header = src.indexOf("' ---- TEST ONLY: entry points for the scripted live tests");
+  assert.ok(header > 0, 'the test-only section exists');
+  const publics = [...src.matchAll(/^Public (?:Sub|Function) (\w+)\(/gm)].map((m) => ({ name: m[1].replace(`${built.prefix}_`, ''), at: m.index! }));
+  const callbacks = new Set([...built.ribbon.matchAll(new RegExp(`"${built.prefix}_(\\w+)"`, 'g'))].map((m) => m[1]));
+  const server = ['ApplyEdit', 'SelectionInfo']; // the add-in server runs these (src/addin/server.ts)
+  const product = new Set(['Auto_Open', 'OnSelectionChange', ...server, ...callbacks]);
+  const tests = publics.filter((p) => !product.has(p.name));
+  assert.deepEqual(tests.map((p) => p.name).sort(), ['AgendaDump', 'AgendaEdit', 'AgendaSelect', 'AgendaSorter', 'ConvertToPlainText', 'ExportCopy', 'Probe', 'ResizeChart', 'Run', 'SelectChart', 'SelectCharts', 'SelectRole']);
+  for (const t of tests) {
+    assert.ok(t.at > header, `${t.name} is in the test-only section`);
+    // Only its own definition names it: no other add-in code calls it.
+    assert.equal(src.match(new RegExp(`\\b${built.prefix}_${t.name}\\(`, 'g'))?.length, 1, `${t.name} is called inside the add-in`);
+    assert.match(src.slice(src.lastIndexOf('\n\n', t.at), t.at), /' Test only: /, `${t.name} is marked`);
+    assert.match(src.slice(t.at, src.indexOf('\n', t.at)), /\(ByVal /, `${t.name} takes arguments, so the Macros dialog does not list it`);
+  }
+  for (const p of publics.filter((x) => product.has(x.name))) assert.ok(p.at < header, `${p.name} is not in the test section`);
+  assert.doesNotMatch(built.ribbon, /_(Run|Probe|Select\w*|ResizeChart|ExportCopy|ConvertToPlainText|Agenda(Edit|Select|Sorter|Dump))"/, 'no control calls a test entry point');
+});
+
+test('shipped files carry no developer paths', () => {
+  const { source, ribbon } = buildAddin();
+  const files = ['addin/applescript/open-charts.applescript', 'addin/windows/install.ps1', 'addin/windows/uninstall.ps1', 'addin/popup-mac/main.swift', 'addin/popup-mac/Info.plist', 'src/web/editor.html', 'src/web/toolbar.html']
+    .map((f) => [f, readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')]);
+  for (const [name, text] of [['VBA', source], ['ribbon', ribbon], ...files]) {
+    assert.doesNotMatch(text, /\/Users\/\w|\/home\/\w|[A-Z]:\\Users\\\w|\/private\/(tmp|var)\//, name);
+  }
+});
