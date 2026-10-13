@@ -7,6 +7,7 @@ import { ADDIN_USAGE } from './addin/usage.ts';
 // Each command loads only the modules it needs (dynamic imports): every TypeScript file costs start-up time.
 
 const USAGE = `Usage: open-charts <deck.json> [-o out/deck] [--font Arial.ttf --bold-font "Arial Bold.ttf"] [--svg] [--strict] [--report report.json]
+       open-charts fill <template.pptx> <data.json> [-o out.pptx] [--dry-run] [--strict] [--style style.json] [--each items.json] [--report report.json]
        open-charts inspect <deck.pptx> [--json]
        open-charts import <deck.pptx> [-o deck.json]
        open-charts serve [--port 4173]
@@ -16,6 +17,11 @@ Writes <out>.pptx with one native, editable chart per slide.
 --svg also writes <out>-<n>.svg previews. Layout warnings are printed to stderr.
 --strict exits with code 1 if any slide has a layout issue (the deck is still written).
 --report writes the issues per slide as JSON.
+--style applies a style file (fonts, colours, number defaults, element styles; see docs/DATA-FORMAT.md).
+fill replaces shapes named chart:<name> with charts and {{name}} in text with values, in your own
+  template; untouched parts stay byte-identical. --dry-run reports what it would do, writes nothing.
+  --each writes one deck per item of a JSON array (put a {field} in -o). --strict exits 1 on any
+  missing value, chart error or layout issue.
 inspect lists the charts in a .pptx: frames, roles, tag sizes, contract version.
 import recovers the deck JSON from the charts' OC_SPEC tags.
 
@@ -30,6 +36,9 @@ const { values, positionals } = parseArgs({
     svg: { type: 'boolean', default: false },
     strict: { type: 'boolean', default: false },
     report: { type: 'string' },
+    style: { type: 'string' },
+    'dry-run': { type: 'boolean', default: false },
+    each: { type: 'string' },
     json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
     port: { type: 'string', default: '4173' },
@@ -44,6 +53,18 @@ if (values.help) {
   try {
     const { addinMain } = await import('./addin/cli.ts');
     await addinMain(positionals.slice(1), { out: values.out, register: !values['no-register'] });
+  } catch (err) {
+    fail((err as Error).message);
+  }
+} else if (command === 'fill') {
+  if (positionals.length !== 3) fail(USAGE);
+  try {
+    const [{ fillMain }, { createMeasurer }] = await Promise.all([import('./template/cli.ts'), import('./fonts.ts')]);
+    const code = fillMain(positionals[1], positionals[2], {
+      out: values.out, dryRun: values['dry-run']!, strict: values.strict!, each: values.each, report: values.report,
+      style: await loadStyle(), measurer: createMeasurer(values.font, values['bold-font']),
+    });
+    process.exitCode = code;
   } catch (err) {
     fail((err as Error).message);
   }
@@ -80,6 +101,17 @@ if (values.help) {
   await run();
 }
 
+/** The `--style` file, checked as untrusted input (size, keys, values); exits with every problem listed. */
+async function loadStyle() {
+  if (!values.style) return undefined;
+  const { parseStyleFile } = await import('./core/style-file.ts');
+  try {
+    return parseStyleFile(readFileSync(values.style, 'utf8'), values.style);
+  } catch (err) {
+    fail((err as Error).message);
+  }
+}
+
 function fail(msg: string): never {
   console.error(msg);
   process.exit(1);
@@ -94,7 +126,7 @@ async function run() {
   const out = values.out ?? positionals[0].replace(/\.json$/, '');
   mkdirSync(dirname(out), { recursive: true });
 
-  const { pptx, slides } = buildDeck(deck, createMeasurer(values.font, values['bold-font']));
+  const { pptx, slides } = buildDeck(deck, createMeasurer(values.font, values['bold-font']), await loadStyle());
   writeFileSync(`${out}.pptx`, pptx);
   console.log(`Wrote ${out}.pptx (${slides.length} slide${slides.length === 1 ? '' : 's'})`);
 

@@ -1,0 +1,29 @@
+{
+  "$schema": "../../schema/style.schema.json",
+  "name": "Ember",
+  "description": "Warm consulting look: Georgia, rust-to-sand fills, dark axis, dotted light gridlines, rust decorations.",
+  "font": "Georgia",
+  "fontSize": 11,
+  "text": "333333",
+  "muted": "6B6B6B",
+  "axis": "8C8C8C",
+  "palette": ["8C2D19", "D9542B", "F2A766", "F7D9B9", "5B5B5B", "BFBFBF"],
+  "positive": "2E7D4F",
+  "negative": "B3261E",
+  "numbers": { "locale": "en-GB" },
+  "elements": {
+    "label:total:*": { "color": "8C2D19" },
+    "axis": { "line": "333333", "lineWidth": 1 },
+    "axis:*": { "color": "6B6B6B", "line": "333333", "lineWidth": 1 },
+    "gridline:*": { "line": "D9D9D9", "lineWidth": 0.5, "dash": "dot" },
+    "connector:*": { "line": "8C8C8C", "dash": "dash" },
+    "leader:*": { "line": "8C8C8C" },
+    "arrow:*": { "line": "8C2D19", "lineWidth": 1.25, "color": "8C2D19", "outline": "8C2D19" },
+    "valueline:*": { "line": "8C2D19", "color": "8C2D19" }
+  },
+  "types": {
+    "line": { "palette": ["8C2D19", "5B5B5B", "D9542B", "BFBFBF"] },
+    "scatter": { "palette": ["D9542B", "5B5B5B"] },
+    "bubble": { "palette": ["D9542B", "5B5B5B", "F2A766"] }
+  }
+}

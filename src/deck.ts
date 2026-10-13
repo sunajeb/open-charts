@@ -1,5 +1,5 @@
 import type { ChartSpec, Frame, Scene, Style } from './core/index.ts';
-import { checkScene, defaultStyle, layoutGroup, migrate, scaleGroupOf, themeOf } from './core/index.ts';
+import { checkScene, defaultStyle, layoutGroup, fileStyle, mergeStyles, migrate, scaleGroupOf, styleFor, themeOf, type StyleFile } from './core/index.ts';
 import type { Measurer } from './core/text.ts';
 import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
 import { chartTags, chunkedTags } from './render/tags.ts';
@@ -91,7 +91,27 @@ export function deckAgenda(deck: DeckSpec): { slides: AgendaSlide[]; chapters: C
   return { slides, chapters };
 }
 
-export function buildDeck(deck: DeckSpec, m: Measurer): { pptx: Uint8Array; slides: BuiltSlide[] } {
+/**
+ * A deck under a style file: each chart's style becomes the file's style for its type, then the
+ * deck's, then the chart's own (later wins), so the stored spec re-lays out the same anywhere.
+ */
+export function applyStyleFile(deck: DeckSpec, file: StyleFile): DeckSpec {
+  const chart = (c: ChartSpec): ChartSpec => ({ ...c, style: mergeStyles(styleFor(file, c.type), deck.style, c.style) });
+  return {
+    ...deck,
+    style: mergeStyles(fileStyle(file), deck.style),
+    slides: deck.slides.map((s) => ({
+      ...s,
+      ...(s.chart ? { chart: chart(s.chart) } : {}),
+      ...(s.charts ? { charts: s.charts.map((c) => ({ ...c, chart: chart(c.chart) })) } : {}),
+    })),
+  };
+}
+
+export function buildDeck(deck: DeckSpec, m: Measurer, styleFile?: StyleFile): { pptx: Uint8Array; slides: BuiltSlide[] } {
+  // Under a style file every chart carries its full style; the deck style only sets the slide font and theme.
+  const deckStyle = styleFile ? undefined : deck.style;
+  if (styleFile) deck = applyStyleFile(deck, styleFile);
   const style = { ...defaultStyle, ...deck.style };
   const agenda = deck.slides.some((s) => isAgendaSlide(s) || s.split) ? agendaSlides(deck, m) : [];
   const built = deck.slides.map((s, i) => {
@@ -125,7 +145,7 @@ export function buildDeck(deck: DeckSpec, m: Measurer): { pptx: Uint8Array; slid
     return {
       charts,
       slide: { title: s.title, scene: scenes[0], scenes, svg: sceneToSvg(scenes, SLIDE, s.title, font(0)), issues },
-      content: scenes.map((scene, k) => chartContent(charts[k].chart, scene, font(k), deck.style)),
+      content: scenes.map((scene, k) => chartContent(charts[k].chart, scene, font(k), deckStyle)),
       extra: { title: s.title, tags: agenda[i]?.tags } as { title?: string; tags?: Tags; hidden?: boolean },
     };
   });

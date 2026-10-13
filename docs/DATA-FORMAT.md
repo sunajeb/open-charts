@@ -852,6 +852,7 @@ optional.
 | `negative` | colour, waterfall decreases | `C0504D` |
 | `theme` | object: hex colour per theme slot (`accent1`…`accent6`, `dk1`, `lt1`, `dk2`, `lt2`) | the open-charts theme |
 | `numbers` | object: `locale`, `decimals`, `scale` for every chart | none |
+| `elements` | object: default element styles, role or selector → element style, in the vocabulary of [overrides](#overrides) | none |
 
 ### Colours and the presentation's theme
 
@@ -998,6 +999,78 @@ add-in's convert command writes both from the text the label shows.
 drawn with, per element. When the add-in updates a chart it reads the shapes back, and whatever you
 changed with PowerPoint's own tools — a fill, a font, a size, a label's text, a line — becomes an
 override in the spec, so the next layout draws it again instead of drawing over it.
+
+### Element defaults
+
+`elements` gives kinds of elements a default look, with the same keys and properties as a chart's
+[`overrides`](#overrides). For example, `"gridline:*": {"line": "D9D9D9", "dash": "dot"}` makes every
+gridline dotted, and `"label:total:*": {"color": "accent1"}` puts every total in the brand colour. A
+chart's own overrides win property by property, so a chart can still recolour one total. A default
+that matches nothing in a chart is not a warning. `pin` and `detach` belong to one element of one
+chart and are not allowed here. A default colour on value labels also applies to labels inside dark
+segments, so leave value labels out if you want them to switch to white for contrast.
+
+## Style files
+
+A style file reproduces a client deck's look for every chart type in one JSON file
+(`schema/style.schema.json`). Pass it with `--style` to `open-charts <deck.json>` and to
+`open-charts fill`. It holds the [style](#style) keys above, plus:
+
+| Key | Type |
+|---|---|
+| `$schema` | string |
+| `name` | string, at most 200 characters |
+| `description` | string, at most 2000 characters |
+| `types` | object: a style per chart type (`line`, `pie`, …), over the file's own keys |
+
+```jsonc
+{
+  "$schema": "../../schema/style.schema.json",
+  "name": "Ember",
+  "font": "Georgia",
+  "fontSize": 11,
+  "text": "333333",
+  "palette": ["8C2D19", "D9542B", "F2A766", "F7D9B9", "5B5B5B", "BFBFBF"],
+  "numbers": { "locale": "en-GB" },
+  "elements": {
+    "axis": { "line": "333333", "lineWidth": 1 },
+    "gridline:*": { "line": "D9D9D9", "lineWidth": 0.5, "dash": "dot" },
+    "connector:*": { "line": "8C8C8C", "dash": "dash" },
+    "arrow:*": { "line": "8C2D19", "lineWidth": 1.25, "color": "8C2D19", "outline": "8C2D19" },
+    "label:total:*": { "color": "8C2D19" }
+  },
+  "types": { "line": { "palette": ["8C2D19", "5B5B5B", "D9542B"] } }
+}
+```
+
+Layering, later wins: the open-charts defaults, the file's keys, the file's `types` entry for the
+chart's type, the deck's `style` (or the fill data's), then the chart's own `style`. `theme`,
+`numbers` and each key of `elements` merge property by property rather than being replaced. The full
+style a chart was drawn with is stored in its `OC_SPEC`, so the add-in re-lays it out the same way.
+When filling a template, the template's theme colours always win over a `theme` in the style.
+
+Style files are untrusted input. A file over 256 KB is rejected, and so is any unknown key at any
+level, a font name longer than 64 characters or containing markup characters, and a palette with
+more than 64 colours. Every value is checked like a deck's style, and every problem is listed with
+its path (`/elements/gridline:*/dash: must be solid, dash or dot`).
+
+## Template fill data
+
+`open-charts fill template.pptx data.json` (`schema/fill.schema.json`):
+
+| Key | Type |
+|---|---|
+| `values` | object: slot name → text (string or number) for a `{{name}}` field, or a chart spec for a shape named `chart:name` |
+| `slides` | array of `{slide, values?, each?}`: template slide numbers (from 1) in output order, values for that slide, and `each`, one copy per item. Omitted: every template slide once |
+| `style` | a [style](#style) for every chart, over `--style`, under each chart's own |
+
+Slot names use letters, digits, `_`, `-` and `.`. A chart slot is a top-level shape named
+`chart:<name>`, or a shape whose only text is `{{chart:<name>}}`. Its frame is the shape's own
+position and size, or its placeholder's on the layout or master. A slot inside a group is reported,
+not filled. The chart replaces the shape as an open-charts group named `chart:<name>` that carries
+the usual tags, so a second fill finds it again. Text fields keep the formatting of the run where
+they start, and a line break in a value becomes a line break in the slide. Limits: 2000 slides, 1000
+items per `each`, 10,000 characters per text value.
 
 ## Validation and errors
 

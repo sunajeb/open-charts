@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+### Templates and style files
+
+- `open-charts fill template.pptx data.json -o out.pptx` fills your own template. Shapes named
+  `chart:<name>`, or holding only `{{chart:<name>}}`, become tagged, editable charts laid out in
+  that shape's frame; a placeholder without its own frame uses the layout's. `{{name}}` fields in
+  text, tables and notes keep their formatting, even when split across runs. `slides` picks,
+  reorders and repeats slides (`each`), and sections follow. Charts take the template's theme
+  colours and body font. Untouched parts stay byte-identical. Also `--dry-run`, `--strict`,
+  `--each items.json -o "out/{field}.pptx"`, `--report` and `--style`. Example in
+  `examples/template/`; live check in `tools/fill-powerpoint.ts`.
+- Style files (`--style style.json` on build and fill, `schema/style.schema.json`): a client's
+  fonts, palette, colours, number defaults and element defaults (`style.elements`, the overrides
+  vocabulary) for every chart type, with per-type overrides. Checked as untrusted input. Examples:
+  `examples/styles/ember.json` and `examples/styles/brand.json`.
+
 ## 0.2.0 (2026-10-13)
 
 The first build meant for people who make slides: charts made in PowerPoint, edited through a

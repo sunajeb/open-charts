@@ -124,7 +124,7 @@ export const SLIDE_KEYS = ['title', 'chart', 'charts', 'chapter', 'level', 'toc'
 export const DECK_AGENDA_KEYS = [...AGENDA_OPTION_KEYS, 'title'] as const;
 /** Keys of one entry of a slide's `charts` (several charts on one slide). */
 export const SLIDE_CHART_KEYS = ['frame', 'chart'] as const;
-export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers'] as const;
+export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers', 'elements'] as const;
 /** Keys of `style.numbers`: number defaults for every chart. */
 export const STYLE_NUMBER_KEYS = ['locale', 'decimals', 'scale'] as const;
 
@@ -249,13 +249,13 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
     if (!isObj(spec.options)) e.add(['options'], 'must be an object');
     else validateOptions(e, spec.options, type as string, nCat, Array.isArray(spec.series) ? spec.series : []);
   }
-  if (spec.style !== undefined) validateStyle(e, spec.style);
+  if (spec.style !== undefined) checkStyle(e, spec.style);
   if (spec.overrides !== undefined) for (const p of checkOverrides(spec.overrides)) e.add(p.path, p.message);
   return e.list;
 }
 
 /** A style (on a deck or a chart): fonts, colours (hex or theme slots), theme colours, number defaults. */
-function validateStyle(e: Errors, st: unknown) {
+function checkStyle(e: Errors, st: unknown) {
   if (!isObj(st)) { e.add(['style'], 'must be an object'); return; }
   e.unknown(st, STYLE_KEYS, ['style']);
   if (st.font !== undefined && (typeof st.font !== 'string' || !st.font)) e.add(['style', 'font'], 'must be a font name');
@@ -285,6 +285,23 @@ function validateStyle(e: Errors, st: unknown) {
       e.unknown(st.numbers, STYLE_NUMBER_KEYS, ['style', 'numbers']);
     }
   }
+  if (st.elements !== undefined) {
+    // Default element styles: the overrides vocabulary (role or selector → ElementStyle), minus what
+    // only makes sense for one element of one chart (a pinned position, plain-text conversion).
+    for (const p of checkOverrides(st.elements)) e.add(['style', 'elements', ...p.path.slice(1)], p.message);
+    if (isObj(st.elements)) {
+      for (const [k, v] of Object.entries(st.elements)) {
+        for (const only of ['pin', 'detach'] as const) if (isObj(v) && v[only] !== undefined) e.add(['style', 'elements', k, only], `"${only}" is per element: set it in the chart's overrides, not in a style`);
+      }
+    }
+  }
+}
+
+/** Every problem in a style object (deck, chart or style file), paths under `base`. Never throws. */
+export function validateStyle(style: unknown, base = ''): SpecError[] {
+  const e = new Errors(base);
+  checkStyle(e, style);
+  return e.list.map((x) => ({ ...x, path: x.path.replace(`${base}/style`, base) || '/' }));
 }
 const THEME_SLOT_KEYS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'] as const;
 
@@ -504,7 +521,7 @@ export function validateDeck(deck: unknown): SpecError[] {
   if (deck.specVersion !== undefined && deck.specVersion !== SPEC_VERSION) {
     e.add(['specVersion'], `unsupported specVersion ${describe(deck.specVersion)}; this engine reads version ${SPEC_VERSION}`);
   }
-  if (deck.style !== undefined) validateStyle(e, deck.style);
+  if (deck.style !== undefined) checkStyle(e, deck.style);
   if (deck.agenda !== undefined) validateAgenda(e, deck.agenda);
   if (!Array.isArray(deck.slides)) { e.add(['slides'], 'must be an array of slides'); return e.list; }
   const out = e.list;

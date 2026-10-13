@@ -52,7 +52,9 @@ const paneLog: string[] = [];
 const server = serveOfficeJs({ root: dist, port: OFFICEJS_PORT, tls, log: logFile(), selftest: true, onSlide: (b64) => slides.push(b64), onLog: (l) => paneLog.push(l) });
 const lines = async () => paneLog;
 // PowerPoint (and its add-in folder), one at a time.
-for (let waited = 0; ; waited += 30) {
+// The owner can run this while holding the lock themselves: OPEN_CHARTS_LOCK=held npm run officejs:live
+const ownsLock = process.env.OPEN_CHARTS_LOCK === 'held';
+for (let waited = 0; !ownsLock; waited += 30) {
   try { mkdirSync(LOCK); break; } catch { /* held */ }
   if (waited % 300 === 0) console.log(`Waiting for ${LOCK} (another live run or the owner is using PowerPoint)…`);
   await sleep(30_000);
@@ -62,7 +64,7 @@ try {
   copyFileSync(join(dist, 'manifest.xml'), join(WEF, 'open-charts-officejs.manifest.xml'));
 } catch (e) {
   server.close();
-  try { rmdirSync(LOCK); } catch { /* */ }
+  if (!ownsLock) try { rmdirSync(LOCK); } catch { /* */ }
   ownerStep(`macOS did not let this process write PowerPoint's add-in folder (${(e as Error).message}).
 Copy the manifest yourself:  cp "${join(dist, 'manifest.xml')}" "${WEF}/open-charts-officejs.manifest.xml"
 (or run npm run officejs:sideload from Terminal and allow access to "data from other apps").`);
@@ -103,7 +105,7 @@ try {
 } finally {
   try { ppt('close active presentation saving no'); } catch { /* already closed */ }
   if (!wasRunning) { try { ppt('quit saving no'); } catch { /* gone */ } }
-  try { rmdirSync(LOCK); } catch { /* not ours any more */ }
+  if (!ownsLock) try { rmdirSync(LOCK); } catch { /* not ours any more */ }
   server.close();
 }
 writeFileSync(join(OUT, 'result.json'), JSON.stringify({ failures, slides: slides.length }, null, 2));
