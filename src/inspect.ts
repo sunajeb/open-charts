@@ -17,7 +17,7 @@ export function formatInspect(file: string, slides: SlideInfo[]): string {
     const type = c.spec ? safeType(c.spec) : '?';
     lines.push(
       `  slide ${c.slide}  "${c.name}"  ${type}  frame ${f(c.frame)}${moved(c.frame, c.bounds) ? `  RESIZED to ${f(c.bounds)}` : ''}`,
-      `    engine ${c.engine ?? '?'}  font ${c.font ?? '?'}  spec ${c.spec === undefined ? 'missing' : bytes(Buffer.byteLength(c.spec))}${c.specChunks > 1 ? ` in ${c.specChunks} chunks` : ''}  tags ${bytes(c.tagBytes)}`,
+      `    engine ${c.engine ?? '?'}  font ${c.font ?? '?'}  spec ${c.spec === undefined ? c.error ?? 'missing' : bytes(Buffer.byteLength(c.spec))}${c.specChunks > 1 ? ` in ${c.specChunks} chunks` : ''}  tags ${bytes(c.tagBytes)}`,
       `    ${c.children} shapes, ${c.roles.length} roles: ${roleSummary}`,
     );
   }

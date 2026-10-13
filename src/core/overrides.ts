@@ -525,8 +525,10 @@ export function colorName(c: string | undefined): string {
  * mark, else from its text's box; line colour and width from its first line (a label's leader is not
  * the label's look).
  */
-export function rendered(entries: RenderedEntry[]): RenderedMap {
+export function rendered(all: RenderedEntry[]): RenderedMap {
   const out: RenderedMap = {};
+  // Entries come from the host (shapes as PowerPoint reports them): malformed ones are left out.
+  const entries = all.filter((e) => e && typeof e.role === 'string' && e.props && typeof e.props === 'object');
   const marked = new Set(entries.filter((e) => e.kind === 'mark').map((e) => e.role));
   const seenMark = new Set<string>(), seenLine = new Set<string>();
   const box = (p: RenderedProps) => ({ fill: p.fill, outline: p.outline, ...(p.outline && p.outline !== 'none' && p.outlineWidth != null ? { outlineWidth: p.outlineWidth } : {}) });
@@ -573,6 +575,21 @@ function sameColor(a = 'none', b = 'none'): boolean {
   return ha.toLowerCase() === hb.toLowerCase();
 }
 const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * The well-typed properties of `p`: OC_BASE (a tag anyone can edit) and what the add-in reads back
+ * come from outside the engine; anything else is left out, so it is never compared.
+ */
+function cleanProps(p: unknown): RenderedProps | undefined {
+  if (!p || typeof p !== 'object') return undefined;
+  const q = p as Record<string, unknown>, out: Record<string, unknown> = {};
+  for (const k of ['text', 'font', 'color', 'fill', 'outline', 'line']) if (typeof q[k] === 'string') out[k] = q[k];
+  for (const k of ['size', 'outlineWidth', 'lineWidth']) if (typeof q[k] === 'number' && Number.isFinite(q[k])) out[k] = q[k];
+  if (typeof q.bold === 'boolean') out.bold = q.bold;
+  if (q.rotate === -90 || q.rotate === 0 || q.rotate === 90) out.rotate = q.rotate;
+  return out as RenderedProps;
+}
 const allows = (role: string, p: ElementProperty) => { const k = kindOf(role); return !!k && (ELEMENT_PROPERTIES[p].kinds as readonly string[]).includes(k); };
 
 /**
@@ -587,8 +604,8 @@ const allows = (role: string, p: ElementProperty) => { const k = kindOf(role); r
 export function mergeNativeEdits<T extends ChartSpec>(spec: T, base: RenderedMap, current: RenderedMap): { spec: T; changes: string[] } {
   const overrides: Overrides = { ...(spec.overrides ?? {}) };
   const changes: string[] = [];
-  for (const [role, cur] of Object.entries(current)) {
-    const b = base[role];
+  for (const [role, raw] of Object.entries(current)) {
+    const b = cleanProps(base[role]), cur = cleanProps(raw);
     if (!b || !cur || !kindOf(role)) continue;
     const st: ElementStyle = { ...(overrides[role] ?? {}) };
     const before = changes.length;
@@ -600,8 +617,12 @@ export function mergeNativeEdits<T extends ChartSpec>(spec: T, base: RenderedMap
     const both = (k: keyof RenderedProps) => cur[k] !== undefined && b[k] !== undefined;
     const text = cur.text?.replace(/\r\n?/g, '\n');
     if (both('text') && text !== b.text) set('content', [{ text: text! }], 'text');
-    if (both('font') && !b.font!.startsWith('+') && cur.font !== b.font) set('font', cur.font);
-    if (both('size') && !near(cur.size!, b.size!, 0.05)) set('size', Math.round(cur.size! * 10) / 10);
+    // An empty font name or a size of 0 or less is what PowerPoint reports for text in several fonts
+    // or sizes: not one value to keep. A changed size or width is kept within what a spec allows (a
+    // 96 pt label at 72 pt), and only when that differs from base, so the next update sees no change.
+    if (both('font') && cur.font && !b.font!.startsWith('+') && cur.font !== b.font) set('font', cur.font);
+    const size = cur.size! > 0 ? clamp(Math.round(cur.size! * 10) / 10, 4, 72) : undefined;
+    if (both('size') && size !== undefined && !near(cur.size!, b.size!, 0.05) && !near(size, b.size!, 0.05)) set('size', size);
     if (both('bold') && cur.bold !== b.bold) set('bold', cur.bold);
     if (both('rotate') && cur.rotate !== b.rotate) set('rotate', cur.rotate);
     for (const k of ['color', 'fill', 'outline', 'line'] as const) {
@@ -611,8 +632,9 @@ export function mergeNativeEdits<T extends ChartSpec>(spec: T, base: RenderedMap
       const v = theme && isElementColor(theme) ? theme : hex;
       if (v === 'none' ? k === 'fill' || k === 'outline' : isElementColor(v)) set(k, /^[0-9a-f]{6}$/i.test(v) ? v.toUpperCase() : v);
     }
-    if (both('outlineWidth') && !near(cur.outlineWidth!, b.outlineWidth!, 0.05)) set('outlineWidth', Math.round(cur.outlineWidth! * 100) / 100);
-    if (both('lineWidth') && !near(cur.lineWidth!, b.lineWidth!, 0.05)) set('lineWidth', Math.max(0.25, Math.round(cur.lineWidth! * 100) / 100));
+    const ow = clamp(Math.round(cur.outlineWidth! * 100) / 100, 0, 20), lw = clamp(Math.round(cur.lineWidth! * 100) / 100, 0.25, 20);
+    if (both('outlineWidth') && !near(cur.outlineWidth!, b.outlineWidth!, 0.05) && !near(ow, b.outlineWidth!, 0.05)) set('outlineWidth', ow);
+    if (both('lineWidth') && !near(cur.lineWidth!, b.lineWidth!, 0.05) && !near(lw, b.lineWidth!, 0.05)) set('lineWidth', lw);
     if (changes.length > before) overrides[role] = st;
   }
   return changes.length ? { spec: { ...spec, overrides }, changes } : { spec, changes };
