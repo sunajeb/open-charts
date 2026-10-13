@@ -20,6 +20,7 @@
     "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts",
     "build:mac": "node --experimental-strip-types --no-warnings scripts/build-mac.ts",
     "check:mac-pkg": "node --experimental-strip-types --no-warnings scripts/check-mac-pkg.ts",
+    "build:msi": "node --experimental-strip-types --no-warnings scripts/build-msi.ts",
     "build:win": "node --experimental-strip-types --no-warnings scripts/build-win.ts",
     "build:officejs": "node --experimental-strip-types --no-warnings scripts/build-officejs.ts",
     "officejs:cert": "node --experimental-strip-types --no-warnings scripts/officejs-cert.ts",

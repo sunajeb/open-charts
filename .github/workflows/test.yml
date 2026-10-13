@@ -44,11 +44,17 @@ jobs:
 
   # Windows: the unit suite, the engine as a single executable (no Node on the PC), its smoke test,
   # the VBA's HTTP calls made the way VBA makes them (MSXML2.ServerXMLHTTP from COM), and
-  # install.ps1 / uninstall.ps1 against a temporary profile. No PowerPoint on the runner: the live
-  # add-in run is tools/e2e-powerpoint-win.ps1 on a real PC (docs/ACCEPTANCE.md).
+  # install.ps1 / uninstall.ps1 against a temporary profile, then the MSIs (scripts/build-msi.ts):
+  # the per-user one installed and removed silently without admin rights, the machine one with its
+  # Active Setup step. No PowerPoint on the runner: the live add-in run is
+  # tools/e2e-powerpoint-win.ps1 on a real PC (docs/ACCEPTANCE.md).
+  # Signing (Azure Trusted Signing, docs/release.md) runs only when its secrets exist and never for
+  # pull requests; otherwise everything is built and tested unsigned.
   windows:
     if: github.event_name != 'schedule'
     runs-on: windows-latest
+    env:
+      AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
     steps:
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
@@ -59,6 +65,21 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build:win
+      - name: Sign open-charts.exe (Azure Trusted Signing)
+        if: env.AZURE_TRUSTED_SIGNING_ACCOUNT != '' && github.event_name != 'pull_request'
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist\win
+          files-folder-filter: exe
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
       - run: node --experimental-strip-types --no-warnings scripts/smoke-exe.ts dist/win/open-charts.exe
       - name: install.ps1, the engine as VBA calls it, uninstall.ps1 (temporary profile)
         shell: powershell
@@ -112,6 +133,85 @@ jobs:
           if ($still) { throw 'the engine is still running after uninstall' }
           Remove-Item -Recurse -Force 'HKCU:\Software\open-charts-ci'
           Write-Host 'install / uninstall OK'
+      - name: WiX Toolset
+        shell: powershell
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          & "$env:USERPROFILE\.dotnet\tools\wix.exe" extension add --global WixToolset.Util.wixext/5.0.2 WixToolset.UI.wixext/5.0.2
+      - run: npm run build:msi
+      - name: Sign the MSIs (Azure Trusted Signing)
+        if: env.AZURE_TRUSTED_SIGNING_ACCOUNT != '' && github.event_name != 'pull_request'
+        uses: azure/trusted-signing-action@v0.5.1
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          files-folder: ${{ github.workspace }}\dist\win
+          files-folder-filter: msi
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Per-user MSI, silent, no admin rights (install, the engine, uninstall)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The runner's own profile (a throwaway VM): an MSI installs where Windows says the user's folders are.
+          $msi = (Get-ChildItem dist\win\open-charts-*.msi | Where-Object { $_.Name -notlike '*-machine.msi' }).FullName
+          # The package asks for no elevation (summary information Word Count, bit 8).
+          $wi = New-Object -ComObject WindowsInstaller.Installer
+          $si = $wi.GetType().InvokeMember('SummaryInformation', 'GetProperty', $null, $wi, @($msi, 0))
+          $words = $si.GetType().InvokeMember('Property', 'GetProperty', $null, $si, @(15))
+          if (-not ($words -band 8)) { throw "the per-user MSI asks for elevation (Word Count $words)" }
+          $log = Join-Path $env:RUNNER_TEMP 'msi-user.log'
+          $p = Start-Process msiexec.exe -ArgumentList @('/i', "`"$msi`"", '/quiet', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "msiexec /i exited $($p.ExitCode)" }
+          $engine = Join-Path $env:LOCALAPPDATA 'open-charts'
+          $exe = Join-Path $engine 'open-charts.exe'
+          $ppam = Join-Path $env:APPDATA 'Microsoft\AddIns\open-charts.ppam'
+          $office = 'HKCU:\Software\Microsoft\Office\16.0\PowerPoint'
+          foreach ($f in $exe, $ppam, (Join-Path $engine 'addin.json'), (Join-Path $engine 'uninstall.ps1')) { if (-not (Test-Path $f)) { throw "missing $f" } }
+          $reg = Get-ItemProperty (Join-Path $office 'AddIns\open-charts')
+          if ($reg.Path -ne $ppam -or $reg.AutoLoad -ne 1) { throw "registry: $($reg | Out-String)" }
+          if ((Get-ItemProperty (Join-Path $office 'Security\Trusted Locations\open-charts')).Path -ne ((Split-Path $ppam) + '\')) { throw 'no trusted location' }
+          if ((& $exe addin types | Out-String) -notmatch 'available') { throw 'the installed engine does not run' }
+          # A running engine (as the add-in leaves it) must not block the uninstall.
+          Start-Process -FilePath $exe -ArgumentList 'addin', 'serve' -WindowStyle Hidden
+          $up = $false
+          for ($i = 0; $i -lt 150 -and -not $up; $i++) { Start-Sleep -Milliseconds 100; try { $up = (Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4174/api/addin/ping -TimeoutSec 1).StatusCode -eq 200 } catch { } }
+          if (-not $up) { throw 'the installed engine did not start' }
+          $p = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/quiet', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "msiexec /x exited $($p.ExitCode)" }
+          foreach ($x in $engine, $ppam, (Join-Path $office 'AddIns\open-charts'), (Join-Path $office 'Security\Trusted Locations\open-charts'), 'HKCU:\Software\open-charts') { if (Test-Path $x) { throw "not removed: $x" } }
+          if (Get-Process -Name 'open-charts' -ErrorAction SilentlyContinue) { throw 'the engine is still running after uninstall' }
+          Write-Host 'per-user MSI: silent install / uninstall OK'
+      - name: Machine MSI (Intune), Active Setup step for a user, uninstall
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $msi = (Get-ChildItem dist\win\open-charts-*-machine.msi).FullName
+          $log = Join-Path $env:RUNNER_TEMP 'msi-machine.log'
+          $p = Start-Process msiexec.exe -ArgumentList @('/i', "`"$msi`"", '/quiet', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "msiexec /i exited $($p.ExitCode)" }
+          $dir = Join-Path $env:ProgramFiles 'open-charts'
+          foreach ($f in 'open-charts.exe', 'open-charts.ppam', 'addin.json', 'install.ps1', 'uninstall.ps1') { if (-not (Test-Path (Join-Path $dir $f))) { throw "missing $f in $dir" } }
+          $as = Get-ItemProperty 'HKLM:\Software\Microsoft\Active Setup\Installed Components\open-charts'
+          if ($as.StubPath -notmatch 'install\.ps1' -or -not $as.Version) { throw "Active Setup: $($as | Out-String)" }
+          # What Windows runs at this user's next sign-in.
+          $p = Start-Process cmd.exe -ArgumentList "/c $($as.StubPath)" -Wait -PassThru -NoNewWindow
+          if ($p.ExitCode -ne 0) { throw "StubPath exited $($p.ExitCode)" }
+          $ppam = Join-Path $env:APPDATA 'Microsoft\AddIns\open-charts.ppam'
+          if (-not (Test-Path (Join-Path $env:LOCALAPPDATA 'open-charts\open-charts.exe')) -or -not (Test-Path $ppam)) { throw 'Active Setup did not install for the user' }
+          if ((Get-ItemProperty 'HKCU:\Software\Microsoft\Office\16.0\PowerPoint\AddIns\open-charts').Path -ne $ppam) { throw 'not registered for the user' }
+          powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $env:LOCALAPPDATA 'open-charts\uninstall.ps1')
+          if ($LASTEXITCODE) { throw "uninstall.ps1 exited $LASTEXITCODE" }
+          $p = Start-Process msiexec.exe -ArgumentList @('/x', "`"$msi`"", '/quiet', '/norestart', '/l*v', "`"$log`"") -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 80; throw "msiexec /x exited $($p.ExitCode)" }
+          if ((Test-Path $dir) -or (Test-Path 'HKLM:\Software\Microsoft\Active Setup\Installed Components\open-charts')) { throw 'machine MSI not removed' }
+          Write-Host 'machine MSI: install, Active Setup, uninstall OK'
       - uses: actions/upload-artifact@v4
         with:
           name: open-charts-win
@@ -120,6 +220,7 @@ jobs:
             dist/win/open-charts.ppam
             dist/win/addin.json
             dist/win/*.ps1
+            dist/win/*.msi
           retention-days: 30
 
   # LibreOffice renders fonts differently per OS, so baselines are per platform (test/goldens/<platform>/).
