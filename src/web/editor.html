@@ -635,7 +635,21 @@ function convertData(c, from, to) {
 const unitText = (u) => (u && typeof u === 'object' ? u.text ?? '' : u ?? '');
 
 /** Re-index category references (arrows, waterfall totals) after categories move. map(old) → new index or -1. */
+// Per-element overrides follow their series / category through inserts and deletes (core/overrides.ts remapOverrides).
+function remapOverrides(p, map) {
+  const c = chart();
+  if (!c.overrides) return;
+  const re = new RegExp(`(^|:)${p}(\\d+)(?=:|$)`), out = {};
+  for (const [key, st] of Object.entries(c.overrides)) {
+    const m = re.exec(key);
+    if (!m) { out[key] = st; continue; }
+    const j = map(+m[2]);
+    if (j >= 0) out[key.replace(re, `$1${p}${j}`)] = st;
+  }
+  c.overrides = out;
+}
 function remapCategories(map) {
+  remapOverrides('c', map);
   const o = opts();
   for (const key of ['cagr', 'difference']) {
     if (!o[key]) continue;
@@ -1149,6 +1163,7 @@ function markCellErrors() {
 function insertSeries(at) {
   const c = chart();
   c.series.splice(at, 0, { name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
+  remapOverrides('s', (i) => (i >= at ? i + 1 : i));
   invalid.clear(); changed(true, 'struct');
   moveTo(at, -1);
 }
@@ -1163,6 +1178,7 @@ function insertCategory(at) {
 function deleteSeries(i) {
   const c = chart(); if (c.series.length < 2) return;
   c.series.splice(i, 1);
+  remapOverrides('s', (k) => (k === i ? -1 : k > i ? k - 1 : k));
   invalid.clear(); focusCell = null; sel = null; changed(true, 'struct');
 }
 function deleteCategory(j) {

@@ -93,3 +93,14 @@ test('routes: a selection shows the toolbar next to it; a change applies overrid
     server.close();
   }
 });
+
+test('the toolbar reads the engine\'s property table (src/core/overrides.ts)', async () => {
+  const { propertyTable } = await import('../src/addin/toolbar.ts');
+  const { ELEMENT_PROPERTIES } = await import('../src/core/overrides.ts');
+  const t = await propertyTable();
+  assert.equal(t.info, ELEMENT_PROPERTIES);
+  const label = controlsFor(['label:value:s0:c1'], t).map((c) => c.prop);
+  for (const p of ['size', 'rotate', 'fill', 'color', 'bold']) assert.ok(label.includes(p), p);
+  const bar = controlsFor(['bar:s0:c1'], t).map((c) => c.prop);
+  assert.ok(bar.includes('fill') && !bar.includes('size'));
+});
