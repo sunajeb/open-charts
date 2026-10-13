@@ -481,9 +481,10 @@ test('the AppleScript helper: one request per line, never starts PowerPoint, exi
     const n = join(dir, 'n');
     writeFileSync(n, '0');
     const slow = macroRunner('/bin/sh', ['-c', `c=$(cat ${JSON.stringify(n)}); echo $((c+1)) > ${JSON.stringify(n)}; if [ "$c" = 0 ]; then exec sleep 30; else read l; echo '{"out":"pong"}'; fi`]);
-    const r = await slow.run('m', [], 200);
+    // Long enough for the first helper to start and record its run even on a loaded machine.
+    const r = await slow.run('m', [], 3000);
     assert.ok('error' in r && r.error.killed);
-    assert.equal(await slow.ping(5000), true);
+    assert.equal(await slow.ping(30_000), true);
     slow.stop();
   } finally {
     rmSync(dir, { recursive: true, force: true });

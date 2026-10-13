@@ -269,7 +269,8 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
     warm: start,
     async info() {
       if (!start()) return undefined;
-      const answer = expect('info', 1000);
+      // A cold helper takes 2–3 s to start and preload (more under load); don't fall back to the browser early.
+      const answer = expect('info', 6000);
       send({ cmd: 'info' });
       const m = await answer;
       if (!m) return undefined;
@@ -285,7 +286,7 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
       const info = await helper.info();
       if (!info) return undefined;
       const frame = info.saved ? keepSaved(info.saved, info.screens) : placePopup(chartRect(where, info.windows, info.screens), info.windows, info.screens, opts.size);
-      const answer = expect('shown', 3000);
+      const answer = expect('shown', 6000);
       send({ cmd: 'show', panel: 'datasheet', id, url: popupUrl(base2, id), frame: [frame.x, frame.y, frame.w, frame.h], focus: opts.focus !== false });
       return answer;
     },
