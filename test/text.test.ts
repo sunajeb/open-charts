@@ -77,3 +77,4 @@ test('measurer memoises widths and shapes Arabic and Hebrew through opentype.js'
   assert.ok(m.width('مرحبا بالعالم', 12) > 0);
   assert.ok(m.width('שלום', 12) > 0);
 });
+
