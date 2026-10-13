@@ -16,6 +16,12 @@ Private Const SCRIPT_HANDLER As String = "engine"
 Private Const TITLE As String = "open-charts"
 ' The command that reinstalls the add-in; the build writes the launcher path of this install here.
 Private Const REINSTALL As String = """$HOME/Library/Application Support/open-charts/bin/open-charts"" addin install"
+' Chart types each command applies to, "|type|type|": the build writes them from src/core/spec.ts
+' OPTIONS (totals, cagr / difference, scaleGroup), so the ribbon and right-click menu offer a command
+' only where the engine draws it.
+Private Const TOTALS_TYPES As String = "|stacked|"
+Private Const ARROW_TYPES As String = "|stacked|"
+Private Const SCALE_TYPES As String = "|stacked|"
 
 Private gRibbon As Object
 Private gEvents As AppEvents
@@ -83,15 +89,26 @@ Public Sub OCPREFIX_onAction(ByVal control As Object)
     Dispatch control.Id
 End Sub
 
-' Edit data and Update chart need a selected chart. Until PowerPoint has shown that it reports
+' The buttons need a selected chart (CommandApplies). Until PowerPoint has shown that it reports
 ' selection changes, they stay enabled and explain themselves when nothing suitable is selected.
-' A piece of an ungrouped chart also enables them, so the click can say why it is not a chart.
+' A piece of an ungrouped chart also enables Edit data and Update chart, so the click can say why
+' it is not a chart.
 Public Sub OCPREFIX_getEnabled(ByVal control As Object, ByRef enabled)
     If Not gEventsOk Then
         enabled = True
-    Else
+    ElseIf control.Id = "btnEditData" Or control.Id = "btnUpdate" Then
         enabled = Not (FindSelectedChart() Is Nothing) Or UngroupedSelected()
+    Else
+        enabled = CommandApplies(control.Id)
     End If
+End Sub
+
+' Right-click menu items (customUI contextMenus): shown only on open-charts charts, and only the
+' commands that apply to what is selected.
+Public Sub OCPREFIX_getVisible(ByVal control As Object, ByRef visible)
+    visible = False
+    On Error Resume Next
+    visible = CommandApplies(CommandId(control.Id))
 End Sub
 
 ' Called by AppEvents on every selection change.
@@ -103,8 +120,10 @@ Public Sub OnSelectionChange()
     CheckResized
     NotifySelection
     If Not gRibbon Is Nothing Then
-        gRibbon.InvalidateControl "btnEditData"
-        gRibbon.InvalidateControl "btnUpdate"
+        Dim c As Variant
+        For Each c In Array("btnEditData", "btnUpdate", "btnTotals", "btnCagr", "btnDifference", "btnSameScale", "btnUnscale", "btnPlainText", "btnResetLabel")
+            gRibbon.InvalidateControl c
+        Next c
     End If
     gBusy = False
 End Sub
@@ -197,6 +216,7 @@ Public Function OCPREFIX_ApplyEdit(ByVal sessionId As String, ByVal context As S
         GoTo Done
     End If
     gBusy = True
+    NewUndoEntry
     Phase "find", t
     Dim sld As Object, oldGroup As String
     Set sld = target.Parent
@@ -332,6 +352,9 @@ Private Sub Dispatch(ByVal id As String)
     If gBusy Then Tell "open-charts is still updating a chart. Try again in a moment.": Exit Sub
     On Error GoTo Failed
     gBusy = True
+    id = CommandId(id)
+    ' One user action, one undo entry (NewUndoEntry).
+    NewUndoEntry
     If Left$(id, 6) = "chart_" Then
         InsertChart Mid$(id, 7)
     ElseIf id = "btnUpdate" Then
@@ -340,6 +363,18 @@ Private Sub Dispatch(ByVal id As String)
         EditData
     ElseIf id = "btnPlainText" Then
         ConvertToPlainText
+    ElseIf id = "btnResetLabel" Then
+        ChartCommand "unpin"
+    ElseIf id = "btnTotals" Then
+        ChartCommand "totals"
+    ElseIf id = "btnCagr" Then
+        ChartCommand "cagr"
+    ElseIf id = "btnDifference" Then
+        ChartCommand "difference"
+    ElseIf id = "btnSameScale" Then
+        SameScale True
+    ElseIf id = "btnUnscale" Then
+        SameScale False
     Else
         Tell "This button is not known to this version of the add-in (" & id & ")."
     End If
@@ -423,6 +458,193 @@ Public Sub OCPREFIX_ConvertToPlainText(ByVal role As String)
     If response <> "" Then Set chart = ReplaceChart(chart, response)
     Report "PLAINTEXT " & IIf(chart Is Nothing, "failed: " & gLastMessage, "OK")
 End Sub
+
+' ---- Chart commands (ribbon "Chart tools" group, right-click menus) ----------------------------
+
+' A right-click menu item's id is "ctx<menu>_<ribbon button id>": the same command as the button.
+Private Function CommandId(ByVal id As String) As String
+    If Left$(id, 3) = "ctx" And InStr(id, "_") > 0 Then CommandId = Mid$(id, InStr(id, "_") + 1) Else CommandId = id
+End Function
+
+' One user action, one undo entry: PowerPoint for Windows starts a new entry here, so Ctrl+Z undoes
+' the whole command and nothing before it. Late bound, and ignored where PowerPoint has no such
+' method (docs/USER-GUIDE.md "Undo" says what PowerPoint for Mac does).
+Private Sub NewUndoEntry()
+    On Error Resume Next
+    CallByName Application, "StartNewUndoEntry", VbMethod
+End Sub
+
+' Whether ribbon button `id` (or its right-click item) applies to the selection.
+Private Function CommandApplies(ByVal id As String) As Boolean
+    Dim chart As Object, shp As Variant
+    On Error Resume Next
+    Select Case id
+        Case "btnSameScale"
+            CommandApplies = (ScaleCandidates().Count >= 2)
+            Exit Function
+        Case "btnUnscale"
+            For Each shp In SelectedCharts()
+                If TagValue(shp, "OC_SGROUP") <> "" Then CommandApplies = True: Exit Function
+            Next shp
+            Exit Function
+    End Select
+    Set chart = FindSelectedChart()
+    If chart Is Nothing Then Exit Function
+    Select Case id
+        Case "btnEditData", "btnUpdate", "btnResetLabel": CommandApplies = True
+        Case "btnPlainText": CommandApplies = (Left$(SelectedRoles(chart), 6) = "label:")
+        Case "btnTotals": CommandApplies = (InStr(TOTALS_TYPES, "|" & ChartTypeOf(chart) & "|") > 0)
+        Case "btnCagr", "btnDifference": CommandApplies = (InStr(ARROW_TYPES, "|" & ChartTypeOf(chart) & "|") > 0)
+    End Select
+End Function
+
+' The chart type in a chart's OC_SPEC ("" if it cannot be read).
+Private Function ChartTypeOf(ByVal chart As Object) As String
+    Dim s As String, at As Long, e As Long
+    s = SpecOf(chart)
+    at = InStr(s, """type"":""")
+    If at = 0 Then Exit Function
+    at = at + 8
+    e = InStr(at, s, """")
+    If e > at Then ChartTypeOf = Mid$(s, at, e - at)
+End Function
+
+' OC_ROLE values of the selected pieces of `chart`, comma-separated; "" when the whole chart is selected.
+Private Function SelectedRoles(ByVal chart As Object) As String
+    Dim sel As Object, i As Long, r As String, out As String
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If Not sel.HasChildShapeRange Then Exit Function
+    For i = 1 To sel.ChildShapeRange.Count
+        r = TagValue(sel.ChildShapeRange(i), "OC_ROLE")
+        If r <> "" And r <> "frame" Then out = out & IIf(out = "", "", ",") & r
+    Next i
+    SelectedRoles = out
+End Function
+
+' The open-charts charts selected on the slide (several with Shift-click), or the one whose pieces are.
+Private Function SelectedCharts() As Collection
+    Dim sel As Object, i As Long, out As Collection, one As Object
+    Set out = New Collection
+    Set SelectedCharts = out
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If sel.Type <> 2 And sel.Type <> 3 Then Exit Function ' ppSelectionShapes, ppSelectionText
+    If sel.HasChildShapeRange Then
+        Set one = FindSelectedChart()
+        If Not one Is Nothing Then out.Add one
+        Exit Function
+    End If
+    For i = 1 To sel.ShapeRange.Count
+        If IsChart(sel.ShapeRange(i)) Then out.Add sel.ShapeRange(i)
+    Next i
+End Function
+
+' The selected charts whose type can share a scale.
+Private Function ScaleCandidates() As Collection
+    Dim shp As Variant, out As Collection
+    Set out = New Collection
+    For Each shp In SelectedCharts()
+        If InStr(SCALE_TYPES, "|" & ChartTypeOf(shp) & "|") > 0 Then out.Add shp
+    Next shp
+    Set ScaleCandidates = out
+End Function
+
+' Totals, CAGR / difference arrow, reset label position: the engine changes the chart's options or
+' overrides (core/commands.ts runCommand), keeping formatting changed in PowerPoint, and the chart
+' is drawn again in place. Its same-scale partners follow (totals can change its scale).
+Private Sub ChartCommand(ByVal cmd As String)
+    Dim chart As Object, sld As Object, response As String, oldGroup As String
+    Set chart = SelectedChart()
+    If chart Is Nothing Then Exit Sub
+    Set sld = chart.Parent
+    oldGroup = TagValue(chart, "OC_SGROUP")
+    response = Engine("command" & vbLf & cmd & vbLf & ChartContext(chart) & "roles=" & SelectedRoles(chart) & vbLf & NativeLines(chart) & SpecOf(chart))
+    If response = "" Then Exit Sub
+    Set chart = ReplaceChart(chart, response)
+    If chart Is Nothing Then Exit Sub
+    SyncAfter sld, chart, oldGroup
+    chart.Select
+End Sub
+
+' Same scale (joining = True): the selected charts get one same-scale group (options.scaleGroup in
+' each OC_SPEC; an existing group of one of them is reused) and are laid out again so one value
+' unit is equally long in all of them; later edits, resizes and updates keep it (SyncAfter).
+' Remove from same scale (joining = False): the selected charts leave their groups; the charts left
+' behind are laid out again at their remaining group's scale.
+Private Sub SameScale(ByVal joining As Boolean)
+    Dim charts As Collection, shp As Variant, g As String, sld As Object, response As String
+    Dim oldGroups As Collection, old As String, done As Object, ids As String, n As Long, lastId As Long
+    If joining Then
+        Set charts = ScaleCandidates()
+        If charts.Count < 2 Then
+            Tell "Select two or more open-charts column, bar, waterfall, line, area or combination charts on this slide (Shift-click), then choose Same scale."
+            Exit Sub
+        End If
+    Else
+        Set charts = New Collection
+        For Each shp In SelectedCharts()
+            If TagValue(shp, "OC_SGROUP") <> "" Then charts.Add shp
+        Next shp
+        If charts.Count = 0 Then Tell "Select a chart that shares its scale with others, then choose Remove from same scale.": Exit Sub
+    End If
+    Set sld = charts(1).Parent
+    If joining Then
+        For Each shp In charts
+            If g = "" Then g = TagValue(shp, "OC_SGROUP")
+        Next shp
+        If g = "" Then g = NewScaleGroup(sld)
+    End If
+    Set oldGroups = New Collection
+    For Each shp In charts
+        old = TagValue(shp, "OC_SGROUP")
+        If old <> "" And old <> g Then oldGroups.Add old
+        response = Engine("command" & vbLf & "scaleGroup" & vbLf & TagValue(shp, "OC_FRAME") & vbLf & _
+            Fmt(shp.Left) & "," & Fmt(shp.Top) & "," & Fmt(shp.Width) & "," & Fmt(shp.Height) & vbLf & _
+            ThemeLine(sld) & ScaleLineFor(shp, g) & "group=" & g & vbLf & NativeLines(shp) & SpecOf(shp))
+        If response = "" Then Exit For
+        Set done = ReplaceChart(shp, response)
+        If done Is Nothing Then Exit For
+        n = n + 1: lastId = done.Id: ids = ids & "|" & done.Id
+    Next shp
+    ' Every member now carries its own scale: lay the others out again at the group's smallest.
+    If joining And n > 0 Then SyncGroup sld, g, lastId
+    For Each shp In oldGroups
+        SyncGroup sld, CStr(shp), 0
+    Next shp
+    Report "SAMESCALE " & IIf(joining, g, "-") & " " & n & " of " & charts.Count & " charts"
+    ' Select the charts again: the group's members (the sync replaced them), or the ones that left.
+    If n > 0 Then SelectCharts sld, g, ids & "|"
+End Sub
+
+' Selects the charts of same-scale group g on the slide, or (g = "") those with an id in "|id|id|".
+Private Sub SelectCharts(ByVal sld As Object, ByVal g As String, ByVal ids As String)
+    Dim shp As Object, first As Boolean, hit As Boolean
+    On Error Resume Next
+    first = True
+    For Each shp In sld.Shapes
+        If IsChart(shp) Then
+            If g = "" Then hit = (InStr(ids, "|" & shp.Id & "|") > 0) Else hit = (TagValue(shp, "OC_SGROUP") = g)
+            If hit Then
+                shp.Select IIf(first, -1, 0) ' msoTrue replaces the selection, msoFalse adds to it
+                first = False
+            End If
+        End If
+    Next shp
+End Sub
+
+' A same-scale group name no chart on the slide uses yet ("scale1", "scale2", ...).
+Private Function NewScaleGroup(ByVal sld As Object) As String
+    Dim i As Long, shp As Object, used As String
+    For Each shp In sld.Shapes
+        If IsChart(shp) Then used = used & "|" & TagValue(shp, "OC_SGROUP")
+    Next shp
+    used = used & "|"
+    Do
+        i = i + 1
+    Loop While InStr(used, "|scale" & i & "|") > 0
+    NewScaleGroup = "scale" & i
+End Function
 
 ' Lays a chart out again where it now is (its group's bounds are its frame) and replaces it in
 ' place, same stacking order. force=False is the automatic check: the engine answers "nothing to
@@ -1194,8 +1416,12 @@ End Function
 
 ' Request line "scale=" with the smallest own scale of the chart's partners, "" outside a group.
 Private Function ScaleLine(ByVal chart As Object) As String
-    Dim g As String, shp As Object, best As String, v As Double
-    g = TagValue(chart, "OC_SGROUP")
+    ScaleLine = ScaleLineFor(chart, TagValue(chart, "OC_SGROUP"))
+End Function
+
+' The same for the chart as a member of group g.
+Private Function ScaleLineFor(ByVal chart As Object, ByVal g As String) As String
+    Dim shp As Object, best As String, v As Double
     If g = "" Then Exit Function
     For Each shp In chart.Parent.Shapes
         If IsChart(shp) Then
@@ -1205,7 +1431,7 @@ Private Function ScaleLine(ByVal chart As Object) As String
             End If
         End If
     Next shp
-    If best <> "" Then ScaleLine = "scale=" & best & vbLf
+    If best <> "" Then ScaleLineFor = "scale=" & best & vbLf
 End Function
 
 ' Re-lays out every chart of group g on the slide except the one with id skipId.
