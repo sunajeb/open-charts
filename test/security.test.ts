@@ -190,7 +190,7 @@ test('VBA: Windows sends the token from the token file; settings turn verbose lo
   assert.match(bas, /http\.setRequestHeader "X-OC-Token", WinToken\(\)/);
   assert.match(bas, /Private Const TOKEN_FILE As String = "\\open-charts\\token"/);
   assert.match(bas, /If Left\$\(t, 12\) = "X-OC-Token: " Then WinToken = Trim\$\(Mid\$\(t, 13\)\)/);
-  assert.match(bas, /gVerbose = \(ignored = "OK verbose"\)/);
+  assert.match(bas, /gVerbose = \(InStr\(ignored, " verbose"\) > 0\)/);
 });
 
 test('logging: results and errors always, diagnostics only with verbose on', () => {

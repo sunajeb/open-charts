@@ -66,7 +66,8 @@ test('report: log, settings, addin.json and versions in a zip; never the token; 
     const req = parseRequest(['report', 'spec', '', '', 'app=16.89 (build 25091420) Macintosh', SPEC].join('\n'));
     assert.equal(req.app, '16.89 (build 25091420) Macintosh');
     const out = handleSupport(req.op, req.arg, { app: req.app, spec: req.spec }, m, home, shell);
-    const path = /^M\tSaved a problem report:\\n(.+?\.zip)\\n/m.exec(out)?.[1];
+    // The answer escapes backslashes and newlines (src/addin/format.ts): a Windows path comes back doubled.
+    const path = /^M\tSaved a problem report:\\n(.+?\.zip)\\n/m.exec(out)?.[1]?.replace(/\\\\/g, '\\');
     assert.ok(path && path.startsWith(join(home, 'reports', 'open-charts-report-')), out);
     assert.match(out, /and the selected chart's data\. No slide content\./);
     assert.deepEqual(calls, [`reveal ${path}`]);
@@ -84,7 +85,7 @@ test('report: log, settings, addin.json and versions in a zip; never the token; 
 
     // Without "spec" (the user said no) the chart stays out, whatever follows the params.
     const no = handleSupport('report', '', { spec: SPEC }, m, home, shell);
-    const noPath = /Saved a problem report:\\n(.+?\.zip)/.exec(no)![1];
+    const noPath = /Saved a problem report:\\n(.+?\.zip)/.exec(no)![1].replace(/\\\\/g, '\\');
     assert.ok(!unzip(readFileSync(noPath)).has('chart-spec.json'));
     assert.match(no, /version numbers\. No slide content\./);
   } finally { rmSync(home, { recursive: true, force: true }); }
