@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { createMeasurer } from '../src/fonts.ts';
 import { handleRequest, parseRequest } from '../src/addin/engine.ts';
 import { fileCommand, handleSupport, LOG_TAIL, WELCOME, writeSampleDeck, type Shell } from '../src/addin/support.ts';
@@ -96,7 +97,7 @@ test('report from the CLI: `addin report --spec <file>` prints where the zip is'
   try {
     const spec = join(home, 'chart.json');
     writeFileSync(spec, SPEC);
-    const out = execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', new URL('../src/cli.ts', import.meta.url).pathname, 'addin', 'report', '--spec', spec],
+    const out = execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', fileURLToPath(new URL('../src/cli.ts', import.meta.url)), 'addin', 'report', '--spec', spec],
       { encoding: 'utf8', env: { ...process.env, OPEN_CHARTS_HOME: home } });
     const path = /Saved a problem report:\n(.+\.zip)\n/.exec(out)?.[1];
     assert.ok(path && existsSync(path), out);
