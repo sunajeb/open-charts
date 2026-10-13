@@ -1,0 +1,196 @@
+{
+  "agenda": {
+    "preset": "flat"
+  },
+  "slides": [
+    {
+      "toc": true
+    },
+    {
+      "chapter": "Executive summary"
+    },
+    {
+      "title": "Revenue grew in every region",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "NA",
+          "EU",
+          "APAC"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              42,
+              31,
+              18
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "chapter": "Market"
+    },
+    {
+      "chapter": "Market size",
+      "level": 2
+    },
+    {
+      "title": "The market doubles by 2028",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "2024",
+          "2025",
+          "2026",
+          "2027",
+          "2028"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              10,
+              12,
+              15,
+              17,
+              20
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "chapter": "Growth drivers",
+      "level": 2
+    },
+    {
+      "title": "Cloud leads growth",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "Cloud",
+          "On-prem",
+          "Services"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              24,
+              6,
+              9
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "chapter": "Competition"
+    },
+    {
+      "title": "Three players hold 70% share",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "Us",
+          "A",
+          "B",
+          "Others"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              30,
+              22,
+              18,
+              30
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "chapter": "Plan"
+    },
+    {
+      "title": "Investment by year",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "2025",
+          "2026",
+          "2027"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              5,
+              8,
+              11
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "chapter": "Next steps"
+    },
+    {
+      "title": "Backup",
+      "split": true
+    },
+    {
+      "chapter": "Methodology"
+    },
+    {
+      "title": "Survey sample by region",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "NA",
+          "EU",
+          "APAC"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              400,
+              350,
+              250
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "chapter": "Data sources"
+    },
+    {
+      "title": "Sources by type",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "Public",
+          "Survey",
+          "Partner"
+        ],
+        "series": [
+          {
+            "name": "Revenue",
+            "values": [
+              12,
+              5,
+              3
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

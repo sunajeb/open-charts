@@ -40,8 +40,13 @@ function shape(s: Shape, font: string): string {
   const box = s.fill || s.stroke
     ? `<rect x="${n(s.x)}" y="${n(s.y)}" width="${n(s.w)}" height="${n(s.h)}" rx="${s.rounded ? n(s.h / 2) : 0}" fill="${c(s.fill)}" stroke="${c(s.stroke)}" stroke-width="0.75"/>`
     : '';
-  const spans = lines.map((l, i) => `<tspan x="${n(x)}" y="${n(top + lh * i + lh / 2)}">${esc(l)}</tspan>`).join('');
-  return `${box}<text font-family="${esc(font)}, Helvetica, sans-serif" font-size="${s.size}"${s.bold ? ' font-weight="bold"' : ''} fill="${c(s.color)}" text-anchor="${anchor}" dominant-baseline="central">${spans}</text>`;
+  const b = s.bullet;
+  const tx = b && s.align === 'left' ? x + b.at + b.hang : x;
+  const spans = lines.map((l, i) => `<tspan x="${n(tx)}" y="${n(top + lh * i + lh / 2)}">${esc(l)}</tspan>`).join('');
+  const mark = b && s.align === 'left'
+    ? `<text font-family="${esc(font)}, Helvetica, sans-serif" font-size="${s.size}"${s.bold ? ' font-weight="bold"' : ''} fill="${c(s.color)}" x="${n(x + b.at)}" y="${n(top + lh / 2)}" dominant-baseline="central">${esc(b.number !== undefined ? `${b.number}.` : b.char ?? '\u2022')}</text>`
+    : '';
+  return `${box}<text font-family="${esc(font)}, Helvetica, sans-serif" font-size="${s.size}"${s.bold ? ' font-weight="bold"' : ''} fill="${c(s.color)}" text-anchor="${anchor}" dominant-baseline="central">${spans}</text>${mark}`;
 }
 
 export function sceneToSvg(scenes: Scene[], size: { w: number; h: number }, title?: string, font = 'Arial'): string {

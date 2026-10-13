@@ -4,21 +4,161 @@
   "title": "open-charts deck spec, version 1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["slides"],
+  "required": [
+    "slides"
+  ],
   "properties": {
-    "$schema": { "type": "string" },
-    "specVersion": { "const": 1 },
-    "style": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+    "$schema": {
+      "type": "string"
+    },
+    "specVersion": {
+      "const": 1
+    },
+    "style": {
+      "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style"
+    },
+    "agenda": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "How agenda slides look (see docs/USER-GUIDE.md, Agenda).",
+      "properties": {
+        "preset": {
+          "enum": [
+            "flat",
+            "plain",
+            "boxed"
+          ],
+          "description": "Predefined style (default flat)."
+        },
+        "numbering": {
+          "type": "boolean",
+          "description": "Number chapters (1., 2., …) instead of bullets."
+        },
+        "fontSize": {
+          "type": "number",
+          "minimum": 6,
+          "maximum": 72,
+          "description": "Top-level heading size in pt (default 20); subchapters are 85 % of it."
+        },
+        "tocLevels": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9,
+          "description": "Levels a table of contents shows (default 1)."
+        },
+        "styles": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Per-state heading styles on top of the preset.",
+          "properties": {
+            "current-top": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "top-contains-current": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "top": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "current-sub": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "child-of-current-top": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "in-subtree": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "under-current-top": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "same-top": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "other": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "toc-top": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "toc-sub": {
+              "$ref": "#/$defs/headingStyle"
+            },
+            "path": {
+              "$ref": "#/$defs/headingStyle"
+            }
+          }
+        },
+        "title": {
+          "type": "string",
+          "description": "Title of agenda slides (default \"Agenda\")."
+        }
+      }
+    },
     "slides": {
       "type": "array",
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "description": "A slide with one chart (\"chart\") or several (\"charts\").",
-        "oneOf": [{ "required": ["chart"] }, { "required": ["charts"] }],
+        "description": "A slide with one chart (\"chart\") or several (\"charts\"); or an agenda slide: \"chapter\" starts a chapter, \"toc\" is a table of contents. \"split\" starts a new agenda section.",
+        "oneOf": [
+          {
+            "required": [
+              "chart"
+            ]
+          },
+          {
+            "required": [
+              "charts"
+            ]
+          },
+          {
+            "required": [
+              "chapter"
+            ]
+          },
+          {
+            "required": [
+              "toc"
+            ]
+          },
+          {
+            "required": [
+              "split"
+            ],
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "chart"
+                  ]
+                },
+                {
+                  "required": [
+                    "charts"
+                  ]
+                },
+                {
+                  "required": [
+                    "chapter"
+                  ]
+                },
+                {
+                  "required": [
+                    "toc"
+                  ]
+                }
+              ]
+            }
+          }
+        ],
         "properties": {
-          "title": { "type": "string" },
-          "chart": { "$ref": "https://open-charts.dev/schema/chart/1.json" },
+          "title": {
+            "type": "string"
+          },
+          "chart": {
+            "$ref": "https://open-charts.dev/schema/chart/1.json"
+          },
           "charts": {
             "type": "array",
             "minItems": 1,
@@ -26,22 +166,90 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["chart"],
+              "required": [
+                "chart"
+              ],
               "properties": {
                 "frame": {
                   "type": "object",
                   "additionalProperties": false,
-                  "required": ["x", "y", "w", "h"],
+                  "required": [
+                    "x",
+                    "y",
+                    "w",
+                    "h"
+                  ],
                   "description": "Where the chart goes, in points from the slide's top-left corner (the slide is 960 x 540).",
                   "properties": {
-                    "x": { "type": "number" }, "y": { "type": "number" },
-                    "w": { "type": "number", "exclusiveMinimum": 0 }, "h": { "type": "number", "exclusiveMinimum": 0 }
+                    "x": {
+                      "type": "number"
+                    },
+                    "y": {
+                      "type": "number"
+                    },
+                    "w": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    },
+                    "h": {
+                      "type": "number",
+                      "exclusiveMinimum": 0
+                    }
                   }
                 },
-                "chart": { "$ref": "https://open-charts.dev/schema/chart/1.json" }
+                "chart": {
+                  "$ref": "https://open-charts.dev/schema/chart/1.json"
+                }
               }
             }
+          },
+          "chapter": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Agenda slide starting a chapter with this name."
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9,
+            "description": "Text level of the chapter (1 = top, 2 = subchapter, …)."
+          },
+          "toc": {
+            "const": true,
+            "description": "Table-of-contents slide: every top-level chapter, no highlighting."
+          },
+          "split": {
+            "type": "boolean",
+            "description": "This slide starts a new agenda section (e.g. the backup) with its own chapters."
           }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "headingStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fill": {
+          "type": "string",
+          "description": "Hex colour like \"1F3A5F\", a theme colour (accent1…accent6, dk1, lt1, dk2, lt2, tx1, bg1, tx2, bg2), or \"\" for none."
+        },
+        "line": {
+          "type": "string",
+          "description": "Hex colour like \"1F3A5F\", a theme colour (accent1…accent6, dk1, lt1, dk2, lt2, tx1, bg1, tx2, bg2), or \"\" for none."
+        },
+        "color": {
+          "type": "string",
+          "description": "Hex colour like \"1F3A5F\", a theme colour (accent1…accent6, dk1, lt1, dk2, lt2, tx1, bg1, tx2, bg2), or \"\" for none."
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "size": {
+          "type": "number",
+          "minimum": 4,
+          "maximum": 96
         }
       }
     }

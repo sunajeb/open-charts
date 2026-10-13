@@ -233,6 +233,13 @@ export interface TextShape {
   fill?: string;
   stroke?: string;
   rounded?: boolean;
+  /**
+   * List paragraph (agenda headings): a bullet character (`char`) or an automatic number starting
+   * at `number`, drawn `at` pt from the box's left edge with the text `hang` pt after it.
+   */
+  bullet?: { char?: string; number?: number; at: number; hang: number };
+  /** Text (outline) level of the paragraph, 1 = top; PowerPoint's indent level. */
+  level?: number;
   /** Coarse label kind (kept for compatibility; `Scene.roles` is the precise role). */
   role?: 'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration' | 'title';
 }
