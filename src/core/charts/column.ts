@@ -194,7 +194,8 @@ function layoutVertical(ctx: Ctx, md: Model): 'labels-too-wide' | void {
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const dist = axisDistance(md.dmin, md.dmax, brk, ph);
   const yOf = (v: number) => py + ph - dist(v);
-  const cx = slotLayout(nCat, o.categoryGaps, px, pw).centre;
+  // Slots of the width settled above (the series column may still have moved by a hair).
+  const cx = slotLayout(nCat, o.categoryGaps, px, slot * slotUnits(nCat, o.categoryGaps)).centre;
 
   if (ticks) valueAxis(ctx, brk ? spacedTicks(ticks, yOf, lh * 1.05) : ticks, yOf, px, axisW, axisFmt, frame.x + leftW);
 

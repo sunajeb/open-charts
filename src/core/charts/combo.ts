@@ -92,7 +92,8 @@ export function layoutCombo(ctx: Ctx) {
   const yOf2 = (v: number) => py + ph - ((v - smin) / (smax - smin)) * ph;
   /** Position of a value of series s on its own axis. */
   const ys = (s: number, v: number) => (sec.has(s) ? yOf2(v) : yOf(v));
-  const cx = slotLayout(nCat, o.categoryGaps, px, pw).centre;
+  // Slots of the width settled above (the series column may still have moved by a hair).
+  const cx = slotLayout(nCat, o.categoryGaps, px, slot * slotUnits(nCat, o.categoryGaps)).centre;
   const r = Math.max(3, fs * 0.3);
   const bottom = Math.max(yOf(0), yOf(dmin));
 
