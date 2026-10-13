@@ -1,4 +1,5 @@
 // Per-element formatting (DATA-FORMAT.md "Overrides"), after the reference product's floating toolbar
+// (docs/DATA-FORMAT.md, Overrides). A chart's `overrides` map an element's role (`label:value:s1:c2`) —
 // or, as a convenience, a selector (`label:value:s1:*`, `bar:*:c2`, `label:category:*`) — to an
 // ElementStyle. Which properties an element takes depends on its kind (ELEMENT_PROPERTIES, the one
 // applicability table behind validation, the docs and, later, the toolbar). Overrides live in the

@@ -2,6 +2,7 @@
 
 Status: synthesis of `docs/plan/01–04` and `docs/native-windows-design.md` as of commit `208b368` (+ uncommitted Mekko work), 2026-10-09. This document is the single entry point; the section docs (§11) hold the detail. Where section docs disagree, this document decides and says so (§4.2).
 
+> **Update 2026-10-13.** We're building open-charts in the most efficient and effective way, taking inspiration from public chart conventions, product documentation and other information available on the internet.
 
 ## 1. Vision and positioning
 
@@ -341,7 +342,7 @@ Phase 4 alone is ~$95k–150k of the team budget and is the first line to cut (O
 
 ### 10.2 Approach and IP notes
 
-- **How we build:** the most efficient and effective path to parity. We take inspiration from the reference product and from other information available on the internet — standards (ECMA-376/OOXML), academic papers (ticks, label placement, rounding), chart-design books, product manuals and marketing, our own experiments with PowerPoint/Keynote/LibreOffice, and the reference product's observed behaviour and internals (§12).
+- **How we build:** the most efficient and effective path to parity. We take inspiration from the reference product and from other information available on the internet — standards (ECMA-376/OOXML), academic papers (ticks, label placement, rounding), chart-design books, product manuals and marketing, our own experiments with PowerPoint/Keynote/LibreOffice, and how existing charting tools behave.
 - **Behaviour spec:** every layout rule gets an entry in `docs/behaviour-spec.md` with its source, so decisions are traceable and reproducible.
 - **Licensing:** Apache-2.0 for code, schema, docs (patent grant, defensive termination); opentype.js MIT with notice; Liberation Sans under OFL in the browser bundle only; Arial never redistributed; example data synthetic and CC0; DCO sign-off, no CLA.
 - **Patents / trademark:** FTO search by counsel on automatic label placement, chart–spreadsheet linking, agenda/Gantt automation and consulting-style auto-layout *before any commercial offering*; design-arounds recorded privately; "open-charts" clearance in software classes US/EU, registration when the add-in ships, short trademark policy.
@@ -358,38 +359,3 @@ Phase 4 alone is ~$95k–150k of the team budget and is the first line to cut (O
 | `plan/spike-results.md` (to be written, week 3) | Answers to all OJ-* and NW-* spikes | Go/no-go evidence |
 | `behaviour-spec.md` (to be written, week 1) | Rule sources | Why each layout rule is what it is |
 | [`../tasks/todo.md`](../tasks/todo.md) | Live checklist (stale — refresh in week 1) | Day-to-day tracking |
-
-## 12. Reference-product internals (binary analysis, 2026-10-13)
-
-
-### 12.1 How it's built (shape of the product)
-- A single large C++ engine (~35 MB arm64) loaded **inside PowerPoint/Excel**, reaching the apps through an **OLE/COM automation compatibility layer** ported to macOS (private frameworks: COM/OLE/OLEAutomation/Uniscribe + a Windows-layer kernel). It drives Office via `IDispatch` and emits **native shapes**.
-- Office loads thin **`.ppam`/`.xlam` VBA stubs** (an ~19 KB VBA module that only forwards). Every ribbon callback is a VBA sub with a **per-build random prefix** (e.g. `ARZ…`) that forwards the control id to the native engine in-process; a native `InitializeVbaRibbonHack` wires it up, version-aware (requires **Office 16.39+**).
-- Six **out-of-process helpers**: updater, diagnostics, an OCR "chart-to-data" engine, a background services agent (stock-image panel + crash reports + push), a PowerPoint document handler, and an installer. IPC is CFMessagePort + Boost.Interprocess + JSON messages.
-- **Build/third-party stack:** Boost 1.87 (Geometry, Multiprecision, Rational, UUID), COIN-OR CLP/CoinUtils (LP solver), Tesseract 5.5.3 (OCR), lunasvg, CommonCrypto. Useful signal for our own dependency choices (we stay zero-dep in `src/core`, but this shows what heavy lifting they needed).
-
-### 12.2 Chart engine model (maps to our `src/core`)
-- Data model is a typed tree: **DataTable → series-group → series → vector → scalar**, with `DataAxis`/`DataLabel`/`Legend` nodes. Element types via an `est…` enum (`LINE`/`AREA`/`SEGMENT`) and a datasheet layout `ect…` enum (`TABLE`/`STACKEDCOLUMN`/…). This is close to our spec→model stage; our `model` output (stacks, nets, running sums, domains, widths, ticks, formatted strings — §3 stage 3) is the right shape.
-- **Layout is a linear program.** Global geometry (gridline-pair alignment, element size relations, Same-Size/Same-Width/Same-Height/fixed-size constraints) is solved with the **COIN-OR CLP simplex method** — not pure heuristics. Local decisions (individual label position, axis tick rounding, 1-D cases) use targeted solvers. **Implication for P1:** our **ledger + label solver v1** is on the right track; for the "same-scale groups / same-size" and gridline-alignment features, consider a small LP (or a constraint pass) rather than ad-hoc passes. This is a concrete design cue for the label solver and the reservation ledger (§3 stages 4,7; §4 P1).
-- **Label placement = constrained candidate selection** (not free optimisation). Each label has an **allowed-position mask** over a fixed set — `CENTER`, `FREE` (user-dragged, pinned), `LEGEND`, and axis-relative `PRILOW`/`PRIHIGH`/`SECLOW`/`SECHIGH`. Auto-placement picks the **minimum-cost valid candidate** (no overlap, in-frame; collisions via Boost.Geometry polygons). **Directly informs our label solver v1** (candidates table + cost function + obstacle grid, §3 stage 7 / doc 02): adopt the same candidate enum + allowed-mask + min-cost model, and treat a user drag as switching a label to a pinned `FREE` state (mirrors our `labelOffsets`/`OC_HIDDEN` tags).
-- **Axis:** "nice" rounding via a value-snapper + tick-spacing module (our Heckbert/Talbot ticks already cover this).
-- **Waterfall specifics (confirms our model):** segment roles `WaterfallSummand`/`WaterfallFloating`, stacked fill order top-to-bottom/bottom-to-top, connector lines, difference/CAGR arrows, and sum-label positioning rules (`awayFromBaseline`/`accordingToSign`, avoid-segment-label-boxing). Our waterfall (running sum, totals/subtotals, connectors, below-zero) matches; the **sum-label position modes and "avoid boxing" rule** are worth adding to the behaviour-spec.
-
-### 12.3 Storage format (why we leapfrog with spec-first)
-- A chart is saved as **native shapes** + a **per-chart embedded Excel workbook** (`.xlsb`, BIFF records, in an OLE storage stream — their "Slide Workbook" / internal datasheet) + **custom XML** under a private namespace + **shape tags**. The engine re-recognises its own charts by **GUID + shape-name** (a persistent shape table). This is exactly the "opaque binary blob + hidden workbook" we reject — **our spec-in-tags (`OC_SPEC`) + recoverable `import` is the deliberate leapfrog** (§1, §3 tag contract). No change needed; this validates the positioning and the tag contract's role.
-- **Data links** store an OOXML `externalLink` part **plus a cached copy** in the embedded workbook, refreshed on demand. Confirms our P5 `data.source` **snapshot + hash + on-demand update** design (§4 P5, `OC_LINK`).
-- **Chart-to-Data (OCR):** screen-captures a chart image and reconstructs a datasheet with **Tesseract** + bar/rectangle detection. Matches our P2 "chart scanner ≥ 90 % of bars within 3 %" KPI — their approach (OCR + geometry) is a reasonable template.
-
-### 12.4 Network, licensing, telemetry (reinforces "no tiers / no vendor data")
-- **Licensing is key-based with an online check** (a hashed key sent to a backend, version-tagged). Editions are an entitlement bitset (only `CHARTS` edition flag was recoverable). Timing/offline/grace behaviour wasn't determinable statically. → Reinforces our **"no licence keys"** stance (§1) and O6 (OSS + optional hosted service only).
-- **First-party usage telemetry exists** — a feature-counter enum covering every feature (insert-waterfall, stock-image searches, slide-workbook, …) **including a `USERCONFUSED` signal**; no third-party analytics SDK. Upload host not in the binary. → Reinforces **O11 (telemetry opt-in, off by default, disclosed)** as a genuine differentiator.
-- **AI pane** is a WebKit web view that sends slide context to a **runtime-loaded** host (first- vs third-party **unprovable statically**) and supports external **MCP** tool servers. → Our AI design (model chooses *what to say*; engine does numbers/pixels; verifier; local-first) is a privacy leapfrog; flag "where does slide content go?" as the reference's weakest privacy point in positioning.
-- **Admin controls** confirmed present as preference keys: auto-update + frequency, external error reporting. No explicit disable key for the usage counters or AI was found.
-
-### 12.5 Net design cues for open-charts
-1. **Label solver v1 (P1):** adopt the candidate-enum + allowed-position-mask + min-cost model; user drag → pinned `FREE`. (§3 stage 7, doc 02.)
-2. **Global constraints (P1):** a small LP/constraint pass for same-size / gridline alignment beats ad-hoc multi-pass loops; the reference uses simplex for exactly this. Evaluate during ledger work.
-3. **Waterfall/axis behaviour-spec:** add sum-label position modes, "avoid segment-label boxing", connector/arrow geometry notes.
-4. **Excel links (P5):** externalLink-part + cached snapshot + hash matches our plan — proceed.
-5. **Positioning:** keep "no licence keys, no hidden workbooks, no telemetry by default, AI that doesn't exfiltrate slide content" front-and-centre; all four are concrete contrasts with the reference's observed behaviour.
-6. **Scope confirmations:** stay zero-dep in `src/core`; keep DAM/stock images and the embedded-workbook model out; spec-in-tags remains the core leapfrog.
