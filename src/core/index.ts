@@ -30,9 +30,9 @@ export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
 export {
   SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError, OPTIONS, LIMITS, appliesTo, optionDefaults, editorSpec,
-  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES,
+  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES, DIRECTIONS, directionsOf,
 } from './spec.ts';
-export type { SpecError, OptionInfo, OptionKey } from './spec.ts';
+export type { SpecError, OptionInfo, OptionKey, Direction } from './spec.ts';
 export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
 export type { NumberStyle, Locale } from './numbers.ts';
 export { parseCategoryDate, years360, cagrYears } from './dates.ts';
