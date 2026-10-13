@@ -2,7 +2,8 @@ import type { ChartSpec, Frame, Scene, Style } from './core/index.ts';
 import { checkScene, defaultStyle, layoutGroup, migrate, scaleGroupOf, themeOf } from './core/index.ts';
 import type { Measurer } from './core/text.ts';
 import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
-import { chartTags } from './render/tags.ts';
+import { chartTags, chunkedTags } from './render/tags.ts';
+import { baseOf } from './core/overrides.ts';
 import { sceneToSvg } from './render/svg.ts';
 
 /** One chart of a slide that holds several (`charts`); without a frame, the charts share the chart area side by side. */
@@ -92,6 +93,9 @@ export function chartContent(chart: ChartSpec, scene: Scene, font: string, style
   // partners on the slide and the smallest scale among them without parsing the spec.
   const group = scaleGroupOf(migrate(chart));
   if (group && scene.valueScale) tags.push(['OC_SGROUP', group], ['OC_SCALE', scaleText(scene.valueScale.own)]);
+  // OC_BASE: the formatting this layout draws, per role, so the next update can tell what the user
+  // changed with PowerPoint's own tools and keep it as an override (core/overrides.ts mergeNativeEdits).
+  if (scene.roles?.length && scene.roles[0] !== 'placeholder') tags.push(...chunkedTags('OC_BASE', JSON.stringify(baseOf(scene.shapes, scene.roles, font))));
   return { scene, name, altText: altText(chart), tags };
 }
 

@@ -285,7 +285,7 @@ function layoutVertical(ctx: Ctx, md: Model): 'labels-too-wide' | void {
       const label = segLabel(s, c);
       // Measured as drawn: an override may change its text, size or direction.
       const L = labelSpec(ctx, `label:value:s${s}:c${c}`, label);
-      if (L.w + 2 <= colW && L.h * 0.9 <= room) {
+      if (L.w + 2 <= colW && L.h - lh * 0.1 <= room) {
         text(ctx, `label:value:s${s}:c${c}`, { x: x + colW / 2 - L.w / 2 - 1, y: ly1 + room / 2 - L.h / 2, w: L.w + 2, h: L.h, text: label, color: textOn(fill), role: 'value' });
       } else {
         // Beside the column (never into the series names right of the last one), or above / below the stack.
@@ -477,7 +477,7 @@ function layoutBars(ctx: Ctx, md: Model) {
       const room = lx2 - lx1;
       const label = segLabel(s, c);
       const L = labelSpec(ctx, `label:value:s${s}:c${c}`, label);
-      if (L.w + 2 <= room && L.h * 0.9 <= barT) {
+      if (L.w + 2 <= room && L.h - lh * 0.1 <= barT) {
         text(ctx, `label:value:s${s}:c${c}`, { x: lx1 + room / 2 - L.w / 2 - 1, y: cy(c) - L.h / 2, w: L.w + 2, h: L.h, text: label, color: textOn(fill), role: 'value' });
       } else {
         // In the gap above or below the bar, or beyond its end.

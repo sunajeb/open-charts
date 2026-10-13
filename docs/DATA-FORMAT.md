@@ -853,6 +853,85 @@ chart types that read that option.
 Labels on a dark fill switch to white automatically. Text is measured with Arial metrics (or the
 metric-compatible Liberation Sans) unless you pass other fonts to the command line with `--font`.
 
+## Overrides
+
+`overrides` formats single elements of a chart — one label, one segment, one line — the way a
+floating toolbar does: label content, font, size, text colour, alignment, text direction, number
+precision, fill, outline and line style. Keys are the element's **role** (the `OC_ROLE` tag of its
+shape in PowerPoint, e.g. `label:value:s1:c2` = the value label of series 1 in category 2; indices
+count from 0 in the spec, hidden series included). As a convenience a key may be a **selector**:
+`*` stands for any one part (`bar:*:c2` = every segment of category 2), and a trailing `*` for the
+rest (`label:category:*` = every category label, `label:value:s1:*` = every value label of series 1).
+Every matching key applies; an exact role wins over a series / category selector, which wins over
+a kind selector.
+
+```json
+{
+  "type": "stacked",
+  "categories": ["2023", "2024", "2025"],
+  "series": [
+    { "name": "Hardware", "values": [40, 44, 47] },
+    { "name": "Services", "values": [20, 26, 33] }
+  ],
+  "overrides": {
+    "label:value:s1:*": { "color": "accent1-darker25", "bold": true },
+    "label:value:s1:c2": { "content": ["value", { "field": "percent", "decimals": 1 }], "size": 14 },
+    "bar:s0:c2": { "fill": "C0504D", "outline": "tx1", "outlineWidth": 1.5 },
+    "label:category:*": { "rotate": -90, "font": "+mj-lt" }
+  }
+}
+```
+
+Which properties an element takes depends on its kind, read from the first part of its role:
+**label** (`label:…`), **legend** (`legend:…`: the swatch takes the fill), **segment** (`bar` `wedge`
+`area` `ball` `shade`), **marker**, **line** (`line` `connector` `leader` `today`), **decoration**
+(`arrow` `valueline` `indicator` `bracket`: lines plus their label bubble) and **axis** (`axis`
+`gridline`). Any other property is a validation error.
+
+| Property | Element kinds | Value |
+|---|---|---|
+| `content` | label | ordered array of fields: `value` `percent` `series` `category` `total`, `{field, decimals?, thousands?, sign?}`, `{text}` |
+| `separator` | label | string between fields (default one space) |
+| `decimals` | label | whole number 0–10 |
+| `font` | label, legend, decoration, axis | font name, or `+mj-lt` / `+mn-lt` (theme heading / body font) |
+| `size` | label, legend, decoration, axis | points 4–72 |
+| `bold` | label, legend, decoration, axis | boolean |
+| `color` | label, legend, decoration, axis | colour |
+| `align` | label, axis | `left` `center` `right` |
+| `rotate` | label, axis | `-90` (90° left) `0` `90` (90° right) |
+| `fill` | segment, marker, label, legend, decoration | colour or `none` |
+| `outline` | segment, marker, label, decoration | colour or `none` |
+| `outlineWidth` | segment, marker, label, decoration | points 0–20 |
+| `outlineDash` | segment, marker | `solid` `dash` `dot` |
+| `line` | line, decoration, axis | colour |
+| `lineWidth` | line, decoration, axis | points 0.25–20 |
+| `dash` | line, decoration, axis | `solid` `dash` `dot` |
+| `arrowheads` | line, decoration | `none` `start` `end` `both` |
+| `marker` | marker | `circle` `square` `diamond` `triangle` `none` |
+| `detach` | label | `true`: convert to plain text |
+
+**Content.** Fields are shown in their order, joined by `separator`: `value` (the element's value;
+a category / series label: its total), `percent` (share of the category; pie and doughnut: of the
+whole), `series` and `category` (names), `total` (the column total), `{"text": "…"}` (custom text).
+A field that does not apply to the element is left out. A numeric field may carry its own format:
+`decimals`, `thousands` (separator on / off) and `sign` ("+" on positives). `decimals` on the
+override sets the precision of every number in the label, including the chart's default content.
+
+**Colours** are hex, a theme colour (`accent1`…`accent6`, `tx1` `tx2` `bg1` `bg2`, `dk1` `lt1` `dk2`
+`lt2`, `hlink` `folHlink`) or a theme colour with a tint or shade: `accent1-lighter40`,
+`accent1-darker25` (0–100). Theme colours follow the presentation's theme; PowerPoint shows the
+tint as "Lighter 40%".
+
+**Layout.** Overrides are applied while the chart is laid out: a label is measured, placed and
+checked for collisions at its overridden content, size and direction (turned category labels get a
+taller axis), so they survive data edits, resizing and Update. The editor's datasheet renames keys
+when you insert or delete a series or category, so an override stays on its element; a key that
+matches nothing drawn (say a category deleted elsewhere) is reported as a warning, never an error.
+Formatting made with PowerPoint's own tools on a chart's shapes is redrawn from the spec on the next
+update — put it in `overrides` instead. `"detach": true` ("convert to plain text") is the exception:
+the engine stops drawing that label and the add-in leaves a plain copy outside the chart group that
+is yours to edit.
+
 ## Validation and errors
 
 Every spec is validated before layout. Each problem is reported with a JSON Pointer to the exact

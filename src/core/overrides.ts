@@ -434,3 +434,130 @@ export function remapOverrides(o: Overrides | undefined, p: 's' | 'c', map: (i: 
   }
   return out;
 }
+
+// ---- OC_BASE: capturing formatting done with PowerPoint's own tools --------------------------------
+//
+// Unlike the reference product, which redraws over native formatting, open-charts keeps it: the chart's
+// group carries OC_BASE, the last-rendered value of every overridable property per role. On the next
+// update the host reads the same properties back from the shapes (`current`), and every property where
+// current ≠ base was changed by the user in PowerPoint and becomes an override in the spec — a
+// three-way merge (docs/MASTER-PLAN.md §3). Both sides are built from per-shape entries with one rule
+// (`rendered`), so the add-in only reports what each shape looks like.
+
+/** Overridable properties of one element as drawn (and as PowerPoint reports them back). */
+export interface RenderedProps {
+  text?: string; font?: string; size?: number; color?: string; bold?: boolean; rotate?: -90 | 0 | 90;
+  fill?: string; outline?: string; outlineWidth?: number; line?: string; lineWidth?: number;
+}
+export type RenderedMap = Record<string, RenderedProps>;
+
+/** One drawn shape as the add-in reads it: its role, what it is, and its properties. */
+export interface RenderedEntry { role: string; kind: 'text' | 'mark' | 'line'; props: RenderedProps }
+
+/**
+ * A colour in OC_BASE and in what the add-in reads back: "RRGGBB@accent1-lighter40" (the hex it shows
+ * and its theme colour, as in a scene) or "RRGGBB"; "none" for no colour.
+ */
+export function colorName(c: string | undefined): string {
+  if (!c) return 'none';
+  const [hex, theme] = c.replace('#', '').split('@');
+  return theme ? `${hex.toUpperCase()}@${theme}` : hex.toUpperCase();
+}
+
+/**
+ * Per role, the properties of its shapes: text props from its text; fill and outline from its first
+ * mark, else from its text's box; line colour and width from its first line (a label's leader is not
+ * the label's look).
+ */
+export function rendered(entries: RenderedEntry[]): RenderedMap {
+  const out: RenderedMap = {};
+  const marked = new Set(entries.filter((e) => e.kind === 'mark').map((e) => e.role));
+  const seenMark = new Set<string>(), seenLine = new Set<string>();
+  const box = (p: RenderedProps) => ({ fill: p.fill, outline: p.outline, ...(p.outline && p.outline !== 'none' && p.outlineWidth != null ? { outlineWidth: p.outlineWidth } : {}) });
+  for (const { role, kind, props } of entries) {
+    if (!role || role === 'placeholder' || role === 'frame') continue;
+    const b = (out[role] ??= {});
+    if (kind === 'text') {
+      const { fill: _f, outline: _o, outlineWidth: _w, line: _l, lineWidth: _lw, ...text } = props;
+      Object.assign(b, text, marked.has(role) ? {} : box(props));
+    } else if (kind === 'mark' && !seenMark.has(role)) {
+      seenMark.add(role);
+      Object.assign(b, box(props));
+    } else if (kind === 'line' && !seenLine.has(role) && !role.startsWith('label:')) {
+      seenLine.add(role);
+      Object.assign(b, { line: props.line, lineWidth: props.lineWidth });
+    }
+    for (const k of Object.keys(b) as (keyof RenderedProps)[]) if (b[k] === undefined) delete b[k];
+  }
+  return out;
+}
+
+/** The entries of a laid-out scene, as the add-in draws them (font: the chart's, unless the shape has its own). */
+export function sceneEntries(shapes: Shape[], roles: string[], font: string): RenderedEntry[] {
+  return shapes.map((s, i): RenderedEntry => {
+    const role = roles[i] ?? '';
+    if (s.kind === 'text') {
+      return { role, kind: 'text', props: {
+        text: s.text, font: s.font ?? font, size: s.size, color: colorName(s.color), bold: !!s.bold, rotate: s.rotate ?? 0,
+        fill: colorName(s.fill), outline: colorName(s.stroke), ...(s.stroke ? { outlineWidth: s.strokeWidth ?? 0.75 } : {}),
+      } };
+    }
+    if (s.kind === 'line') return { role, kind: 'line', props: { line: colorName(s.color), lineWidth: s.width } };
+    return { role, kind: 'mark', props: { fill: colorName(s.fill), outline: colorName(s.stroke), ...(s.stroke ? { outlineWidth: s.strokeWidth ?? 0.75 } : {}) } };
+  });
+}
+
+/** OC_BASE of a scene: per role, the last-rendered value of every overridable property. */
+export const baseOf = (shapes: Shape[], roles: string[], font: string): RenderedMap => rendered(sceneEntries(shapes, roles, font));
+
+/** Same colour: the same theme colour when both name one, else the same hex (tx1 and dk1 alike). */
+function sameColor(a = 'none', b = 'none'): boolean {
+  const [ha, ta] = a.replace('#', '').split('@'), [hb, tb] = b.replace('#', '').split('@');
+  if (ta && tb && ta === tb) return true;
+  return ha.toLowerCase() === hb.toLowerCase();
+}
+const near = (a: number, b: number, tol: number) => Math.abs(a - b) <= tol;
+const allows = (role: string, p: ElementProperty) => { const k = kindOf(role); return !!k && (ELEMENT_PROPERTIES[p].kinds as readonly string[]).includes(k); };
+
+/**
+ * The three-way merge: every property whose current value (read back from PowerPoint) differs from its
+ * last-rendered value in `base` was changed by the user, and becomes an exact-role override in the
+ * returned spec (the input is not changed); properties equal to base keep whatever override they had.
+ * Changed label text becomes custom content. Only properties the element's kind takes are captured; a
+ * theme font in base ("+mn-lt") is not compared (PowerPoint reports the font it stands for). Roles
+ * missing on either side (a shape deleted, a role the engine no longer draws) are skipped. `changes`
+ * lists "role.property" for every override written.
+ */
+export function mergeNativeEdits<T extends ChartSpec>(spec: T, base: RenderedMap, current: RenderedMap): { spec: T; changes: string[] } {
+  const overrides: Overrides = { ...(spec.overrides ?? {}) };
+  const changes: string[] = [];
+  for (const [role, cur] of Object.entries(current)) {
+    const b = base[role];
+    if (!b || !cur || !kindOf(role)) continue;
+    const st: ElementStyle = { ...(overrides[role] ?? {}) };
+    const before = changes.length;
+    const set = <K extends ElementProperty>(k: K, v: ElementStyle[K], what: string = k) => {
+      if (!allows(role, k)) return;
+      st[k] = v;
+      changes.push(`${role}.${what}`);
+    };
+    const both = (k: keyof RenderedProps) => cur[k] !== undefined && b[k] !== undefined;
+    const text = cur.text?.replace(/\r\n?/g, '\n');
+    if (both('text') && text !== b.text) set('content', [{ text: text! }], 'text');
+    if (both('font') && !b.font!.startsWith('+') && cur.font !== b.font) set('font', cur.font);
+    if (both('size') && !near(cur.size!, b.size!, 0.05)) set('size', Math.round(cur.size! * 10) / 10);
+    if (both('bold') && cur.bold !== b.bold) set('bold', cur.bold);
+    if (both('rotate') && cur.rotate !== b.rotate) set('rotate', cur.rotate);
+    for (const k of ['color', 'fill', 'outline', 'line'] as const) {
+      if (!both(k) || sameColor(cur[k], b[k])) continue;
+      // Stored as the theme colour when PowerPoint reports one, else as hex.
+      const [hex, theme] = cur[k]!.replace('#', '').split('@');
+      const v = theme && isElementColor(theme) ? theme : hex;
+      if (v === 'none' ? k === 'fill' || k === 'outline' : isElementColor(v)) set(k, /^[0-9a-f]{6}$/i.test(v) ? v.toUpperCase() : v);
+    }
+    if (both('outlineWidth') && !near(cur.outlineWidth!, b.outlineWidth!, 0.05)) set('outlineWidth', Math.round(cur.outlineWidth! * 100) / 100);
+    if (both('lineWidth') && !near(cur.lineWidth!, b.lineWidth!, 0.05)) set('lineWidth', Math.max(0.25, Math.round(cur.lineWidth! * 100) / 100));
+    if (changes.length > before) overrides[role] = st;
+  }
+  return changes.length ? { spec: { ...spec, overrides }, changes } : { spec, changes };
+}

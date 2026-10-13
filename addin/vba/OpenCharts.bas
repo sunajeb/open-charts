@@ -359,11 +359,122 @@ End Sub
 Private Function Relayout(ByVal old As Object, ByVal force As Boolean) As Object
     Dim response As String, request As String, tp As Single
     tp = Timer
-    request = IIf(force, "update", "relayout") & vbLf & "" & vbLf & ChartContext(old) & SpecOf(old)
+    request = IIf(force, "update", "relayout") & vbLf & "" & vbLf & ChartContext(old) & NativeLines(old) & SpecOf(old)
     Phase "read", tp
     response = Engine(request)
     If response = "" Then Exit Function
     Set Relayout = ReplaceChart(old, response)
+End Function
+
+'  Formatting changed with PowerPoint's own tools is kept: the request carries the chart's OC_BASE
+' (its formatting as last drawn) and what its shapes look like now ("base=" and "native=" lines);
+' the engine turns every difference into an override in the spec (core/overrides.ts mergeNativeEdits).
+' "" for a chart drawn before OC_BASE existed.
+Private Function NativeLines(ByVal chart As Object) As String
+    Dim base As String, k As Long, shp As Object, role As String, out As String, item As String
+    base = ChunkedTag(chart, "OC_BASE")
+    If base = "" Then Exit Function
+    For k = 1 To chart.GroupItems.Count
+        Set shp = chart.GroupItems(k)
+        role = TagValue(shp, "OC_ROLE")
+        If role <> "" And role <> "frame" Then
+            item = ShapeEntry(shp, role)
+            If item <> "" Then out = out & IIf(out = "", "", ",") & item
+        End If
+    Next k
+    NativeLines = "base=" & base & vbLf & "native=[" & out & "]" & vbLf
+End Function
+
+' One shape as {"role", "kind": text | mark | line, "props"} (core/overrides.ts RenderedEntry).
+Private Function ShapeEntry(ByVal shp As Object, ByVal role As String) As String
+    Dim p As String, kind As String, tr As Object, o As Long
+    On Error GoTo Failed
+    If shp.Type = 9 Then ' msoLine
+        kind = "line"
+        p = """line"":" & JsonStr(ColorOf(shp.Line.ForeColor, shp.Line.Visible)) & ",""lineWidth"":" & Fmt3(shp.Line.Weight)
+    Else
+        kind = "mark"
+        p = """fill"":" & JsonStr(ColorOf(shp.Fill.ForeColor, shp.Fill.Visible)) & ",""outline"":" & JsonStr(ColorOf(shp.Line.ForeColor, shp.Line.Visible))
+        If shp.Line.Visible Then p = p & ",""outlineWidth"":" & Fmt3(shp.Line.Weight)
+        If shp.HasTextFrame Then
+            If shp.TextFrame2.HasText Then
+                kind = "text"
+                Set tr = shp.TextFrame2.TextRange
+                o = shp.TextFrame2.Orientation
+                p = p & ",""text"":" & JsonStr(Replace(tr.Text, vbCr, vbLf)) & ",""font"":" & JsonStr(tr.Font.Name) & _
+                    ",""size"":" & Fmt3(tr.Font.Size) & ",""bold"":" & IIf(tr.Font.Bold = -1, "true", "false") & _
+                    ",""color"":" & JsonStr(ColorOf(tr.Font.Fill.ForeColor, -1)) & ",""rotate"":" & IIf(o = 2, "-90", IIf(o = 3, "90", "0"))
+            End If
+        End If
+    End If
+    ShapeEntry = "{""role"":" & JsonStr(role) & ",""kind"":""" & kind & """,""props"":{" & p & "}}"
+    Exit Function
+Failed:
+    ShapeEntry = ""
+End Function
+
+' A colour as "RRGGBB", or "RRGGBB@accent1-lighter40" for a theme colour; "none" when not visible.
+Private Function ColorOf(ByVal cf As Object, ByVal visible As Long) As String
+    Dim c As Long, t As Long, nm As String, ts As Single
+    If visible = 0 Then ColorOf = "none": Exit Function
+    c = cf.RGB
+    ColorOf = Right$("0" & Hex$(c And 255), 2) & Right$("0" & Hex$((c \ 256) And 255), 2) & Right$("0" & Hex$((c \ 65536) And 255), 2)
+    On Error Resume Next
+    t = cf.ObjectThemeColor
+    nm = ThemeName(t)
+    If nm = "" Then Exit Function
+    ts = cf.TintAndShade
+    If ts > 0.004 Then nm = nm & "-lighter" & CStr(CLng(ts * 100))
+    If ts < -0.004 Then nm = nm & "-darker" & CStr(CLng(-ts * 100))
+    ColorOf = ColorOf & "@" & nm
+End Function
+
+' Theme colour name of an msoThemeColorIndex (the inverse of ThemeIndex), "" for none.
+Private Function ThemeName(ByVal t As Long) As String
+    Select Case t
+        Case 1: ThemeName = "dk1"
+        Case 2: ThemeName = "lt1"
+        Case 3: ThemeName = "dk2"
+        Case 4: ThemeName = "lt2"
+        Case 5 To 10: ThemeName = "accent" & (t - 4)
+        Case 11: ThemeName = "hlink"
+        Case 12: ThemeName = "folHlink"
+        Case 13: ThemeName = "tx1"
+        Case 14: ThemeName = "bg1"
+        Case 15: ThemeName = "tx2"
+        Case 16: ThemeName = "bg2"
+    End Select
+End Function
+
+' A JSON string literal.
+Private Function JsonStr(ByVal v As String) As String
+    Dim i As Long, ch As String, code As Long, out As String
+    For i = 1 To Len(v)
+        ch = Mid$(v, i, 1)
+        code = AscW(ch)
+        Select Case code
+            Case 34: out = out & "\"""
+            Case 92: out = out & "\\"
+            Case 10: out = out & "\n"
+            Case 9: out = out & "\t"
+            Case 0 To 31: out = out & "\u" & Right$("000" & Hex$(code), 4)
+            Case Else: out = out & ch
+        End Select
+    Next i
+    JsonStr = """" & out & """"
+End Function
+
+' A tag written in chunks by the engine (render/tags.ts chunkedTags): NAME, or NAME_0..n + NAME_N.
+Private Function ChunkedTag(ByVal shp As Object, ByVal key As String) As String
+    Dim s As String, n As Long, i As Long
+    s = TagValue(shp, key)
+    If s = "" Then
+        n = CLng(Val(TagValue(shp, key & "_N")))
+        For i = 0 To n - 1
+            s = s & TagValue(shp, key & "_" & i)
+        Next i
+    End If
+    ChunkedTag = s
 End Function
 
 ' Draws an engine response in place of chart `old` (same stacking order) and deletes it. Returns the
