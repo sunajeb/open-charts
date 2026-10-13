@@ -704,6 +704,7 @@ End Function
 '  1 kind 2 x 3 y 4 w 5 h 6 fill 7 lineColor 8 lineWidth 9 dash 10 arrowEnd 11 text 12 font
 '  13 size 14 bold 15 color 16 align 17 valign 18 wrap 19 autosize 20 role 21 name 22 points
 '  23 textGeom 24 rotate 25 arrowStart 26 pattern (per-element overrides; absent from older engines)
+'  27 level 28 bullet 29 bulletAt 30 bulletHang (agenda headings: list paragraph)
 Private Function DrawShape(ByVal sld As Object, f() As String) As Object
     Dim kind As String, x As Single, y As Single, w As Single, h As Single, s As Object
     kind = f(1)
@@ -905,6 +906,29 @@ Private Sub SetText(ByVal s As Object, f() As String)
         .SpaceBefore = 0
         .SpaceAfter = 0
         .SpaceWithin = 1
+    End With
+    If Col(f, 28) <> "" Then SetBullet tr.ParagraphFormat, Col(f, 27), Col(f, 28), Val(Col(f, 29)), Val(Col(f, 30))
+End Sub
+
+' A list paragraph (agenda heading): text level, bullet "u<code point>" or number "n<start>", the
+' bullet `at` pt from the left edge and the text `hang` pt after it.
+Private Sub SetBullet(ByVal pf As Object, ByVal level As String, ByVal bullet As String, ByVal at As Single, ByVal hang As Single)
+    On Error Resume Next
+    If Val(level) > 1 Then pf.IndentLevel = CLng(Val(level))
+    pf.LeftIndent = at + hang
+    pf.FirstLineIndent = -hang
+    With pf.Bullet
+        .Visible = -1
+        If Left$(bullet, 1) = "n" Then
+            .Type = 2 ' msoBulletNumbered
+            .Style = 3 ' msoBulletArabicPeriod
+            .StartValue = CLng(Val(Mid$(bullet, 2)))
+        Else
+            .Type = 1 ' msoBulletUnnumbered
+            .Character = CLng(Val(Mid$(bullet, 2)))
+        End If
+        .UseTextColor = -1
+        .UseTextFont = -1
     End With
 End Sub
 

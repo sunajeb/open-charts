@@ -3,7 +3,7 @@
 // (format.ts) that VBA turns into native shapes.
 //
 // Request, one field per line:
-//   1  op       insert | update | relayout | edit | detach | types
+//   1  op       insert | update | relayout | edit | detach | types | agenda (src/addin/agenda.ts)
 //   2  arg      gallery item (insert), edit-session id (update, optional) or element role (detach)
 //   3  frame    "x,y,w,h" pt: target frame (insert) or the chart's OC_FRAME tag
 //   4  bounds   "x,y,w,h" pt: the group's current bounds on the slide (update, relayout)
@@ -36,6 +36,7 @@ import type { Session } from '../server.ts';
 import { FORMAT_VERSION, num, record, shapeBounds, shapeRecord } from './format.ts';
 import { galleryItems, sampleFor, typeLabel } from './registry.ts';
 import { reinstallCommand } from './launcher.ts';
+import { handleAgenda } from './agenda.ts';
 
 export interface AddinRequest {
   op: string; arg: string; frame?: Frame; bounds?: Frame; spec: string;
@@ -197,6 +198,12 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const spec = detachElement(chart, before, role);
         if (!spec) return error('This label is not drawn any more; update the chart and try again.');
         return respond(spec, style, frame, m, env);
+      }
+      case 'agenda': {
+        // Agenda commands (src/addin/agenda.ts): frame = the slide size, bounds = the agenda
+        // placeholder of the "open-charts agenda" layout, the rest a snapshot of the deck.
+        const size = req.frame ?? { x: 0, y: 0, w: 960, h: 540 };
+        return handleAgenda({ command: req.arg, slide: { w: size.w, h: size.h }, placeholder: req.bounds, theme: req.theme, snapshot: req.spec }, m);
       }
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
