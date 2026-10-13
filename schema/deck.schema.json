@@ -38,7 +38,7 @@
           "type": "number",
           "minimum": 6,
           "maximum": 72,
-          "description": "Top-level heading size in pt (default 20); subchapters are 85 % of it."
+          "description": "Top-level heading size in pt (default 24, smaller only when the chapters do not fit); subchapters are 85 % of it."
         },
         "tocLevels": {
           "type": "integer",

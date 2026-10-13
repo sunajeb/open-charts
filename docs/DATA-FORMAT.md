@@ -112,7 +112,7 @@ starts a new, independent agenda there, e.g. for the backup; a slide that only h
 |---|---|---|
 | `preset` | `flat` · `plain` · `boxed` | Predefined style (default `flat`: filled boxes, the current chapter in accent 1). |
 | `numbering` | boolean | Number chapters (1., 2., … per level) instead of bullets. |
-| `fontSize` | pt | Top-level heading size (default 20); subchapters are 85 % of it. |
+| `fontSize` | pt | Top-level heading size (default 24, smaller only when the chapters do not fit the slide); subchapters are 85 % of it. |
 | `tocLevels` | 1–9 | Levels a table of contents shows (default 1). |
 | `styles` | object | Per-state overrides: `{ "<state>": { "fill", "line", "color", "bold", "size" } }`; colours as in [Style](#style), `""` for none. States: `current-top`, `top-contains-current`, `top`, `current-sub`, `child-of-current-top`, `in-subtree`, `under-current-top`, `same-top`, `other`, `toc-top`, `toc-sub`, `path`. |
 | `title` | string | Title of agenda slides (default "Agenda"). A slide's own `title` wins. |

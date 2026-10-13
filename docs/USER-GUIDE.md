@@ -694,10 +694,12 @@ versa, and moving the last chapter before the split does not take the backup alo
 that title slide rather than on the backup's first agenda slide: otherwise it moves and duplicates
 with that chapter.
 
-**Position.** The agenda starts centred on the slide. Move it on the first agenda slide before you
-add more: new agenda slides copy the closest agenda slide before them (its layout, master and
-shapes), so the agenda appears in the same place. The agenda keeps its width fitted to the longest
-heading.
+**Position and size.** The agenda fills the slide's body area below the title (or the layout's
+agenda placeholder, see below), headings at 24 pt, subchapters slightly smaller. With many chapters
+the font gets smaller until the agenda fits. Every agenda slide of a section puts it in the same
+place. Move it on one agenda slide and the others of that section follow on the next update; new
+agenda slides copy the closest agenda slide before them (its layout, master and shapes). A heading
+box is never narrower than its text.
 
 **Styles.** Each heading has one of twelve states, and every heading in the same state looks the
 same:
@@ -719,7 +721,7 @@ same:
 
 To restyle a state, format one heading in that state (fill, outline, font colour, bold, size) and
 click **Update agenda**: every heading in the same state, on every agenda slide, takes the new look.
-The defaults are the *flat* preset: grey boxes, the current chapter white on accent 1. From the
+The defaults are the *flat* preset: grey bars, the current chapter white on accent 1. From the
 command line, `"agenda": {"preset": "plain" | "boxed", "numbering": true, "styles": {...}}` sets the
 preset, numbered headings and per-state styles ([DATA-FORMAT.md › Agenda slides](DATA-FORMAT.md#agenda-slides)).
 
