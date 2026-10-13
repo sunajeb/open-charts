@@ -68,7 +68,7 @@ Rules for this plan
 ## E. Supportability and first-run experience
 - [x] E1 "Report a problem": zips add-in log, versions and the chart spec (no slide content unless the user agrees)
 - [x] E2 First run: short welcome, sample deck, help links
-- [ ] E3 Review every user-facing message (plain, actionable)
+- [x] E3 Review every user-facing message (plain, actionable): add-in, engine, editor, task pane, installer, bridge
 
 ## F. Release 1.0
 - [ ] F1 Freeze the data format at 1.0 (owner decision, Q5); version, changelog
