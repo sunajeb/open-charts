@@ -81,9 +81,27 @@ function waitForLog(re: RegExp, from: number, ms = 20_000): string {
   return '';
 }
 
+/**
+ * Apply in the editor: POSTs the edited chart to the session as the editor does and waits for the
+ * server's outcome on it (drawn, or error + message), then for the macro's APPLIED line in the log.
+ */
+async function applyInEditor(id: string, chart: unknown) {
+  const before = logLines().length, t = Date.now();
+  // A pooled keep-alive socket may have been closed by the server meanwhile: retry once.
+  const post = () => fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart, state: 'applied' }) });
+  const rev = (await (await post().catch(post)).json()).rev;
+  let outcome: { state: string; rev: number; message?: string } | undefined;
+  for (const end = Date.now() + 30_000; Date.now() < end && !(outcome && outcome.rev > rev && ['drawn', 'error'].includes(outcome.state)); sleep(100)) {
+    outcome = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
+  }
+  const ms = Date.now() - t;
+  const applied = waitForLog(/APPLIED|APPLY .* (failed|skipped)/, before, 1000);
+  return { outcome, applied, ms, log: logLines().slice(before).join('\n') };
+}
+
 const results: string[] = [];
 const failures: string[] = [];
-const timings = { insert: [] as number[], update: [] as number[], resize: [] as number[], edit: 0, apply: 0 };
+const timings = { insert: [] as number[], update: [] as number[], resize: [] as number[], edit: 0, apply: [] as number[] };
 const quitPowerPoint = () => { try { ppt('quit saving no', 60); } catch { /* already gone */ } };
 process.on('exit', (code) => { if (code !== 0) quitPowerPoint(); });
 const abortIfFailed = (what: string) => {
@@ -142,16 +160,8 @@ if ('spec' in wf && slideOf.waterfall) {
   const edited = structuredClone(wf.spec);
   edited.categories.splice(5, 0, 'One-offs');
   edited.series[0].values.splice(5, 0, 6);
-  const before = logLines().length;
-  t = Date.now();
-  const rev = (await (await fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: edited, state: 'applied' }) })).json()).rev;
-  // What the editor waits for: the server's outcome on the session (drawn, or error + message).
-  let outcome: { state: string; rev: number; message?: string } | undefined;
-  for (const end = Date.now() + 30_000; Date.now() < end && !(outcome && outcome.rev > rev && ['drawn', 'error'].includes(outcome.state)); sleep(100)) {
-    outcome = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
-  }
-  timings.apply = Date.now() - t;
-  const applied = waitForLog(/APPLIED|APPLY .* failed/, before, 1000);
+  const { outcome, applied, ms } = await applyInEditor(id, edited);
+  timings.apply.push(ms);
   results.push(applied || 'APPLIED: nothing in the log', `SESSION ${id} ${outcome?.state}${outcome?.message ? `: ${outcome.message}` : ''}`);
   if (outcome?.state === 'error') console.log(`Apply did not reach the slide; the editor shows: ${outcome.message}`);
   if (!/APPLIED \w+ OK/.test(applied) || outcome?.state !== 'drawn') {
@@ -319,6 +329,25 @@ const THEME_PNG = join(OUT, 'theme-png');
   console.log(upd);
   if (!/RESULT btnUpdate OK/.test(upd)) failures.push(`theme slide: Update chart failed: ${upd}`);
   if (!/SYNC revenue 1 of 1 charts/.test(upd)) failures.push(`theme slide: Update chart did not re-lay out the group partner (${upd})`);
+  // Edit data and Apply in this restarted PowerPoint (the add-in server started for the first
+  // PowerPoint must not drive this one: it froze PowerPoint and ApplyEdit never ran). The stacked
+  // chart's new data keeps its scale, so the partner is re-laid out at the same group scale.
+  const deckNow = join(OUT, 'themed-before-edit.pptx');
+  macro('ExportCopy', deckNow, 'pptx');
+  const stacked = readCharts(new Uint8Array(readFileSync(deckNow)))[0]?.charts.find((c) => c.spec && JSON.parse(c.spec).type === 'stacked');
+  macro('SelectChart', '1');
+  const editOut = macro('Run', 'btnEditData');
+  if (!stacked?.spec || !/RESULT btnEditData OK/.test(editOut)) failures.push(`theme slide: Edit data failed (${editOut})`);
+  else {
+    const spec = JSON.parse(stacked.spec);
+    spec.series[0].values[2] = 45;
+    const a = await applyInEditor(specKey(stacked.spec), spec);
+    timings.apply.push(a.ms);
+    console.log(`Apply in a restarted PowerPoint (${a.ms} ms):\n${a.log}`);
+    results.push(a.applied || 'APPLIED: nothing in the log');
+    if (!/APPLIED \w+ OK/.test(a.applied) || a.outcome?.state !== 'drawn') failures.push(`theme slide: Apply in a restarted PowerPoint did not update the chart (${a.applied || 'timeout'}, session ${a.outcome?.state}${a.outcome?.message ? `: ${a.outcome.message}` : ''})`);
+    if (!/SYNC revenue 1 of 1 charts/.test(a.log)) failures.push(`theme slide: Apply did not re-lay out the group partner (${a.log})`);
+  }
   // Resize the stacked chart (its own scale changes): the selection change re-lays it out and then
   // its partner, at the new group scale.
   macro('SelectChart', '1');
@@ -391,7 +420,7 @@ console.log(`\nTimings (wall clock, AppleScript run VB macro included):
   update      ${ms(timings.update)}   VBA ${ms(vbaMs(/RESULT btnUpdate/))}
   resize      ${ms(timings.resize)} (selection change incl. re-layout)
   edit data   ${timings.edit} ms to session + editor launch
-  apply       ${timings.apply} ms from editor Apply to chart updated   VBA ${ms(vbaMs(/APPLIED/))}`);
+  apply       ${ms(timings.apply)} from editor Apply to chart updated (first PowerPoint session, then a restarted one)   VBA ${ms(vbaMs(/APPLIED/))}`);
 console.log(`PNGs: ${PNG_DIR} (CLI writer: ${CLI_PNG_DIR})`);
 if (failures.length) {
   console.error(`\nFAILED:\n  ${failures.join('\n  ')}`);
