@@ -94,7 +94,9 @@ scatter, bubble and Gantt charts have no arrows.
 
 - **In the editor**, click an icon for its default (▲) or one of its arrows for that direction.
   With the keyboard: arrow keys move between icons, **Shift+arrow** picks that direction, **Enter**
-  picks the icon. The **Direction** buttons in the Chart section turn the current chart.
+  picks the icon. While you hover (or focus) an icon or an arrow, the strip under the gallery
+  previews your data as that chart, that way, before you pick it. The **Direction** buttons in the
+  Chart section turn the current chart.
 - **In PowerPoint**, a ribbon gallery cannot have clickable arrows inside its tiles, so the four
   **Direction** buttons sit next to it. Select a chart and click an arrow to turn it in place (its
   data, size and position stay); or, with nothing selected, click an arrow and then insert — the new
