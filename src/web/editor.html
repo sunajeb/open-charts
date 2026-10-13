@@ -207,7 +207,8 @@
   .gal-dir[data-dir="left"], .gal-dir[data-dir="right"] { top: 31px; width: 14px; height: 18px; } .gal-dir[data-dir="left"]::before, .gal-dir[data-dir="right"]::before { width: 7px; height: 9px; }
   .gal-dir[data-dir="left"] { left: calc(50% - 40px); } .gal-dir[data-dir="left"]::before { clip-path: polygon(0 50%, 100% 0, 100% 100%); }
   .gal-dir[data-dir="right"] { left: calc(50% + 26px); } .gal-dir[data-dir="right"]::before { clip-path: polygon(0 0, 100% 50%, 0 100%); }
-  .gal-dir:hover, .gal-dir:focus-visible { color: var(--accent-ink); background: var(--accent); outline: none; }
+  .gal-dir:hover, .gal-dir:focus-visible { color: var(--gal-arrow-on); background: var(--gal-hover); outline: none; }
+  .gal-dir:hover::before, .gal-dir:focus-visible::before { transform: scale(1.35); }
   .gal-dir[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
   /* Direction control in the Chart section: the same four arrows. */
   .dir-seg { display: inline-flex; gap: 2px; }

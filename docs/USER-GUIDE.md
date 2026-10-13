@@ -35,7 +35,8 @@ tab on the ribbon, before Home, with one group, **Charts**:
 
 | Control | What it does |
 |---|---|
-| **Insert chart** | A menu of chart types, grouped *Column and bar · Line and area · Mekko · XY · Pie · Timeline and table*. Inserts the chart with sample data on the current slide. |
+| **Insert chart** | The chart gallery: one icon per chart, five per row (see [Choosing a chart and its direction](#choosing-a-chart-and-its-direction)). Inserts the chart with sample data on the current slide. |
+| **Direction** ▲ ▼ ◀ ▶ | With a chart selected: draws it growing that way, in place. With nothing selected: the next chart you insert grows that way. The arrow of the selected chart's direction shows pressed; directions its type cannot take are greyed out. |
 | **Edit data** | Opens the selected chart's datasheet in your browser. Click **Apply to slide** there and the chart on the slide updates. |
 | **Update chart** | Lays the selected chart out again at its current size and position. |
 
@@ -43,7 +44,7 @@ Edit data and Update chart are greyed out unless an open-charts chart is selecte
 
 ### Insert, edit, apply, resize
 
-1. **Insert.** Click a slide in Normal view, then **Insert chart** and pick a type. If the slide has
+1. **Insert.** Click a slide in Normal view, then **Insert chart** and pick a chart. If the slide has
    an empty content placeholder, the chart takes its place and size; otherwise it goes in the
    standard chart area. The chart arrives with sample data.
 2. **Edit data.** With the chart selected, click **Edit data**. The datasheet opens in your browser
@@ -67,6 +68,43 @@ including ones written by the command line or the web editor, and on decks you r
 someone else: the data travels inside the file. Don't ungroup the chart or edit its shapes by hand
 if you want to keep editing its data: the next Update chart or Apply redraws the chart from its data
 and replaces those changes.
+
+## Choosing a chart and its direction
+
+![The chart gallery](ux-shots/chart-gallery.png)
+
+The gallery lists the charts in the same order everywhere — the ribbon's **Insert chart** and the
+editor's chart-type button: Stacked, 100% and Clustered column/bar; Build-up and Build-down
+waterfall; Mekko with a % axis; Combination; Line/Profile; Stacked and 100% area; Mekko with a unit
+axis; Pie; Doughnut; Scatter; Bubble; Gantt/Timeline; then Mekko XY, Harvey balls and Table.
+
+**Directions.** The small arrows around an icon are the directions that chart can grow in:
+
+| Arrow | The chart | Charts |
+|---|---|---|
+| ▲ up | columns growing up from a baseline at the bottom (the default) | every chart with arrows |
+| ▼ down | columns hanging from a baseline at the top; category names above them, totals below — for losses, reductions, or the lower half of a pair | stacked, 100%, clustered, both waterfalls, both Mekkos, combination |
+| ◀ left | bars growing to the left, category names on the right — e.g. the left half of a butterfly chart | the ▼ charts, plus line and both areas |
+| ▶ right | bars growing to the right, category names on the left | the same as ◀ |
+
+A line chart turned sideways is a **profile chart**: the categories (criteria, say) run down the
+side and each series is a line through its scores — the classic vendor comparison. A Mekko chart
+turned sideways draws one row per category, as tall as its share of the total. Pie, doughnut,
+scatter, bubble and Gantt charts have no arrows.
+
+- **In the editor**, click an icon for its default (▲) or one of its arrows for that direction.
+  With the keyboard: arrow keys move between icons, **Shift+arrow** picks that direction, **Enter**
+  picks the icon. The **Direction** buttons in the Chart section turn the current chart.
+- **In PowerPoint**, a ribbon gallery cannot have clickable arrows inside its tiles, so the four
+  **Direction** buttons sit next to it. Select a chart and click an arrow to turn it in place (its
+  data, size and position stay); or, with nothing selected, click an arrow and then insert — the new
+  chart grows that way. Only the directions the selected chart can take are enabled.
+
+**Build-up or build-down waterfall?** A *build-up* waterfall stacks components up to a total on the
+right (cost elements adding up to total cost). A *build-down* waterfall starts with the total on the
+left and subtracts its parts step by step down to the result (revenue down to net income). They are
+the same chart with different data, exactly as in the reference manual: the two tiles just insert
+different sample data. Either can then be turned with the arrows.
 
 ## The datasheet
 
@@ -132,7 +170,7 @@ images are rendered from `examples/`.
 **Use it for** composition over time: revenue by segment, headcount by function.
 **Datasheet:** each row is a segment stacked in every column; each column is a category.
 Negative values stack downwards from the baseline.
-**Options:** horizontal bars, value axis, column gap, series labels (right of the last column by
+**Options:** direction, value axis, column gap, series labels (right of the last column by
 default, or a legend), totals (on by default), CAGR and difference arrows. Segment labels are
 rounded so they add up exactly to the total shown on top.
 
@@ -142,7 +180,7 @@ rounded so they add up exactly to the total shown on top.
 
 **Use it for** side-by-side comparison: win rate by region and segment.
 **Datasheet:** each row is a series; its bars stand side by side in every category.
-**Options:** horizontal bars, value axis, column gap, series labels (a legend by default). No totals
+**Options:** direction, value axis, column gap, series labels (a legend by default). No totals
 or arrows.
 
 ### 100% column (`percent`)
@@ -154,7 +192,7 @@ or arrows.
 column reads exactly 100%. Negative values are ignored (and reported).
 If your data is already in percent and a column may add up to less than 100% (survey answers with
 no-replies), tick **Values are %**: each column then keeps its own total.
-**Options:** horizontal bars, value axis, gap, series labels, totals (off by default; the raw column
+**Options:** direction, value axis, gap, series labels, totals (off by default; the raw column
 totals), CAGR and difference arrows (on the raw totals). The add-in also offers **100% with % axis**,
 the same chart with the value axis switched on.
 
@@ -396,7 +434,7 @@ minimums, in points (72 pt = 1 inch; a 16:9 slide is 960 × 540 pt):
 | Chart type | Minimum width | Minimum height |
 |---|---|---|
 | Stacked, clustered, 100%, waterfall, combination, line, area (n = categories) | 200, or 40 + 14 per category | 120 |
-| Horizontal bars | 200 | 120, or 30 + 12 per category |
+| Bars and profiles (direction ◀ or ▶) | 200 | 120, or 30 + 12 per category |
 | Mekko, Mekko XY | 240, or 24 per category | 140 |
 | Pie, doughnut | 200 | 120 |
 | Scatter, bubble | 200 | 140 |
