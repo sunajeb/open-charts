@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Drag handles (PowerPoint for Mac)
+
+- A selected chart shows handles you can drag: column gap width, the top of the value axis (new
+  option `axisMax`, headroom only), level-arrow position, and a selected label (pinned where you drop
+  it). Live preview while dragging, one update on release, double-click to reset. A transparent,
+  click-through window of the pop-up helper; no extra permissions (USER-GUIDE "Dragging handles").
+
 ### Templates and style files
 
 - `open-charts fill template.pptx data.json -o out.pptx` fills your own template. Shapes named
