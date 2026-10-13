@@ -1171,11 +1171,12 @@ test('add-in session: an engine error blocks Apply; an unknown session shows a c
 // A host that confirms Apply (the PowerPoint add-in; here test/e2e/host.ts): the editor says the
 // slide was updated only once the host has drawn it, and shows the host's error otherwise.
 const HOST = () => process.env.E2E_HOST_URL!;
+const hostHeaders = () => ({ 'X-OC-Token': process.env.E2E_TOKEN! });
 const hostChart = { type: 'clustered', categories: ['North', 'South'], series: [{ name: 'Sales', values: [10, 20] }] };
 async function openHostSession(page: Page, request: APIRequestContext, prefix: string) {
   const id = `${prefix}${Date.now().toString(16)}`;
-  expect((await request.post(`${HOST()}/api/session/${id}`, { data: { chart: hostChart, title: 'Sales' } })).ok()).toBe(true);
-  await page.goto(`${HOST()}/?session=${id}`);
+  expect((await request.post(`${HOST()}/api/session/${id}`, { headers: hostHeaders(), data: { chart: hostChart, title: 'Sales' } })).ok()).toBe(true);
+  await page.goto(`${HOST()}/?session=${id}#oc-token=${process.env.E2E_TOKEN}`);
   await expect(cell(page, 0, 0)).toBeFocused();
   await settled(page);
   return id;
@@ -1191,7 +1192,7 @@ test('add-in session: Apply says "Updated on slide" only after the host drew the
   await expect(page.locator('#toast')).toContainText('Updated on slide');
   await expect(page.locator('#applyAlert')).toBeHidden();
   await expect(page.locator('#applyBtn')).toBeEnabled();
-  const s = await (await request.get(`${HOST()}/api/session/${id}`)).json();
+  const s = await (await request.get(`${HOST()}/api/session/${id}`, { headers: hostHeaders() })).json();
   expect([s.state, s.confirms, s.chart.series[0].values]).toEqual(['drawn', true, [15, 20]]);
 });
 

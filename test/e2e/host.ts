@@ -6,18 +6,25 @@
 //   other  the chart is drawn after 300 ms
 // Like PowerPoint, it draws one apply at a time, in order. GET /test/log/<id> lists what reached
 // "PowerPoint" for a session: { state, chart, at } per POST (the pop-up's live-update tests).
+// Guarded like the add-in's server: every request but the pages needs the token (E2E_TOKEN); pages
+// get it in the URL fragment (src/addin/token.ts).
 import { serve, setSession, type Session } from '../../src/server.ts';
 import { applyErrorMessage } from '../../src/addin/server.ts';
+import { isPublicAddinRequest } from '../../src/addin/server.ts';
 import { toolbarRoutes } from '../../src/addin/toolbar.ts';
 import type { PopupHelper } from '../../src/addin/popup.ts';
 
 const port = Number(process.argv[2]);
+const token = process.env.E2E_TOKEN;
+if (!token) throw new Error('E2E_TOKEN is not set');
 const log = new Map<string, Array<{ state: string; chart: unknown; at: number }>>();
 let queue = Promise.resolve();
 // The element toolbar's page and routes (no helper: nothing is shown; applies are logged below).
-const toolbar = toolbarRoutes({ base: '', helper: { info: async () => undefined, hide: () => {} } as unknown as PopupHelper, apply: (s) => onSession(s) });
+const toolbar = toolbarRoutes({ base: '', token, helper: { info: async () => undefined, hide: () => {} } as unknown as PopupHelper, apply: (s) => onSession(s) });
 serve(port, {}, {
   confirmsApply: true,
+  token,
+  isPublic: isPublicAddinRequest,
   routes: async (req, res) => {
     if (await toolbar(req, res)) return true;
     const m = /^\/test\/log\/([0-9A-Za-z_-]+)$/.exec(req.url ?? '');

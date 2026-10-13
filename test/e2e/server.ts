@@ -1,5 +1,6 @@
 // Global setup: start the editor servers on free ports, stop them after the run.
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 
@@ -35,6 +36,8 @@ async function start(args: string[]): Promise<{ child: ReturnType<typeof spawn>;
 }
 
 export default async function setup() {
+  // The host is guarded like the add-in's server: a per-run token (src/addin/token.ts).
+  process.env.E2E_TOKEN = randomBytes(32).toString('hex');
   // The plain editor (`open-charts serve`), and a host that confirms Apply like the add-in (host.ts).
   const editor = await start(['src/cli.ts', 'serve', '--port']);
   const host = await start(['test/e2e/host.ts']);

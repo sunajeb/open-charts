@@ -3,11 +3,14 @@
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test';
 
 const HOST = () => process.env.E2E_HOST_URL!;
+// The host is guarded like the add-in's server: API calls carry the token, pages get it in the fragment.
+const headers = () => ({ 'X-OC-Token': process.env.E2E_TOKEN! });
+const T = () => `#oc-token=${process.env.E2E_TOKEN}`;
 const MOD = 'ControlOrMeta';
 const chart = { type: 'clustered', categories: ['North', 'South', 'East'], series: [{ name: 'Sales', values: [10, 20, 30] }], options: { unit: 'm' } };
 const cell = (page: Page, r: number, c: number) => page.locator(`#sheet input[data-r="${r}"][data-c="${c}"]`);
 type Entry = { state: string; chart: { series: Array<{ values: number[] }> }; at: number };
-const hostLog = async (request: APIRequestContext, id: string) => (await (await request.get(`${HOST()}/test/log/${id}`)).json()) as Entry[];
+const hostLog = async (request: APIRequestContext, id: string) => (await (await request.get(`${HOST()}/test/log/${id}`, { headers: headers() })).json()) as Entry[];
 const applied = async (request: APIRequestContext, id: string) => (await hostLog(request, id)).filter((e) => e.state === 'applied').map((e) => e.chart.series[0].values);
 
 let errors: string[] = [];
@@ -21,10 +24,10 @@ test.afterEach(() => { expect(errors).toEqual([]); });
 /** The preloaded pop-up page (as the Mac helper keeps it), then a chart opened in it. */
 async function openPopup(page: Page, request: APIRequestContext, prefix = 'pop') {
   const id = `${prefix}${Date.now().toString(16)}${Math.floor(Math.random() * 1e4)}`;
-  expect((await request.post(`${HOST()}/api/session/${id}`, { data: { chart, title: 'Regional sales' } })).ok()).toBe(true);
+  expect((await request.post(`${HOST()}/api/session/${id}`, { headers: headers(), data: { chart, title: 'Regional sales' } })).ok()).toBe(true);
   await page.setViewportSize({ width: 620, height: 360 });
   if (!page.url().includes('popup=1')) {
-    await page.goto(`${HOST()}/?popup=1`);
+    await page.goto(`${HOST()}/?popup=1${T()}`);
     await expect(page.locator('body')).toHaveClass(/popup/);
   }
   const ms = await page.evaluate(async (sid) => {
@@ -133,9 +136,9 @@ test('pop-up: the preloaded page is reused for the next chart with a clean slate
 test('pop-up: an invalid cell is not sent to the slide; fixing it is', async ({ page, request }) => {
   const id = `pop${Date.now().toString(16)}bad`;
   const bad = { type: 'stacked', categories: ['a', 'b'], series: [{ name: 'S', values: [1] }] };
-  await request.post(`${HOST()}/api/session/${id}`, { data: { chart: bad } });
+  await request.post(`${HOST()}/api/session/${id}`, { headers: headers(), data: { chart: bad } });
   await page.setViewportSize({ width: 620, height: 360 });
-  await page.goto(`${HOST()}/?session=${id}&popup=1`);
+  await page.goto(`${HOST()}/?session=${id}&popup=1${T()}`);
   await expect(cell(page, 0, 0)).toBeFocused();
   await page.keyboard.type('5');
   await page.waitForTimeout(800);
@@ -147,9 +150,9 @@ test('pop-up: an invalid cell is not sent to the slide; fixing it is', async ({ 
 
 test('element toolbar page: controls from the property table; a click writes the override and applies', async ({ page, request }) => {
   const id = `tb${Date.now().toString(16)}`;
-  expect((await request.post(`${HOST()}/api/session/${id}`, { data: { chart, title: 'Sales' } })).ok()).toBe(true);
+  expect((await request.post(`${HOST()}/api/session/${id}`, { headers: headers(), data: { chart, title: 'Sales' } })).ok()).toBe(true);
   await page.setViewportSize({ width: 320, height: 44 });
-  await page.goto(`${HOST()}/toolbar`);
+  await page.goto(`${HOST()}/toolbar${T()}`);
   await page.evaluate((sid) => (window as unknown as { ocPopupOpen(a: unknown): Promise<void> }).ocPopupOpen({ id: sid, roles: ['label:value:s0:c1'] }), id);
   await expect(page.getByTitle('Larger text')).toBeVisible();
   await expect(page.getByTitle('Text turned 90° right')).toBeVisible();
@@ -163,4 +166,29 @@ test('element toolbar page: controls from the property table; a click writes the
   await expect(page.getByTitle('Larger text')).toHaveCount(0);
   await page.getByTitle('Fill #A8461A').click();
   await expect.poll(async () => ((await hostLog(request, id)).at(-1)!.chart as unknown as { overrides: Record<string, unknown> }).overrides['bar:s0:c1']).toEqual({ fill: '#A8461A' });
+});
+
+test('security: pages get the token in the fragment only; token-less calls and other sites are refused', async ({ page, request }) => {
+  const id = `sec${Date.now().toString(16)}`;
+  expect((await request.post(`${HOST()}/api/session/${id}`, { data: { chart } })).status()).toBe(403);
+  expect((await request.post(`${HOST()}/api/session/${id}`, { headers: headers(), data: { chart, title: 'Sales' } })).ok()).toBe(true);
+  expect((await request.get(`${HOST()}/api/session/${id}`)).status()).toBe(403);
+  expect((await request.get(`${HOST()}/api/session/${id}`, { headers: { 'X-OC-Token': '0'.repeat(64) } })).status()).toBe(403);
+  // The page reads the session with the token from its fragment, then drops it from the address
+  // (so it is in no history entry and no Referer).
+  await page.setViewportSize({ width: 620, height: 360 });
+  await page.goto(`${HOST()}/?session=${id}&popup=1${T()}`);
+  await expect(cell(page, 0, 0)).toBeFocused();
+  expect(page.url()).not.toContain('oc-token');
+  expect(page.url()).toContain(`session=${id}`);
+  // Another site open in the same browser (the plain editor's origin stands in for it) can neither
+  // change a session nor read one, even if it knew the token.
+  await page.goto(process.env.E2E_BASE_URL!);
+  const read = await page.evaluate(async ([host, sid, tok]) => {
+    try { await fetch(`${host}/api/session/${sid}`, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ state: 'cancelled' }) }); } catch { /* refused */ }
+    try { return String((await fetch(`${host}/api/session/${sid}`, { headers: { 'X-OC-Token': tok } })).status); } catch { return 'blocked'; }
+  }, [HOST(), id, process.env.E2E_TOKEN!]);
+  expect(read).toBe('blocked');
+  expect((await (await request.get(`${HOST()}/api/session/${id}`, { headers: headers() })).json()).state).toBe('open');
+  errors = []; // the browser reports the refused cross-site requests on the console
 });
