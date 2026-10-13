@@ -62,17 +62,16 @@ final class Host: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWind
         config.userContentController = ucc
         config.suppressesIncrementalRendering = false
         web = WKWebView(frame: NSRect(x: 0, y: 0, width: 620, height: 360), configuration: config)
-        var style: NSWindow.StyleMask = [.nonactivatingPanel, .titled, .closable, .fullSizeContentView]
-        if utility { style.insert(.resizable); style.insert(.utilityWindow) }
+        // The datasheet: a small utility window (title bar to drag it, close = Done, resizable). The
+        // toolbar: borderless, never takes the keyboard from PowerPoint.
+        let style: NSWindow.StyleMask = utility ? [.nonactivatingPanel, .titled, .closable, .resizable, .utilityWindow] : [.nonactivatingPanel, .borderless]
         panel = Panel(contentRect: NSRect(x: 0, y: 0, width: 620, height: 360), styleMask: style, backing: .buffered, defer: false)
         super.init()
         ucc.add(self, name: "openCharts")
         web.navigationDelegate = self
         web.autoresizingMask = [.width, .height]
-        panel.title = "open-charts"
-        panel.titleVisibility = .hidden
-        panel.titlebarAppearsTransparent = true
-        panel.isMovableByWindowBackground = true
+        panel.title = "Edit data"
+        panel.hasShadow = true
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -107,7 +106,7 @@ final class Host: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWind
     // The page went away (WebContent process crashed): load it again next time.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { loaded = false }
 
-    func show(id: String, url: String, frame: [Double], focus: Bool) {
+    func show(id: Any, url: String, frame: [Double], focus: Bool) {
         panel.setFrame(cocoa(frame), display: false)
         open = true
         suspended = false
@@ -149,8 +148,16 @@ final class Host: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWind
     func userContentController(_ ucc: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any], let type = body["type"] as? String else { return }
         switch type {
-        case "ready": if open { reveal(ready: true) }
+        case "ready":
+            if let title = body["title"] as? String, !title.isEmpty { panel.title = title }
+            if open { reveal(ready: true) }
         case "close": hide(reason: (body["reason"] as? String) ?? "page")
+        case "resize":
+            // Keep the top-left corner where the server placed it.
+            if let w = body["w"] as? Double, let h = body["h"] as? Double, w > 20, h > 20 {
+                let f = panel.frame
+                panel.setFrame(NSRect(x: f.minX, y: f.maxY - h, width: min(w, 900), height: h), display: true)
+            }
         default: emit(["event": "page", "panel": name, "body": body])
         }
     }
@@ -192,6 +199,27 @@ final class Helper: NSObject {
         }
     }
 
+    /// The toolbar steps aside while the user drags (moving or resizing shapes): hidden on the first
+    /// drag event, back after the mouse is released unless the server has moved or hidden it since.
+    var dragHidden = false
+    var dragTimer: Timer?
+    func watchDrags() {
+        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged]) { [weak self] _ in
+            guard let self, let t = self.hosts["toolbar"], t.open, !t.suspended, t.panel.isVisible else { return }
+            self.dragHidden = true
+            t.panel.orderOut(nil)
+        }
+        NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseUp]) { [weak self] _ in
+            guard let self, self.dragHidden else { return }
+            self.dragTimer?.invalidate()
+            self.dragTimer = Timer.scheduledTimer(withTimeInterval: 0.6, repeats: false) { [weak self] _ in
+                guard let self, self.dragHidden else { return }
+                self.dragHidden = false
+                if let t = self.hosts["toolbar"], t.open, !t.suspended { t.panel.orderFrontRegardless() }
+            }
+        }
+    }
+
     func info() -> [String: Any] {
         let screens = NSScreen.screens.map { s in ["frame": topLeft(s.frame), "visible": topLeft(s.visibleFrame), "scale": Double(s.backingScaleFactor)] as [String: Any] }
         var windows: [[Double]] = []
@@ -216,13 +244,14 @@ final class Helper: NSObject {
             return
         }
         let name = (m["panel"] as? String) ?? "datasheet"
+        if name == "toolbar" && (cmd == "show" || cmd == "hide") { dragHidden = false; dragTimer?.invalidate() }
         switch cmd {
         case "load":
             if let url = m["url"] as? String { host(name).load(url) }
         case "info":
             emit(info())
         case "show":
-            guard let id = m["id"] as? String, let url = m["url"] as? String, let frame = m["frame"] as? [Double], frame.count == 4 else {
+            guard let id = m["id"], JSONSerialization.isValidJSONObject([id]), let url = m["url"] as? String, let frame = m["frame"] as? [Double], frame.count == 4 else {
                 emit(["event": "error", "message": "show needs id, url and frame"])
                 return
             }
@@ -246,6 +275,7 @@ final class Helper: NSObject {
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
 let helper = Helper()
+helper.watchDrags()
 
 // stdin: one JSON request per line; EOF (the server is gone) ends the helper.
 var pendingInput = Data()

@@ -25,6 +25,7 @@ import type { Measurer } from '../core/index.ts';
 import { contextOf, handleRequest, layoutForApply, parseRequest, rememberContext, type Sessions } from './engine.ts';
 import { macroRunner, type MacroResult } from './runner.ts';
 import { helperPath, openPopup, popupHelper, type ChartWhere } from './popup.ts';
+import { toolbarRoutes } from './toolbar.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
@@ -339,9 +340,12 @@ export function serveAddin(port = ADDIN_PORT) {
   if (process.platform === 'darwin' && popup.warm()) log('POPUP helper started');
   const showEditor: OpenEditor = (_url, id, where) => { void openPopup(base, id, where, { helper: popup, log }); };
   const routes = addinRoutes(m, httpSessions(base, showEditor), outlived, retire, connect);
+  const applyNow = (s: Session) => { void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); };
+  // The element mini toolbar (selection → toolbar panel → per-element overrides → Apply).
+  const toolbar = toolbarRoutes({ base, helper: popup, apply: applyNow, log });
   return serve(port, {}, {
-    routes: (req, res) => { idle(); return routes(req, res); },
-    onSession: (s) => { if (s.state === 'applied') void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); },
+    routes: async (req, res) => { idle(); return (await toolbar(req, res)) || routes(req, res); },
+    onSession: (s) => { if (s.state === 'applied') applyNow(s); },
     confirmsApply: true,
   });
 }

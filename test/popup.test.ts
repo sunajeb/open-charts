@@ -140,6 +140,7 @@ rl.on('close', () => process.exit(0));
   assert.equal(shown?.ready, true);
   const seen = (await h.eval('x'))?.result as Array<Record<string, unknown>>;
   assert.deepEqual(seen[0], { cmd: 'load', panel: 'datasheet', url: 'http://127.0.0.1:4174/?popup=1' });
+  assert.deepEqual(seen[1], { cmd: 'load', panel: 'toolbar', url: 'http://127.0.0.1:4174/toolbar' });
   const show = seen.find((m) => m.cmd === 'show')!;
   assert.deepEqual(show, { cmd: 'show', panel: 'datasheet', id: 'sess1', url: 'http://127.0.0.1:4174/?session=sess1&popup=1', frame: [812, 250, POPUP_SIZE.w, POPUP_SIZE.h], focus: true });
   h.stop();

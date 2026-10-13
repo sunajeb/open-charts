@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-charts toolbar</title>
+<!-- The element mini toolbar (src/addin/toolbar.ts): preloaded in the Mac helper's "toolbar" panel,
+     opened per selection with ocPopupOpen({id, roles}). Controls are built from the property table
+     (/api/addin/properties): one renderer per property; properties without one are skipped. -->
+<style>
+  :root { --bg: #ffffff; --ink: #1c2330; --muted: #5f6877; --rule: #dcdfd8; --accent: #1f3a5f; --on: #e4ecf6; color-scheme: light; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #1d2128; --ink: #e7e9ec; --muted: #a2a9b4; --rule: #333a44; --accent: #7fa3cc; --on: #24344a; color-scheme: dark; } }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); font: 12px/1.2 -apple-system, "Segoe UI", sans-serif; overflow: hidden; user-select: none; }
+  #bar { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 8px; white-space: nowrap; }
+  .group { display: flex; align-items: center; gap: 2px; padding-right: 6px; border-right: 1px solid var(--rule); }
+  .group:last-child { border-right: 0; }
+  button { font: inherit; color: inherit; background: transparent; border: 1px solid transparent; border-radius: 5px; height: 26px; min-width: 26px; padding: 0 5px; cursor: pointer; display: inline-grid; place-items: center; }
+  button:hover { border-color: var(--rule); }
+  button[aria-pressed="true"] { background: var(--on); border-color: var(--accent); }
+  .sw { width: 18px; height: 18px; min-width: 0; padding: 0; border: 1px solid rgba(0, 0, 0, .25); border-radius: 4px; }
+  .sw.none { background: linear-gradient(45deg, transparent 45%, #d92d20 45% 55%, transparent 55%), #fff; }
+  output { min-width: 26px; text-align: center; font-variant-numeric: tabular-nums; }
+  .empty { color: var(--muted); }
+</style>
+</head>
+<body>
+<div id="bar" role="toolbar" aria-label="Format the selected chart elements"><span class="empty">Select a chart element</span></div>
+<script>
+const $bar = document.getElementById('bar');
+const post = (m) => { try { window.webkit?.messageHandlers?.openCharts?.postMessage(m); } catch {} };
+let sel = null, style = {};
+const FILLS = ['#1F3A5F', '#3E6A9E', '#7FA3CC', '#A8461A', '#2F6B45', '#8A919C', '#FFFFFF', 'none'];
+
+async function format(change) {
+  if (!sel) return;
+  Object.assign(style, change);
+  render(sel.controls);
+  try {
+    await fetch('/api/addin/format', { method: 'POST', body: JSON.stringify({ id: sel.id, roles: sel.roles, style: change }) });
+  } catch {}
+}
+
+/** One renderer per property: returns the elements of its control, or null (no control yet). */
+const CONTROLS = {
+  fill: () => FILLS.map((c) => {
+    const b = document.createElement('button');
+    b.className = 'sw' + (c === 'none' ? ' none' : '');
+    if (c !== 'none') b.style.background = c;
+    b.title = c === 'none' ? 'No fill' : `Fill ${c}`;
+    b.setAttribute('aria-pressed', String((style.fill ?? '').toUpperCase() === c.toUpperCase()));
+    b.onclick = () => format({ fill: c });
+    return b;
+  }),
+  size: () => {
+    const size = Number(style.size) || 0;
+    const out = document.createElement('output');
+    out.textContent = size ? String(size) : 'Auto';
+    out.title = 'Font size (pt)';
+    const step = (d) => () => format({ size: Math.min(72, Math.max(4, (size || 10) + d)) });
+    const minus = Object.assign(document.createElement('button'), { textContent: 'A−', title: 'Smaller text', onclick: step(-1) });
+    const plus = Object.assign(document.createElement('button'), { textContent: 'A+', title: 'Larger text', onclick: step(1) });
+    return [minus, out, plus];
+  },
+  rotate: () => [[-90, '⟲', 'Text turned 90° left'], [0, '—', 'Horizontal text'], [90, '⟳', 'Text turned 90° right']].map(([v, t, title]) => {
+    const b = Object.assign(document.createElement('button'), { textContent: t, title, onclick: () => format({ rotate: v }) });
+    b.setAttribute('aria-pressed', String((style.rotate ?? 0) === v));
+    return b;
+  }),
+};
+
+function render(controls) {
+  const groups = controls.map((c) => CONTROLS[c.prop]?.()).filter(Boolean);
+  if (!groups.length) { $bar.innerHTML = '<span class="empty">Nothing to format here yet</span>'; return; }
+  $bar.replaceChildren(...groups.map((els) => { const g = document.createElement('div'); g.className = 'group'; g.append(...els); return g; }));
+}
+
+window.ocPopupOpen = async ({ id, roles }) => {
+  sel = { id, roles, controls: [] };
+  try {
+    const r = await fetch(`/api/addin/properties?id=${encodeURIComponent(id)}&roles=${encodeURIComponent(roles.join(','))}`, { cache: 'no-store' });
+    const { controls, style: now } = await r.json();
+    if (sel?.id !== id) return;
+    sel.controls = controls; style = now || {};
+    render(controls);
+  } catch { $bar.innerHTML = '<span class="empty">The add-in is not answering</span>'; }
+  post({ type: 'resize', w: Math.ceil($bar.scrollWidth) + 2, h: 44 });
+  post({ type: 'ready' });
+};
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') post({ type: 'close', reason: 'escape' }); });
+</script>
+</body>
+</html>

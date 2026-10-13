@@ -8,25 +8,31 @@
 // "PowerPoint" for a session: { state, chart, at } per POST (the pop-up's live-update tests).
 import { serve, setSession, type Session } from '../../src/server.ts';
 import { applyErrorMessage } from '../../src/addin/server.ts';
+import { toolbarRoutes } from '../../src/addin/toolbar.ts';
+import type { PopupHelper } from '../../src/addin/popup.ts';
 
 const port = Number(process.argv[2]);
 const log = new Map<string, Array<{ state: string; chart: unknown; at: number }>>();
 let queue = Promise.resolve();
+// The element toolbar's page and routes (no helper: nothing is shown; applies are logged below).
+const toolbar = toolbarRoutes({ base: '', helper: { info: async () => undefined, hide: () => {} } as unknown as PopupHelper, apply: (s) => onSession(s) });
 serve(port, {}, {
   confirmsApply: true,
-  routes: (req, res) => {
+  routes: async (req, res) => {
+    if (await toolbar(req, res)) return true;
     const m = /^\/test\/log\/([0-9A-Za-z_-]+)$/.exec(req.url ?? '');
     if (!m) return false;
     res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(log.get(m[1]) ?? []));
     return true;
   },
-  onSession: (s: Session) => {
-    if (!log.has(s.id)) log.set(s.id, []);
-    log.get(s.id)!.push({ state: s.state, chart: s.chart, at: Date.now() });
-    if (s.state !== 'applied') return;
-    const later = (ms: number, body: { state: string; message?: string }) => setTimeout(() => setSession(s.id, body), ms);
-    if (s.id.startsWith('perm')) later(3000, { state: 'error', message: applyErrorMessage({ message: 'timed out', killed: true }) });
-    else if (s.id.startsWith('gone')) later(0, { state: 'error', message: applyErrorMessage({ message: 'execution error: PowerPoint is not running. (-600)' }) });
-    else queue = queue.then(() => new Promise((r) => setTimeout(() => { setSession(s.id, { state: 'drawn' }); r(); }, 300)));
-  },
+  onSession: (s: Session) => onSession(s),
 });
+function onSession(s: Session) {
+  if (!log.has(s.id)) log.set(s.id, []);
+  log.get(s.id)!.push({ state: s.state, chart: s.chart, at: Date.now() });
+  if (s.state !== 'applied') return;
+  const later = (ms: number, body: { state: string; message?: string }) => setTimeout(() => setSession(s.id, body), ms);
+  if (s.id.startsWith('perm')) later(3000, { state: 'error', message: applyErrorMessage({ message: 'timed out', killed: true }) });
+  else if (s.id.startsWith('gone')) later(0, { state: 'error', message: applyErrorMessage({ message: 'execution error: PowerPoint is not running. (-600)' }) });
+  else queue = queue.then(() => new Promise((r) => setTimeout(() => { setSession(s.id, { state: 'drawn' }); r(); }, 300)));
+}

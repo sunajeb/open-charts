@@ -144,3 +144,23 @@ test('pop-up: an invalid cell is not sent to the slide; fixing it is', async ({ 
   await expect.poll(() => applied(request, id)).toEqual([[5, 2]]);
   errors = errors.filter((e) => !e.includes('400'));
 });
+
+test('element toolbar page: controls from the property table; a click writes the override and applies', async ({ page, request }) => {
+  const id = `tb${Date.now().toString(16)}`;
+  expect((await request.post(`${HOST()}/api/session/${id}`, { data: { chart, title: 'Sales' } })).ok()).toBe(true);
+  await page.setViewportSize({ width: 320, height: 44 });
+  await page.goto(`${HOST()}/toolbar`);
+  await page.evaluate((sid) => (window as unknown as { ocPopupOpen(a: unknown): Promise<void> }).ocPopupOpen({ id: sid, roles: ['label:value:s0:c1'] }), id);
+  await expect(page.getByTitle('Larger text')).toBeVisible();
+  await expect(page.getByTitle('Text turned 90° right')).toBeVisible();
+  await page.getByTitle('Text turned 90° right').click();
+  await expect(page.getByTitle('Text turned 90° right')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(async () => (await hostLog(request, id)).filter((e) => e.state === 'applied').length).toBe(1);
+  const last = (await hostLog(request, id)).at(-1)!.chart as unknown as { overrides: unknown };
+  expect(last.overrides).toEqual({ 'label:value:s0:c1': { rotate: 90 } });
+  // A bar takes only a fill.
+  await page.evaluate((sid) => (window as unknown as { ocPopupOpen(a: unknown): Promise<void> }).ocPopupOpen({ id: sid, roles: ['bar:s0:c1'] }), id);
+  await expect(page.getByTitle('Larger text')).toHaveCount(0);
+  await page.getByTitle('Fill #A8461A').click();
+  await expect.poll(async () => ((await hostLog(request, id)).at(-1)!.chart as unknown as { overrides: Record<string, unknown> }).overrides['bar:s0:c1']).toEqual({ fill: '#A8461A' });
+});

@@ -183,6 +183,8 @@ export interface PopupHelper {
   /** Shows session `id` next to the chart; resolves with the helper's "shown" answer, or undefined. */
   show(base: string, id: string, where?: ChartWhere, opts?: { focus?: boolean; size?: { w: number; h: number } }): Promise<Msg | undefined>;
   info(): Promise<{ windows: Rect[]; screens: ScreenInfo[] } | undefined>;
+  /** Shows another panel (the element toolbar): ocPopupOpen(arg) in its preloaded page, at `frame`, without taking the keyboard. */
+  showPanel?(panel: string, url: string, arg: unknown, frame: Rect): void;
   hide(panel?: string): void;
   eval(js: string, panel?: string): Promise<Msg | undefined>;
   stop(): void;
@@ -237,6 +239,7 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
     (c.stdout as unknown as { unref?: () => void }).unref?.();
     child = c;
     send({ cmd: 'load', panel: 'datasheet', url: preloadUrl(base) });
+    send({ cmd: 'load', panel: 'toolbar', url: `${base}/toolbar` });
     return true;
   };
   const helper: PopupHelper = {
@@ -264,6 +267,9 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
       return answer;
     },
     hide(panel = 'datasheet') { send({ cmd: 'hide', panel }); },
+    showPanel(panel, url, arg, frame) {
+      if (start()) send({ cmd: 'show', panel, id: arg, url, frame: [frame.x, frame.y, frame.w, frame.h], focus: false });
+    },
     async eval(js, panel = 'datasheet') {
       if (!start()) return undefined;
       const answer = expect('eval', 3000);
