@@ -16,7 +16,8 @@
     "goldens": "node --experimental-strip-types --no-warnings test/goldens/run.ts",
     "bench": "node --experimental-strip-types --no-warnings scripts/bench.ts",
     "bench:accept": "node --experimental-strip-types --no-warnings test/bench/accept.ts",
-    "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts"
+    "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts",
+    "build:popup": "node --experimental-strip-types --no-warnings scripts/build-popup.ts"
   },
   "engines": {
     "node": ">=22.6"
