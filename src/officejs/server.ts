@@ -3,6 +3,7 @@
 // certificate from scripts/officejs-cert.ts, plus a log endpoint the task pane writes to:
 //   POST /api/log   one line per event (ready, insert, apply, errors), appended to officejs.log
 //   GET  /api/log   the lines so far (used by the live check, tools/officejs-live.ts)
+//   GET  /api/selftest  {run:true} once when started with --selftest (the live check), else false
 // Without a certificate it serves plain http (tests, Office on the web through a tunnel).
 import { createServer as createHttps } from 'node:https';
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -20,12 +21,31 @@ const TYPES: Record<string, string> = {
   '.png': 'image/png', '.ttf': 'font/ttf', '.json': 'application/json', '.LICENSE': 'text/plain; charset=utf-8',
 };
 
-export interface OfficeServerOptions { root: string; port?: number; host?: string; tls?: { key: string; cert: string } | null; log?: string }
+export interface OfficeServerOptions { root: string; port?: number; host?: string; tls?: { key: string; cert: string } | null; log?: string;
+  /** Answer GET /api/selftest with {run:true} once, so the pane runs its live self-test. */
+  selftest?: boolean;
+  /** Receives each slide the self-test exports (base64 .pptx, POST /api/selftest/slide). */
+  onSlide?: (b64: string) => void;
+  /** Receives each log line as it arrives. */
+  onLog?: (line: string) => void }
 
 export function serveOfficeJs(opts: OfficeServerOptions) {
   const lines: string[] = [];
+  let selftest = !!opts.selftest;
   const handler = async (req: IncomingMessage, res: ServerResponse) => {
     const url = new URL(req.url ?? '/', 'http://x');
+    if (url.pathname === '/api/selftest') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ run: selftest }));
+      selftest = false; // once: a reloaded pane does not run it again
+      return;
+    }
+    if (url.pathname === '/api/selftest/slide' && req.method === 'POST' && opts.onSlide) {
+      const chunks: Buffer[] = [];
+      for await (const c of req) chunks.push(c as Buffer);
+      opts.onSlide(Buffer.concat(chunks).toString('utf8'));
+      res.writeHead(204).end();
+      return;
+    }
     if (url.pathname === '/api/log') {
       if (req.method === 'POST') {
         const chunks: Buffer[] = [];
@@ -33,6 +53,7 @@ export function serveOfficeJs(opts: OfficeServerOptions) {
         const d = new Date(), local = new Date(d.getTime() - d.getTimezoneOffset() * 60_000).toISOString().slice(0, 19);
         const line = `${local} ${Buffer.concat(chunks).toString('utf8').replace(/[\r\n]+/g, ' ').slice(0, 4000)}`;
         lines.push(line);
+        opts.onLog?.(line);
         if (lines.length > 2000) lines.shift();
         if (opts.log) { try { appendFileSync(opts.log, `${line}\n`); } catch { /* logging never breaks the add-in */ } }
         res.writeHead(204).end();
@@ -68,5 +89,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const tls = process.argv.includes('--http') ? null : devTls();
   if (!tls && !process.argv.includes('--http')) { console.error('No dev certificate. Run: npm run officejs:cert   (or pass --http)'); process.exit(1); }
   mkdirSync(addinHome(), { recursive: true });
-  serveOfficeJs({ root, port: Number(arg('--port') ?? OFFICEJS_PORT), tls, log: logFile() });
+  serveOfficeJs({ root, port: Number(arg('--port') ?? OFFICEJS_PORT), tls, log: logFile(), selftest: process.argv.includes('--selftest') });
 }

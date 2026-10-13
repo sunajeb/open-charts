@@ -194,6 +194,18 @@ export async function insertSlide(b64: string, afterSlideId?: string): Promise<v
   });
 }
 
+/** Every slide as its own .pptx (base64, 1.8): the live self-test sends them to the dev server. */
+export async function exportSlides(): Promise<string[]> {
+  return PowerPoint.run(async (ctx: PP) => {
+    const slides = ctx.presentation.slides;
+    slides.load('items/id');
+    await ctx.sync();
+    const out = slides.items.map((s: PP) => s.exportAsBase64());
+    await ctx.sync();
+    return out.map((r: PP) => r.value as string);
+  });
+}
+
 /** A name no user shape has: marks the chart to replace in the exported slide's XML. */
 export const REPLACE_MARKER = 'open-charts:replace-me';
 

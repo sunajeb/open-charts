@@ -14,8 +14,9 @@ import { parseFrame, specJson } from '../render/tags.ts';
 import { ENGINE_VERSION } from '../version.ts';
 import { buildChart, chartDeck, CHART_FRAME, fromBase64, renderDeck, resolveFrame, toBase64, type StoredSpec } from './engine.ts';
 import { loadMeasurer } from './measure.ts';
+import { samples } from '../core/samples.ts';
 import { hostCaps, NO_CAPS, planScene, type HostCaps } from './plan.ts';
-import { drawPathB, insertSlide, readSelection, replaceSlide, REPLACE_MARKER, slideTheme, type SelectedChart } from './powerpoint.ts';
+import { drawPathB, exportSlides, insertSlide, readSelection, replaceSlide, REPLACE_MARKER, slideTheme, type SelectedChart } from './powerpoint.ts';
 import { browserInflate, patchSlide } from './slide-patch.ts';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -24,11 +25,13 @@ const w = window as any;
 
 // ---- Log: to the console, an in-page list (tests) and the dev server's /api/log (live checks) ----
 const LOG: string[] = (w.OC_LOG = []);
+/** Served by the local dev server (npm run officejs:serve): it has the log and self-test endpoints; static hosting does not. */
+const DEV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 export function log(event: string, data: Record<string, unknown> = {}) {
   const line = `${event} ${JSON.stringify(data)}`;
   LOG.push(line);
   console.log(`[open-charts] ${line}`);
-  try { void fetch(new URL('api/log', location.href), { method: 'POST', body: line, keepalive: true }).catch(() => {}); } catch { /* no server: fine */ }
+  if (DEV) try { void fetch(new URL('api/log', location.href), { method: 'POST', body: line, keepalive: true }).catch(() => {}); } catch { /* no server: fine */ }
 }
 
 // ---- State --------------------------------------------------------------------------------------
@@ -199,8 +202,46 @@ function start() {
       Office.context.document.addHandlerAsync(Office.EventType.DocumentSelectionChanged, () => { void refresh(); });
     } catch (e) { log('selection-handler-error', { message: String(e) }); }
     publish();
-    void refresh(true);
+    void refresh(true).then(maybeSelfTest);
   });
+}
+
+// ---- Live self-test ---------------------------------------------------------------------------------
+// Only when the dev server was started for the live check (tools/officejs-live.ts) does
+// GET api/selftest answer {"run":true} (once). The pane then exercises the real PowerPoint: insert,
+// edit in place, Revert, a Path A chart, and logs each step to api/log for the tool to read.
+async function maybeSelfTest() {
+  if (!DEV) return;
+  let run = false;
+  try {
+    const r = await fetch(new URL('api/selftest', location.href), { cache: 'no-store' });
+    run = r.ok && (await r.json()).run === true;
+  } catch { /* static hosting: no self-test */ }
+  if (!run) return;
+  const step = async (name: string, f: () => Promise<unknown>) => {
+    try { const out = await f(); log('selftest-step', { name, ok: true, out }); return true; } catch (e) { log('selftest-step', { name, ok: false, error: String((e as Error).message ?? e) }); return false; }
+  };
+
+  const host = w.OC_HOST;
+  let ok = true;
+  ok = (await step('insert', () => host.apply(samples.clustered))) && ok;
+  ok = (await step('bound-after-insert', async () => { if (!bound) throw new Error('not bound'); return bound.chart.name; })) && ok;
+  const edited = structuredClone(samples.clustered!);
+  edited.series[0].values[0] = 77;
+  ok = (await step('apply-edit', () => host.apply(edited))) && ok;
+  ok = (await step('revert', () => host.revert())) && ok;
+  ok = (await step('insert-freeform', async () => {
+    bound = null;
+    return run('insert', () => draw(samples.area!, { x: 520, y: 300, w: 400, h: 220 }));
+  })) && ok;
+  ok = (await step('readback', async () => {
+    if (!caps.groups) return 'exportAsBase64 needs PowerPointApi 1.8';
+    const slides = await exportSlides();
+    for (const b64 of slides) await fetch(new URL('api/selftest/slide', location.href), { method: 'POST', body: b64 });
+    return `${slides.length} slides exported`;
+  })) && ok;
+  try { Office.context.document.settings.set('Office.AutoShowTaskpaneWithDocument', true); Office.context.document.settings.saveAsync(() => {}); } catch { /* optional */ }
+  log('selftest-done', { ok });
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', start); else start();

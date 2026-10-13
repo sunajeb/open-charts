@@ -27,7 +27,7 @@ keyUsage = critical, digitalSignature, keyEncipherment
 extendedKeyUsage = serverAuth
 subjectAltName = DNS:localhost, IP:127.0.0.1
 `);
-  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '825', '-keyout', key, '-out', crt, '-config', cnf], { stdio: ['ignore', 'ignore', 'inherit'] });
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-sha256', '-days', '825', '-keyout', key, '-out', crt, '-config', cnf], { stdio: 'pipe' });
   console.log(`Made ${crt}`);
 } else {
   console.log(`Certificate exists: ${crt}`);
