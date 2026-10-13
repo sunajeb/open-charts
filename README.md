@@ -144,6 +144,27 @@ policies, application control and proxies on company laptops are covered in
 The [user guide](docs/USER-GUIDE.md) covers the datasheet, every option, hidden labels and
 troubleshooting.
 
+## Office.js add-in (Windows, web, Mac)
+
+A second, web-based add-in runs wherever PowerPoint runs Office add-ins (Windows, the web, Mac): a
+task pane with the same datasheet, the chart engine running inside the pane (no Node, no macros, no
+data leaves the computer). It shares the `.ppam` add-in's tag contract, so a chart made by either
+add-in, by the command line or by the web editor can be edited by the other.
+
+```sh
+npm install
+npm run build:officejs      # dist/officejs: task pane, engine bundle, manifest.xml, fonts
+npm run officejs:cert       # once: a certificate for https://localhost:4175 — trust it as printed
+npm run officejs:serve      # keep running while you use the add-in
+npm run officejs:sideload   # Mac: copies the manifest into PowerPoint's add-in folder; restart PowerPoint
+```
+
+Then **Home › open-charts** opens the pane: **Insert on slide** draws the chart on the current slide;
+select an open-charts chart and the pane loads its data, **Apply to slide** replaces it in place,
+**Revert** puts back the previous version, and a banner offers **Re-layout to new size** after a
+resize. Sideloading on Windows and the web, and how charts are drawn on PowerPoints with fewer API
+features, are in the [user guide](docs/USER-GUIDE.md#officejs-add-in-windows-web-mac).
+
 ## The editor
 
 ```sh
@@ -248,6 +269,8 @@ npm run goldens         # examples → .pptx → LibreOffice PDF → PNG, diffed
 npm run e2e:powerpoint  # macOS + PowerPoint: insert/update every chart type through the add-in
 npm run build:win       # dist/win: open-charts.exe (no Node needed), the .ppam, install scripts
 npm run bench           # layout and start-up times against the performance budgets
+npm run build:officejs  # Office.js add-in bundle; test/officejs.test.ts and test/e2e/officejs.spec.ts test it
+npm run officejs:live   # macOS + PowerPoint: the Office.js pane's self-test in real PowerPoint
 ```
 
 `npm run goldens` needs `soffice` (LibreOffice) and `pdftoppm` (poppler). Baselines are per platform
@@ -260,4 +283,4 @@ The live PowerPoint for Windows run is `e2e-powerpoint-win.ps1` on a real PC
 
 ## Licence and provenance
 
-Apache-2.0. Built from public chart-design conventions, published algorithms (Heckbert and Talbot et al. for axis ticks, largest-remainder rounding, Liang–Barsky clipping), the open OOXML standard and study of how existing charting tools behave. All code is original; none is copied from a commercial product. `vendor/opentype.module.js` is opentype.js (MIT).
+Apache-2.0. Built from public chart-design conventions, published algorithms (Heckbert and Talbot et al. for axis ticks, largest-remainder rounding, Liang–Barsky clipping), the open OOXML standard and study of how existing charting tools behave. All code is original; none is copied from a commercial product. `vendor/opentype.module.js` is opentype.js (MIT). `vendor/fonts/LiberationSans-{Regular,Bold}.ttf` are the Liberation Sans 2.1.5 fonts (SIL Open Font License 1.1, `vendor/fonts/LiberationSans.LICENSE`), used by the Office.js add-in to measure text with Arial's widths.
