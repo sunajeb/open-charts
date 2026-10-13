@@ -865,6 +865,13 @@ test('series colour swatch: pick an accent, a hex, then back to automatic', asyn
   await page.fill('#colorHex', '#4f9d69');
   await edit(page, () => page.press('#colorHex', 'Enter'));
   expect((await deck(page)).slides[0].chart.series[1].color).toBe('4F9D69');
+  // A theme colour is stored as its slot (it follows the deck's theme) and shown in the colour it stands for.
+  await page.click('#sheet .swatch[data-i="1"]');
+  await expect(page.locator('#themeSwatches button[data-slot="accent3"]')).toHaveAttribute('aria-label', 'Accent 3 (#7FA3CC)');
+  await edit(page, () => page.click('#themeSwatches button[data-slot="accent3"]'));
+  expect((await deck(page)).slides[0].chart.series[1].color).toBe('accent3');
+  expect(await rects(page, '7FA3CC')).toBeGreaterThanOrEqual(5);
+  await expect(page.locator('#sheet .swatch[data-i="1"]')).toHaveAttribute('aria-label', /Accent 3$/);
   await page.click('#sheet .swatch[data-i="0"]');
   await edit(page, () => page.click('#colorAuto'));
   expect((await deck(page)).slides[0].chart.series[0].color).toBeUndefined();

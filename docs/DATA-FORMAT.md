@@ -18,11 +18,12 @@ valid specs. Machine-readable schemas: `schema/chart.schema.json` and `schema/de
 
 ## Deck
 
-A deck is what the command line reads: a list of slides, each with an optional title and one chart.
+A deck is what the command line reads: a list of slides, each with an optional title and one chart
+(or several, see [Several charts on a slide](#several-charts-on-a-slide)).
 
 | Key | Type | Required | Meaning |
 |---|---|---|---|
-| `slides` | array | yes | One entry per slide: `{ "title"?: string, "chart": <chart spec> }`. |
+| `slides` | array | yes | One entry per slide: `{ "title"?: string, "chart": <chart spec> }`, or `{ "title"?: string, "charts": [{ "frame"?: {x, y, w, h}, "chart": <chart spec> }] }`. |
 | `style` | object | no | Fonts and colours for every chart in the deck. See [Style](#style). |
 | `specVersion` | `1` | no | Format version. Leave it out or set it to `1`. |
 | `$schema` | string | no | Ignored; lets editors find the JSON Schema. |
@@ -49,6 +50,47 @@ A deck is what the command line reads: a list of slides, each with an optional t
 The command line also accepts a file that holds a single chart spec (no `slides`); it becomes a
 one-slide deck without a title.
 
+### Several charts on a slide
+
+A slide with `charts` instead of `chart` holds several charts. Each entry is `{ "frame"?, "chart" }`;
+`frame` is `{x, y, w, h}` in points from the slide's top-left corner (the slide is 960 × 540). Charts
+without a frame share the chart area below the title side by side, in equal columns 24 pt apart. A
+slide has either `chart` or `charts`, never both. Give the charts the same
+[`scaleGroup`](#scalegroup) to draw them at one scale:
+
+```json
+{
+  "slides": [
+    {
+      "title": "Price and volume explain the whole gap",
+      "charts": [
+        {
+          "chart": {
+            "type": "stacked",
+            "categories": ["2022", "2023", "2024"],
+            "series": [
+              { "name": "Core", "values": [20, 30, 47] },
+              { "name": "New", "values": [5, 6, 8] }
+            ],
+            "options": { "scaleGroup": "revenue", "unit": "m" }
+          }
+        },
+        {
+          "chart": {
+            "type": "waterfall",
+            "categories": ["2023", "Price", "Volume", "2024"],
+            "series": [{ "name": "Change", "values": [36, 9, 10, "e"] }],
+            "options": { "scaleGroup": "revenue", "unit": "m" }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
+`open-charts import` gives such a slide back as `charts`, with each chart's frame.
+
 ## Chart
 
 | Key | Type | Required | Meaning |
@@ -59,6 +101,7 @@ one-slide deck without a title.
 | `options` | object | no | See [Options](#options). |
 | `specVersion` | `1` | no | Format version. Specs without it are read as version 1. A higher number is rejected ("made with a newer open-charts?"). |
 | `$schema` | string | no | Ignored. |
+| `style` | object | no | Style for this chart only, over the deck's. See [Style](#style). |
 
 Unknown keys are errors, everywhere in the spec, so a typo such as `"vlaues"` is reported rather
 than silently ignored.
@@ -228,6 +271,7 @@ same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optio
 | [`axisTitles`](#axistitles) | `{x?, y?}` | scatter, bubble | none |
 | [`sizeLegend`](#sizelegend) | boolean or caption | bubble | off |
 | [`labelContent`](#labelcontent) | `percent` `value` `both` | pie, doughnut | `percent` |
+| [`scaleGroup`](#scalegroup) | group name | stacked, clustered, waterfall, line, area, combo | none (own scale) |
 | [`shades`](#shades) | array of `{from, to, label?}` | gantt | none |
 | [`brackets`](#brackets) | array of `{from, to, label?}` | gantt | none |
 | [`today`](#today) | date | gantt | none |
@@ -338,6 +382,18 @@ data. `true` forces zero in; `false` always fits the data.
 
 Space between columns as a fraction of the column width: `0` makes columns touch, `0.5` (the
 default) leaves half a column between them. From 0 to 10, in the editor too.
+
+#### `scaleGroup`
+
+Charts on one slide with the same `scaleGroup` name share one value scale: a value unit is equally
+long in all of them, so a 7 in one chart is a seventh as tall as a 49 in the other. The group takes the
+smallest scale among its charts — the chart with the largest values for its size keeps its own
+scale, the others leave room above their columns. Charts of different sizes still compare
+correctly, because the scale is points per unit, not the axis range. Read by stacked, clustered,
+waterfall, line, area and combination charts; names only matter within one slide. In PowerPoint,
+Update chart, Apply in the editor and resizing a chart re-lay out the rest of its group too (the
+add-in finds them by the `OC_SGROUP` tag). See [Several charts on a slide](#several-charts-on-a-slide)
+for an example.
 
 ### Labels and legend
 
@@ -546,27 +602,49 @@ drawn.
 
 ## Style
 
-`style` sits on the deck (or, inside a `.pptx`, on a chart's stored spec) and changes fonts and
-colours. Every key is optional.
+`style` sits on the deck, on a chart (over the deck's style, for that chart only) or, inside a
+`.pptx`, on a chart's stored spec, and changes fonts, colours and number defaults. Every key is
+optional.
 
 | Key | Type | Default |
 |---|---|---|
 | `font` | font name | `Arial` |
 | `fontSize` | points, 4–72 | `12` |
-| `text` | hex colour, labels | `222222` |
-| `muted` | hex colour, secondary text | `595959` |
-| `axis` | hex colour, axes, connectors, arrows | `7F7F7F` |
-| `background` | hex colour, separators drawn in the background colour | `FFFFFF` |
-| `palette` | non-empty array of hex colours, one per series (or slice) in turn | `1F3A5F 3E6A9E 7FA3CC B9CDE5 A6A6A6 D9D9D9` |
-| `positive` | hex colour, waterfall increases | `3E8E5E` |
-| `negative` | hex colour, waterfall decreases | `C0504D` |
+| `text` | colour, labels | `tx1` (the theme's text colour) |
+| `muted` | colour, secondary text | `595959` |
+| `axis` | colour, axes, connectors, arrows | `7F7F7F` |
+| `background` | colour, separators drawn in the background colour | `bg1` (the theme's background) |
+| `palette` | non-empty array of colours, one per series (or slice) in turn | `accent1` … `accent6` |
+| `positive` | colour, waterfall increases | `3E8E5E` |
+| `negative` | colour, waterfall decreases | `C0504D` |
+| `theme` | object: hex colour per theme slot (`accent1`…`accent6`, `dk1`, `lt1`, `dk2`, `lt2`) | the open-charts theme |
+| `numbers` | object: `locale`, `decimals`, `scale` for every chart | none |
 
-Labels on a dark fill switch to white automatically. Text is measured with Arial metrics (or the
-metric-compatible Liberation Sans) unless you pass other fonts to the command line with `--font`.
+### Colours and the presentation's theme
+
+A colour is a hex colour (`"1F3A5F"` or `"#1F3A5F"`) or a **theme colour**: `accent1` … `accent6`,
+`dk1`, `lt1`, `dk2`, `lt2`, or `tx1`, `bg1`, `tx2`, `bg2` (text and background as the slide master
+maps them, so text stays readable on a dark-background master). Series colours (`series[].color`)
+may be theme colours too.
+
+A theme colour follows the presentation the chart is in: the `.pptx` stores it as a theme colour
+(`schemeClr`), and the add-in sets it as one, so Design › Variants or a new template recolours the
+chart like PowerPoint's own shapes. The default style uses the six accents for series, `tx1` for
+text and `bg1` for separators, so a chart inserted in a client's deck takes the deck's colours.
+
+`theme` says what the theme colours stand for where there is no presentation to ask: the preview,
+the theme of decks the command line writes, and the choice of black or white for labels on a
+coloured fill. Its default, the open-charts theme, is a navy-to-grey ramp (`1F3A5F 3E6A9E 7FA3CC
+B9CDE5 A6A6A6 D9D9D9`, text `222222`). In PowerPoint the add-in uses the slide's own theme colours
+instead, so label contrast always matches what is drawn.
 
 ```json
 {
-  "style": { "fontSize": 11, "palette": ["0B5394", "6FA8DC", "CFE2F3"] },
+  "style": {
+    "palette": ["accent1", "accent2", "B9CDE5"],
+    "theme": { "accent1": "0B5394", "accent2": "6FA8DC" },
+    "numbers": { "locale": "de-DE", "decimals": 1 }
+  },
   "slides": [
     {
       "title": "Mix by channel",
@@ -575,13 +653,23 @@ metric-compatible Liberation Sans) unless you pass other fonts to the command li
         "categories": ["2023", "2024"],
         "series": [
           { "name": "Online", "values": [45, 58] },
-          { "name": "Stores", "values": [55, 42] }
+          { "name": "Stores", "values": [55, 42] },
+          { "name": "Partners", "values": [12, 14], "color": "accent4" }
         ]
       }
     }
   ]
 }
 ```
+
+### Number defaults
+
+`numbers` sets `locale`, `decimals` and `scale` for every chart in the deck, with the same values as
+the [options](#numbers) of those names. A chart's own options win, and a default only applies to
+chart types that read that option.
+
+Labels on a dark fill switch to white automatically. Text is measured with Arial metrics (or the
+metric-compatible Liberation Sans) unless you pass other fonts to the command line with `--font`.
 
 ## Validation and errors
 
