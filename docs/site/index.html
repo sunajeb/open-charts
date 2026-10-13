@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>open-charts</title>
+<meta name="description" content="Open-source charts for PowerPoint: waterfall, Mekko, Gantt and more, drawn as native shapes, with the data inside the deck.">
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1d2330; --muted: #5b6474; --line: #e3e6ec; --card: #f6f7f9;
+    --accent: #1f5f8b; --accent-fg: #ffffff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg: #12151b; --fg: #e8ebf0; --muted: #a0a8b6; --line: #2a303a; --card: #1a1f27; --accent: #6fb1e0; --accent-fg: #0d1117; }
+  }
+  :root[data-theme="dark"] { --bg: #12151b; --fg: #e8ebf0; --muted: #a0a8b6; --line: #2a303a; --card: #1a1f27; --accent: #6fb1e0; --accent-fg: #0d1117; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1040px; margin: 0 auto; padding: 0 16px 64px; }
+  header { padding: 56px 0 32px; }
+  h1 { font-size: clamp(30px, 5vw, 46px); line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.01em; }
+  h2 { font-size: 24px; margin: 48px 0 12px; }
+  p { margin: 0 0 12px; }
+  .lead { font-size: 19px; color: var(--muted); max-width: 680px; }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+  .btn { display: inline-block; padding: 11px 18px; border-radius: 8px; text-decoration: none; font-weight: 600; border: 1px solid var(--accent); }
+  .btn.primary { background: var(--accent); color: var(--accent-fg); }
+  .btn.secondary { color: var(--accent); }
+  .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 16px; margin-top: 16px; }
+  figure { margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  figure img { display: block; width: 100%; height: auto; }
+  figcaption { padding: 8px 12px; font-size: 14px; color: #5b6474; border-top: 1px solid #e3e6ec; background: #fff; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; }
+  .card h3 { margin: 0 0 6px; font-size: 18px; }
+  .card p { color: var(--muted); margin: 0; font-size: 16px; }
+  .types { color: var(--muted); }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; }
+  footer { border-top: 1px solid var(--line); margin-top: 56px; padding-top: 20px; color: var(--muted); font-size: 15px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Consulting-style charts in PowerPoint. Open source.</h1>
+    <p class="lead">open-charts adds waterfall, Mekko, Gantt, Harvey ball and 15 more chart types to PowerPoint. Charts are drawn as ordinary PowerPoint shapes, so they look right in any deck, and their data travels inside the file, so anyone with the add-in can edit them.</p>
+    <div class="actions">
+      <a class="btn primary" href="https://github.com/sunajeb/open-charts/releases">Download for Mac or Windows</a>
+      <a class="btn secondary" href="https://github.com/sunajeb/open-charts/blob/master/docs/USER-GUIDE.md">Read the user guide</a>
+    </div>
+  </header>
+
+  <section aria-labelledby="gallery">
+    <h2 id="gallery">Drawn by PowerPoint, laid out by open-charts</h2>
+    <p class="types">Every picture below is a screenshot of a chart inserted with the add-in, at its default settings.</p>
+    <div class="gallery">
+      <figure><img src="img/waterfall.png" alt="Waterfall chart building up total cost from materials, labour, energy, logistics and overhead" width="880" height="424" loading="lazy"><figcaption>Waterfall</figcaption></figure>
+      <figure><img src="img/stacked.png" alt="Stacked column chart of revenue by segment over five years with totals and a growth arrow" width="880" height="424" loading="lazy"><figcaption>Stacked column with totals and CAGR</figcaption></figure>
+      <figure><img src="img/mekko.png" alt="Mekko chart showing market share by segment and region" width="880" height="424" loading="lazy"><figcaption>Mekko</figcaption></figure>
+      <figure><img src="img/gantt.png" alt="Gantt chart of a project plan with phases and milestones" width="880" height="424" loading="lazy"><figcaption>Gantt</figcaption></figure>
+      <figure><img src="img/combo.png" alt="Combination chart with columns and a line" width="880" height="424" loading="lazy"><figcaption>Combination</figcaption></figure>
+      <figure><img src="img/harvey.png" alt="Harvey ball table comparing options on several criteria" width="880" height="424" loading="lazy"><figcaption>Harvey balls</figcaption></figure>
+      <figure><img src="img/line.png" alt="Line chart with labelled series" width="880" height="424" loading="lazy"><figcaption>Line</figcaption></figure>
+      <figure><img src="img/scatter.png" alt="Scatter chart with labelled points" width="880" height="424" loading="lazy"><figcaption>Scatter</figcaption></figure>
+    </div>
+    <p class="types" style="margin-top:16px">All types: stacked, clustered and 100% columns and bars, waterfall (build-up and build-down), combination, line, step line, stacked and 100% area, Mekko, Mekko with an x axis, scatter, bubble, pie, doughnut, Gantt, Harvey balls and tables.</p>
+  </section>
+
+  <section aria-labelledby="how">
+    <h2 id="how">How it works</h2>
+    <div class="grid">
+      <div class="card"><h3>Insert, then Edit data</h3><p>Pick a type on the open-charts tab. Edit data opens a small grid; the chart on the slide follows as you type.</p></div>
+      <div class="card"><h3>Your deck's look</h3><p>Charts use the deck's theme colours and fonts, any font you have installed. Change a colour or font with PowerPoint's own tools and it stays when you update the chart.</p></div>
+      <div class="card"><h3>Resize freely</h3><p>Drag a chart to any size. Labels are measured and placed again, so text never stretches or overlaps.</p></div>
+      <div class="card"><h3>Data inside the file</h3><p>Send the deck to a colleague with the add-in and they can edit the chart. Without it, they still see a normal chart.</p></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="install">
+    <h2 id="install">Install</h2>
+    <div class="grid">
+      <div class="card"><h3>Mac</h3><p>Download the <code>.pkg</code> from the releases page and open it. No admin rights needed. Then look for the open-charts tab in PowerPoint.</p></div>
+      <div class="card"><h3>Windows</h3><p>Download the <code>.msi</code> from the releases page. It installs for your user only, without admin rights.</p></div>
+      <div class="card"><h3>For IT teams</h3><p>Silent installs, Intune and Jamf, macro policy and network use are covered in the <a href="https://github.com/sunajeb/open-charts/blob/master/docs/IT-DEPLOYMENT.md">IT deployment guide</a>.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    open-charts is free and open source under the Apache 2.0 licence. Source, issues and releases on <a href="https://github.com/sunajeb/open-charts">GitHub</a>. Microsoft and PowerPoint are trademarks of Microsoft Corporation; open-charts is not affiliated with Microsoft.
+  </footer>
+</main>
+</body>
+</html>

@@ -73,6 +73,8 @@ Rules for this plan
 ## F. Release 1.0
 - [ ] F1 Freeze the data format at 1.0 (owner decision, Q5); version, changelog
 - [ ] F2 Landing page + download for prosumers; licence and legal review (Q2); name/trademark check (Q6)
+      (page ready: docs/site/index.html with PowerPoint-rendered charts, links to Releases and guides;
+      publishing it, e.g. GitHub Pages from docs/site, waits for Q2/Q6)
 
 ## Owner questions (open)
 - Q1 Rewrite git history to remove the old analysis docs (force-push; anyone who cloned keeps old copies)?
