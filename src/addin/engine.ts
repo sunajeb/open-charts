@@ -13,6 +13,8 @@
 //                     contrast is decided on the colours PowerPoint will show
 //      scale=N        same-scale group: the smallest own scale (OC_SCALE, pt per unit) of the
 //                     other charts in this chart's group on the slide
+//   (edit sends the same lines 3–4 and params, so the server can lay an Apply out by itself:
+//    layoutForApply)
 //   5… spec     the chart's OC_SPEC tag, reassembled (update, relayout, edit); always starts with "{"
 //
 // update   re-lays the chart out where it now is, with the applied edit session if there is one
@@ -34,6 +36,11 @@ export interface AddinRequest {
   theme?: Partial<ThemeColors>;
   /** Same-scale group: the smallest own scale of the other charts in the group (from `scale=`). */
   ptPerUnit?: number;
+  /**
+   * Lines 3 up to the spec as sent (frame, bounds, theme=, scale=), each ending in a newline: what the
+   * layout depends on besides the data. VBA compares it with the chart's own to reuse a layout.
+   */
+  context?: string;
 }
 
 /** Context of one layout in PowerPoint: the slide's theme and the chart's same-scale group. */
@@ -72,6 +79,7 @@ export function parseRequest(text: string): AddinRequest {
     params[lines[i].slice(0, at)] = lines[i].slice(at + 1).trim();
   }
   const scale = Number(params.scale);
+  const context = lines.length > 2 ? lines.slice(2, i).map((l) => `${l}\n`).join('') : '';
   return {
     op: (lines[0] ?? '').trim(),
     arg: (lines[1] ?? '').trim(),
@@ -80,7 +88,37 @@ export function parseRequest(text: string): AddinRequest {
     spec: lines.slice(i).join('\n').trim(),
     ...(params.theme ? { theme: parseTheme(params.theme) } : {}),
     ...(params.scale && scale > 0 && Number.isFinite(scale) ? { ptPerUnit: scale } : {}),
+    ...(context ? { context } : {}),
   };
+}
+
+/**
+ * Apply without a round trip through PowerPoint's AppleScriptTask (about 0.2 s each): the add-in
+ * server lays the applied chart out itself and hands the response to ApplyEdit with the context it
+ * assumed. The context of a session's chart comes from Edit data and then from each Apply's answer.
+ */
+const applyContexts = new Map<string, { context: string; spec: string }>();
+const MAX_CONTEXTS = 64;
+
+export function rememberContext(id: string, context: string, spec?: string) {
+  const prev = applyContexts.get(id);
+  applyContexts.delete(id);
+  applyContexts.set(id, { context, spec: spec ?? prev?.spec ?? '' });
+  if (applyContexts.size > MAX_CONTEXTS) applyContexts.delete(applyContexts.keys().next().value!);
+}
+
+export const contextOf = (id: string): string | undefined => applyContexts.get(id)?.context;
+
+/**
+ * The response ApplyEdit draws for applied session `s` on a chart whose context is `context`:
+ * exactly the `update` request VBA would send for it. The session is not settled here: the server
+ * does that once it hands the response to PowerPoint.
+ */
+export async function layoutForApply(s: Session, context: string, m: Measurer): Promise<string> {
+  const req = parseRequest(`update\n${s.id}\n${context}`);
+  const spec = applyContexts.get(s.id)?.spec || JSON.stringify(s.chart);
+  const applied: Sessions = { get: async () => ({ ...s, state: 'applied' }), open: async () => {} };
+  return handleRequest({ ...req, spec }, m, applied);
 }
 
 /** Same frame as a chart on a generated slide: the area below the title. */
@@ -122,6 +160,7 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         if (!sessions) return error('Editing is not available here.');
         const id = specKey(req.spec);
         await sessions.open(id, style ? { ...chart, style } : chart, `${typeLabel(chart.type)} chart`);
+        if (req.context) rememberContext(id, req.context, req.spec);
         return `${header()}\n${record('I', id)}\n`;
       }
       case 'types':

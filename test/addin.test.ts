@@ -8,8 +8,8 @@ import { installLauncher, launcherPath, reinstallCommand, removeLauncher } from 
 import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
-import { DEFAULT_FRAME, handleRequest, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { addinRoutes, applyErrorMessage, applyInPowerPoint, applyScript, editorPage, outlivedPowerPoint, RESTARTED_MESSAGE } from '../src/addin/server.ts';
+import { contextOf, DEFAULT_FRAME, handleRequest, layoutForApply, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
+import { addinRoutes, applyErrorMessage, applyInPowerPoint, applyScript, editorPage, outlivedPowerPoint, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
 import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
@@ -235,7 +235,7 @@ test('VBA source is ASCII and every Sub/Function is closed', async () => {
 
 test('VBA: Apply is silent, an ungrouped chart is named as such, the engine starts as the add-in loads', () => {
   const src = readFileSync(new URL('../addin/vba/OpenCharts.bas', import.meta.url), 'utf8');
-  const body = (name: string) => { const a = src.indexOf(`Sub ${name}(`); return src.slice(a, src.indexOf('End Sub', a)); };
+  const body = (name: string) => { const a = src.search(new RegExp(`(Sub|Function) ${name}\\(`)); return src.slice(a, src.slice(a).search(/End (Sub|Function)/) + a); };
   // ApplyEdit runs under the server's AppleScript call: a dialog would block it until it times out.
   assert.match(body('OCPREFIX_ApplyEdit'), /gSilent = True/);
   assert.doesNotMatch(body('OCPREFIX_ApplyEdit'), /MsgBox|Tell /);
@@ -292,6 +292,7 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
   const home = mkdtempSync(join(tmpdir(), 'oc-apply-'));
   const chart = { type: 'stacked', categories: ['a'], series: [{ name: 'S', values: [1] }] };
   const scripts: string[] = [];
+  const argv: string[][] = [];
   try {
     // Not installed: no AppleScript, a clear error.
     let s = setSession('ap1', { chart, state: 'applied' });
@@ -303,15 +304,16 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     // The macro draws the chart: the engine settles the session ("open"), and once the macro has
     // returned the server says "drawn", never earlier, while PowerPoint is still drawing.
     s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async (script) => {
-      scripts.push(script);
+    await applyInPowerPoint(s, home, async (script, _ms, args) => {
+      scripts.push(script); argv.push(args);
       setSession('ap1', { state: 'open' });
       return undefined;
     });
     assert.deepEqual([getSession('ap1')!.state, getSession('ap1')!.message], ['drawn', undefined]);
-    assert.equal(scripts[0], applyScript('oc123', 'ap1'));
-    assert.match(scripts[0], /^if application "Microsoft PowerPoint" is not running then error/, 'never starts PowerPoint');
-    assert.match(scripts[0], /run VB macro macro name "oc123_ApplyEdit" list of parameters \{"ap1"\}/);
+    assert.equal(scripts[0], applyScript('oc123'));
+    assert.match(scripts[0], /^on run argv\nif application "Microsoft PowerPoint" is not running then error/, 'never starts PowerPoint');
+    assert.match(scripts[0], /return run VB macro macro name "oc123_ApplyEdit" list of parameters \{item 1 of argv, item 2 of argv, item 3 of argv\}/);
+    assert.deepEqual(argv[0], ['ap1', '', ''], 'no layout of its own without prepare');
 
     // The macro ran but drew nothing (no chart found).
     s = setSession('ap1', { chart, state: 'applied' });
@@ -348,6 +350,69 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('Apply: the server lays the chart out for its context and ApplyEdit only draws it', async () => {
+  const s0 = sampleFor('waterfall');
+  assert.ok('spec' in s0);
+  const json = JSON.stringify(s0.spec);
+  const id = specKey(json);
+  const theme = 'theme=000000,FFFFFF,44546A,E7E6E6,C00000,ED7D31,A5A5A5,FFC000,5B9BD5,70AD47,0563C1,954F72\n';
+  const context = `48,96,864,408\n48,96,864,408\n${theme}`;
+  // Edit data sends the chart's context (frame, bounds, theme) and the engine keeps it for Apply.
+  const { sessions } = fakeSessions();
+  await handleRequest(parseRequest(`edit\n\n${context}${json}`), m, sessions);
+  assert.equal(contextOf(id), context);
+
+  // The server's layout is exactly the update request VBA would send for that context.
+  const edited = { ...s0.spec, categories: s0.spec.categories.map((c, i) => (i ? c : 'Start')) };
+  const applied: Session = setSession(id, { chart: edited, state: 'applied' });
+  const viaVba = await handleRequest(parseRequest(`update\n${id}\n${context}${json}`), m, { get: async () => applied, open: async () => {} });
+  assert.equal(await layoutForApply(applied, context, m), viaVba);
+  assert.match(viaVba, /\tStart\t/);
+
+  const home = mkdtempSync(join(tmpdir(), 'oc-apply-fast-'));
+  try {
+    writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
+    const prepare = (a: Session, c: string) => layoutForApply(a, c, m);
+    const calls: string[][] = [];
+    const moved = `48,96,864,408\n100,96,432,204\n${theme}`;
+    const line = (c: string) => `CONTEXT\t${c.replace(/\n/g, '\t')}`;
+    // 1. The context is as expected: one call with the layout; settled while PowerPoint draws, then drawn.
+    let s = setSession(id, { chart: edited, state: 'applied' });
+    await applyInPowerPoint(s, home, async (_script, _ms, args) => {
+      calls.push(args);
+      assert.equal(getSession(id)!.state, 'open', 'settled before drawing: a same-data chart keeps its data');
+      return `SYNC g 1 of 1 charts\nAPPLIED ${id} OK (200 ms) engine 0 ms, draw 190 ms\n${line(moved)}\n`;
+    }, () => false, prepare);
+    assert.deepEqual(calls.map((a) => a.slice(0, 2)), [[id, context]]);
+    assert.equal(calls[0][2], viaVba);
+    assert.equal(getSession(id)!.state, 'drawn');
+    assert.equal(contextOf(id), moved, 'the new chart\'s context is kept for the next Apply');
+    assert.match(readFileSync(join(home, 'addin.log'), 'utf8'), /SYNC g 1 of 1 charts\n.*APPLIED \w+ OK \(200 ms\)[^\n]*\n.*APPLY \w+ done \(\d+ ms, layout \d+ ms\)/);
+
+    // 2. The chart was moved back meanwhile: ApplyEdit answers its context, the server lays out again.
+    calls.length = 0;
+    s = setSession(id, { chart: edited, state: 'applied' });
+    await applyInPowerPoint(s, home, async (_script, _ms, args) => {
+      calls.push(args);
+      return args[1] === '*' ? `APPLIED ${id} OK (210 ms)\n${line(context)}` : line(context);
+    }, () => false, prepare);
+    assert.deepEqual(calls.map((a) => a.slice(0, 2)), [[id, moved], [id, '*']]);
+    assert.equal(calls[1][2], viaVba);
+    assert.equal(getSession(id)!.state, 'drawn');
+
+    // 3. No chart, or drawing failed: an error that says what to do.
+    for (const answer of [`APPLIED ${id} no chart`, `APPLIED ${id} failed: boom`]) {
+      s = setSession(id, { chart: edited, state: 'applied' });
+      await applyInPowerPoint(s, home, async () => answer, () => false, prepare);
+      assert.equal(getSession(id)!.state, 'error');
+      assert.match(getSession(id)!.message!, /could not find the chart/);
+    }
+  } finally {
+    rmSync(home, { recursive: true, force: true });
+  }
+  assert.deepEqual(parseApplyAnswer('CONTEXT\ta\tb\t\nAPPLIED x OK (1 ms)\n'), { lines: ['APPLIED x OK (1 ms)'], context: 'a\nb\n', applied: 'APPLIED x OK (1 ms)' });
 });
 
 test('a server that outlived the PowerPoint that started it never sends Apple events and hands over', async () => {

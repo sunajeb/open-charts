@@ -39,6 +39,9 @@ Private gDrawMs As Single
 ' Finer phases for the timing log (" theme 12 ms, shapes 210 ms, ..."), summed per name.
 Private gPhaseNames As Collection
 Private gPhaseMs As Collection
+' While ApplyEdit runs, Report collects lines for its answer instead of logging them itself.
+Private gCollect As Boolean
+Private gCollected As String
 
 ' ---- Loading --------------------------------------------------------------------------------
 
@@ -118,15 +121,20 @@ Public Sub OCPREFIX_Run(ByVal controlId As String)
     gSilent = False
 End Sub
 
-' The editor applied an edit session: lay that chart out again with the new data. Silent: the
-' add-in server runs this and the editor shows the outcome (the engine marks the session drawn;
-' the server reports anything else), so no dialog may block it.
-Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
-    Dim target As Object, t As Single, tp As Single
+' The editor applied an edit session: the add-in server has laid the chart out with the new data for
+' `context` (ChartContext: frame, bounds, theme, same-scale group) and passes the response, so this
+' only draws it in place of the chart (and re-lays out its same-scale partners). If the chart's
+' context is not `context` ("*" accepts any), it draws nothing and answers its context, and the
+' server lays it out again for that. Silent: the server runs this and the editor shows the outcome,
+' so no dialog may block it. Answers its log lines (the server writes them: a Report here would be
+' another AppleScriptTask, about 0.2 s) and, after drawing, the new chart's context.
+Public Function OCPREFIX_ApplyEdit(ByVal sessionId As String, ByVal context As String, ByVal response As String) As String
+    Dim target As Object, t As Single, tp As Single, here As String, outcome As String
     t = Timer
     ResetTiming
     gSilent = True
     gLastMessage = ""
+    gCollected = "": gCollect = True
     On Error Resume Next
     If sessionId = gEditId And Not gEditShape Is Nothing Then
         If gEditShape.Name <> "" Then Set target = gEditShape
@@ -134,16 +142,20 @@ Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
     On Error GoTo Failed
     If target Is Nothing Then Set target = FindSelectedChart()
     If target Is Nothing Then
-        Report "APPLIED " & sessionId & " no chart"
-        gSilent = False
-        Exit Sub
+        OCPREFIX_ApplyEdit = "APPLIED " & sessionId & " no chart"
+        GoTo Done
+    End If
+    here = ChartContext(target)
+    If response = "" Or (context <> "*" And context <> here) Then
+        OCPREFIX_ApplyEdit = ContextLine(here)
+        GoTo Done
     End If
     gBusy = True
     Phase "find", t
     Dim sld As Object, oldGroup As String
     Set sld = target.Parent
     oldGroup = TagValue(target, "OC_SGROUP")
-    Set target = Relayout(target, True, sessionId)
+    Set target = ReplaceChart(target, response)
     tp = Timer
     If Not target Is Nothing Then SyncAfter sld, target, oldGroup
     Phase "sync", tp
@@ -151,16 +163,33 @@ Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
     If Not target Is Nothing Then
         Set gEditShape = target
         gEditId = sessionId
+        tp = Timer
+        here = ChartContext(target)
+        Phase "context", tp
     End If
-    Report "APPLIED " & sessionId & " " & IIf(target Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
-    gSilent = False
-    Exit Sub
+    outcome = gCollected & "APPLIED " & sessionId & " " & IIf(target Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
+    If Not target Is Nothing Then outcome = outcome & vbLf & ContextLine(here)
+    OCPREFIX_ApplyEdit = outcome
+    GoTo Done
 Failed:
     ' Never leave an error dialog (it would block the server's call) or the busy flag behind.
     gBusy = False
+    OCPREFIX_ApplyEdit = gCollected & "APPLIED " & sessionId & " failed: " & Err.Description
+Done:
+    gCollect = False
     gSilent = False
-    Report "APPLIED " & sessionId & " failed: " & Err.Description
-End Sub
+End Function
+
+' What a layout depends on besides the data: the request lines between the session id and the spec.
+Private Function ChartContext(ByVal chart As Object) As String
+    ChartContext = TagValue(chart, "OC_FRAME") & vbLf & Fmt(chart.Left) & "," & Fmt(chart.Top) & "," & Fmt(chart.Width) & "," & Fmt(chart.Height) & vbLf & _
+        ThemeLine(chart.Parent) & ScaleLine(chart)
+End Function
+
+' A context as one answer line (src/addin/server.ts parseApplyAnswer).
+Private Function ContextLine(ByVal context As String) As String
+    ContextLine = "CONTEXT" & vbTab & Replace(context, vbLf, vbTab)
+End Function
 
 ' Selects the n-th open-charts chart on the active slide (1-based), or nothing for "0" (as a
 ' click on an empty part of the slide), for scripted tests.
@@ -267,7 +296,7 @@ Private Sub UpdateChart()
     If chart Is Nothing Then Exit Sub
     Set sld = chart.Parent
     oldGroup = TagValue(chart, "OC_SGROUP")
-    Set chart = Relayout(chart, True, "")
+    Set chart = Relayout(chart, True)
     If chart Is Nothing Then Exit Sub
     SyncAfter sld, chart, oldGroup
     chart.Select
@@ -277,7 +306,8 @@ Private Sub EditData()
     Dim chart As Object, response As String
     Set chart = SelectedChart()
     If chart Is Nothing Then Exit Sub
-    response = Engine("edit" & vbLf & "" & vbLf & TagValue(chart, "OC_FRAME") & vbLf & "" & vbLf & SpecOf(chart))
+    ' The chart's context too: the server lays an Apply out for it by itself (ApplyEdit).
+    response = Engine("edit" & vbLf & "" & vbLf & ChartContext(chart) & SpecOf(chart))
     If response = "" Then Exit Sub
     gSessionId = ""
     Draw Nothing, response
@@ -290,22 +320,22 @@ End Sub
 ' Lays a chart out again where it now is (its group's bounds are its frame) and replaces it in
 ' place, same stacking order. force=False is the automatic check: the engine answers "nothing to
 ' do" when neither size nor data changed. Returns the new group (or the old one if unchanged).
-Private Function Relayout(ByVal old As Object, ByVal force As Boolean, ByVal sessionId As String) As Object
-    Dim response As String, bounds As String, grp As Object, head As String, theme As String, scl As String, tp As Single
+Private Function Relayout(ByVal old As Object, ByVal force As Boolean) As Object
+    Dim response As String, request As String, tp As Single
     tp = Timer
-    bounds = Fmt(old.Left) & "," & Fmt(old.Top) & "," & Fmt(old.Width) & "," & Fmt(old.Height)
-    head = IIf(force, "update", "relayout") & vbLf & sessionId & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf
-    Phase "read", tp: tp = Timer
-    theme = ThemeLine(old.Parent)
-    Phase "theme", tp: tp = Timer
-    scl = ScaleLine(old)
-    Phase "scale", tp: tp = Timer
-    head = head & theme & scl & SpecOf(old)
+    request = IIf(force, "update", "relayout") & vbLf & "" & vbLf & ChartContext(old) & SpecOf(old)
     Phase "read", tp
-    response = Engine(head)
+    response = Engine(request)
     If response = "" Then Exit Function
+    Set Relayout = ReplaceChart(old, response)
+End Function
+
+' Draws an engine response in place of chart `old` (same stacking order) and deletes it. Returns the
+' new group, `old` when the response is "nothing to do", or Nothing.
+Private Function ReplaceChart(ByVal old As Object, ByVal response As String) As Object
+    Dim grp As Object, tp As Single
     Set grp = Draw(old.Parent, response)
-    If gNothing Then Set Relayout = old: Exit Function
+    If gNothing Then Set ReplaceChart = old: Exit Function
     If grp Is Nothing Then Exit Function
     tp = Timer
     Do While grp.ZOrderPosition > old.ZOrderPosition + 1
@@ -314,7 +344,7 @@ Private Function Relayout(ByVal old As Object, ByVal force As Boolean, ByVal ses
     Phase "zorder", tp: tp = Timer
     old.Delete
     Phase "delete", tp
-    Set Relayout = grp
+    Set ReplaceChart = grp
 End Function
 
 ' A chart whose group was resized on the slide is laid out again at its new size (text is never
@@ -340,7 +370,7 @@ Private Sub CheckResized()
                 Set sel = FindSelectedChart()
                 If Not sel Is Nothing Then selectedId = sel.Id
                 wasSelected = (selectedId = shp.Id)
-                Set result = Relayout(shp, False, "")
+                Set result = Relayout(shp, False)
                 If Not result Is Nothing Then
                     If TagValue(result, "OC_SGROUP") <> "" Then groups.Add TagValue(result, "OC_SGROUP") & vbTab & result.Id
                 End If
@@ -413,6 +443,7 @@ Private Sub Phase(ByVal name As String, ByVal t0 As Single)
 End Sub
 
 Private Sub Report(ByVal text As String)
+    If gCollect Then gCollected = gCollected & text & vbLf: Exit Sub
     On Error Resume Next
     Dim ignored As String
     ignored = AppleScriptTask(SCRIPT_FILE, "logLine", text)
@@ -849,7 +880,7 @@ Private Sub SyncGroup(ByVal sld As Object, ByVal g As String, ByVal skipId As Lo
         End If
     Next shp
     For Each shp In peers
-        If Not Relayout(shp, True, "") Is Nothing Then n = n + 1
+        If Not Relayout(shp, True) Is Nothing Then n = n + 1
     Next shp
     If peers.Count > 0 Then Report "SYNC " & g & " " & n & " of " & peers.Count & " charts"
 End Sub
