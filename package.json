@@ -13,7 +13,9 @@
     "test": "node --experimental-strip-types --no-warnings --test 'test/*.test.ts'",
     "e2e": "playwright test -c test/e2e",
     "goldens": "node --experimental-strip-types --no-warnings test/goldens/run.ts",
-    "bench": "node --experimental-strip-types --no-warnings scripts/bench.ts"
+    "bench": "node --experimental-strip-types --no-warnings scripts/bench.ts",
+    "bench:accept": "node --experimental-strip-types --no-warnings test/bench/accept.ts",
+    "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts"
   },
   "engines": {
     "node": ">=22.6"

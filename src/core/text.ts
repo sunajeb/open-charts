@@ -72,12 +72,16 @@ function metricsOf(font: Font): FontMetrics {
 
 // Scripts whose glyphs change with context (Hebrew, Arabic, Syriac, ... and their presentation forms):
 // measured by the full shaper (opentype.js), parsed on first use.
+// East Asian ideographs, kana, Hangul and full-width forms missing from a Latin font: PowerPoint draws
+// them in a fallback East Asian font, where they are one em wide (not the .notdef box's width).
+const FULL_WIDTH = /[\u1100-\u115F\u2E80-\u9FFF\uA960-\uA97F\uAC00-\uD7AF\uF900-\uFAFF\uFE30-\uFE4F\uFF01-\uFF60\uFFE0-\uFFE6]/u;
+
 const SHAPED = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
 
 /**
  * Measurer over font metrics: the sum of the glyph advances, without kerning or ligatures, as
- * PowerPoint draws text by default (identical to opentype.js for Latin, Greek, Cyrillic and CJK — checked
- * over every pair of Latin characters in test/text.test.ts). Text in shaped scripts goes through
+ * PowerPoint draws text by default (identical to opentype.js for Latin, Greek and Cyrillic — checked
+ * over every pair of Latin characters in test/text.test.ts; East Asian characters the font lacks are one em). Text in shaped scripts goes through
  * opentype.js, from `fontBytes` when given. Widths are memoised (bounded), so repeated labels cost nothing.
  */
 export function measurerFromMetrics(
@@ -105,7 +109,7 @@ function build(regular: FontMetrics, bold: FontMetrics | null | undefined, fonts
     const scale = 1 / fm.unitsPerEm * size;
     let x = 0;
     for (const ch of line) {
-      const a = adv.get(ch.codePointAt(0)!) ?? fm.notdef;
+      const a = adv.get(ch.codePointAt(0)!) ?? (FULL_WIDTH.test(ch) ? fm.unitsPerEm : fm.notdef);
       if (a) x += a * scale;
     }
     return x;

@@ -1,0 +1,19 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Revenue beat plan from 2023 as services scaled",
+      "chart": {
+        "specVersion": 1,
+        "type": "combo",
+        "categories": ["2021","2022","2023","2024","2025"],
+        "series": [
+          {"name":"Products","values":[62,71,84,98,112]},
+          {"name":"Services","values":[18,22,33,41,52]},
+          {"name":"Plan","values":[88,96,108,124,140],"as":"line"}
+        ],
+        "options": {"unit":"m","totals":true}
+      }
+    }
+  ]
+}

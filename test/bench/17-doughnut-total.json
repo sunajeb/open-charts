@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Headcount by function: engineering is now 46% of the company",
+      "chart": {
+        "specVersion": 1,
+        "type": "doughnut",
+        "categories": ["Engineering","Sales","Customer success","Marketing","G&A"],
+        "series": [{"name":"Headcount","values":[412,196,128,74,86]}],
+        "options": {"totals":true,"labelContent":"both"}
+      }
+    }
+  ]
+}

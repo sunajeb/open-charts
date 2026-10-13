@@ -1,0 +1,19 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Category sales by channel: modern trade dominates the big categories",
+      "chart": {
+        "specVersion": 1,
+        "type": "mekko",
+        "categories": ["Beverages","Snacks","Dairy","Frozen","Bakery"],
+        "series": [
+          {"name":"Modern trade","values":[320,210,140,90,40]},
+          {"name":"Traditional trade","values":[180,150,60,20,45]},
+          {"name":"E-commerce","values":[60,35,15,25,5]}
+        ],
+        "options": {"mekko":"unit","unit":"m","valueAxis":true}
+      }
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Restructuring charges pushed two years below break-even",
+      "chart": {
+        "specVersion": 1,
+        "type": "stacked",
+        "categories": ["2021","2022","2023","2024","2025"],
+        "series": [
+          {"name":"Operating profit","values":[24,18,9,15,27]},
+          {"name":"Other income","values":[4,3,2,5,6]},
+          {"name":"Restructuring","values":[-6,-28,-19,-8,-3]},
+          {"name":"FX","values":[2,-3,-1,1,2]}
+        ],
+        "options": {"unit":"m","valueAxis":true}
+      }
+    }
+  ]
+}

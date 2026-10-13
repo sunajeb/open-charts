@@ -1,0 +1,44 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Transformation programme: roll-out completes in Q4 2026",
+      "chart": {
+        "specVersion": 1,
+        "type": "gantt",
+        "categories": [
+          "Diagnostic",
+          "Target operating model design",
+          "Pilot (two sites)",
+          "Wave 1 roll-out",
+          "Wave 2 roll-out",
+          "Benefits tracking",
+          "Steering committee",
+          "Go/no-go"
+        ],
+        "series": [
+          {
+            "name": "Start",
+            "values": ["2026-01-05","2026-02-02","2026-03-16","2026-05-04","2026-08-03","2026-05-04",null,null]
+          },
+          {
+            "name": "End",
+            "values": ["2026-02-13","2026-03-27","2026-05-01","2026-08-28","2026-11-27","2026-12-18",null,null]
+          },
+          {
+            "name": "Milestone",
+            "values": ["2026-02-13",null,"2026-05-01",null,"2026-11-27",null,"2026-03-30","2026-05-04"]
+          }
+        ],
+        "options": {
+          "today": "2026-04-15",
+          "shades": [{"from":"2026-08-03","to":"2026-08-21","label":"Summer freeze"}],
+          "brackets": [
+            {"from":"2026-01-05","to":"2026-05-01","label":"Design"},
+            {"from":"2026-05-04","to":"2026-12-18","label":"Deliver"}
+          ]
+        }
+      }
+    }
+  ]
+}

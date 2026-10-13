@@ -1,0 +1,20 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Revenue grew 2.3x in four years, led by Enterprise",
+      "chart": {
+        "specVersion": 1,
+        "type": "stacked",
+        "categories": ["2021","2022","2023","2024","2025E"],
+        "series": [
+          {"name":"Enterprise","values":[42,58,75,96,121]},
+          {"name":"Mid-market","values":[31,36,44,51,60]},
+          {"name":"SMB","values":[18,21,22,26,29]},
+          {"name":"Services","values":[6,5,7,8,9]}
+        ],
+        "options": {"unit":"m","cagr":{"from":0,"to":4}}
+      }
+    }
+  ]
+}
