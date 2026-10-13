@@ -249,6 +249,26 @@ revert; quits PowerPoint). Still to confirm live: PowerPoint for Mac's `PointsTo
 answers nothing useful the pop-up goes to the right edge of PowerPoint's window), typing into the
 non-activating panel while PowerPoint stays the active app, and the toolbar's selection events.
 
+## 11. Agenda (P5)
+
+**What:** chapters, subchapters and agenda slides (MASTER-PLAN §4.3 P5 exit criterion 2: insert /
+reorder / nest / split on a large deck, every agenda slide updates, hidden-parent logic per the
+reference). The engine has the model, the 12 style states, which chapters show, hidden parents,
+sections and moves (`src/core/agenda.ts`). The agenda element and its tags are in `src/agenda.ts`.
+Update logic for the add-in is in `src/addin/agenda.ts` (op `agenda`). The ribbon's **Agenda**
+group and VBA are in `addin/vba/OpenCharts.bas` (Agenda section). CLI slides are `chapter` / `toc`
+/ `split` (`examples/agenda.json`).
+
+| Check | How | Result |
+|---|---|---|
+| 12 states exactly as the manual defines them; which subchapters show; level normalisation; numbering | `test/agenda.test.ts` | **Pass** |
+| Hidden parent: hidden when the first subchapter's agenda slide follows directly, shown again with content between; Remove / Insert Hidden Agenda Slides keep the chapter | unit + simulated deck | **Pass** |
+| Sections: a split starts an independent agenda; moving the last main chapter leaves the backup | unit | **Pass** |
+| Update logic on a simulated 40-slide PowerPoint deck that applies the engine's answers as the VBA does: insert, rename on any slide, nest by text level, demote, move (slides move along), split, duplicate / delete in the sorter, restyle a state, table of contents; unchanged slides are not redrawn | `test/agenda.test.ts` | **Pass** |
+| CLI: `examples/agenda.json` (18 slides) writes native agenda slides (text boxes with bullets and text levels, `OC_AGENDA`, `OC_KIND`, `OC_CHAPTER`, `OC_SPLIT`), the hidden parent has `show="0"` | unit; LibreOffice PNGs looked at; goldens `agenda-*.png` | **Pass** |
+| Ribbon: Agenda group in the open-charts tab; every button reaches `AgendaCommand`; selection change runs the automatic update | unit | **Pass** |
+| Live PowerPoint for Mac (`npm run e2e:agenda`): 30 content slides, then the steps above through the add-in's own entry points, PNG export | Mac, live | LIVE_RESULT |
+
 ## Bugs
 
 Fixed on this branch:
