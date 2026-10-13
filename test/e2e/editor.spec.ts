@@ -1143,3 +1143,115 @@ test('add-in session: Apply that cannot reach PowerPoint shows why and what to d
   await page.click('#applyAlertClose');
   await expect(page.locator('#applyAlert')).toBeHidden();
 });
+
+// ---- Decorations (reference manual: Chart annotations, Axes) ---------------------------------------
+// Sample totals: 2021 97, 2022 120, 2023 148, 2024 181, 2025E 216.
+const opt = async (page: Page, k: string) => (await deck(page)).slides[0].chart.options?.[k];
+const has = async (page: Page, t: string) => (await texts(page)).some((x) => x.replace(/\s/g, '') === t);
+const dashed = (page: Page) => page.locator('#preview svg line[stroke-dasharray]').count();
+
+test('difference arrow modes: absolute, relative, reverse; the mode survives a new range', async ({ page }) => {
+  await expect(page.locator('#diffMode')).toBeDisabled();
+  await edit(page, () => page.selectOption('#diffFrom', '0'));
+  await edit(page, () => page.selectOption('#diffTo', '3'));
+  expect(await has(page, '+84m')).toBe(true);
+  await edit(page, () => page.selectOption('#diffMode', 'relative'));
+  expect(await opt(page, 'difference')).toEqual({ from: 0, to: 3, mode: 'relative' });
+  expect(await has(page, '+87%')).toBe(true);
+  await edit(page, () => page.selectOption('#diffMode', 'reverse'));
+  expect(await has(page, '−46%')).toBe(true);
+  await edit(page, () => page.selectOption('#diffTo', '4'));
+  expect(await opt(page, 'difference')).toEqual({ from: 0, to: 4, mode: 'reverse' });
+  await edit(page, () => page.selectOption('#diffMode', ''));
+  expect(await opt(page, 'difference')).toEqual({ from: 0, to: 4 });
+});
+
+test('level arrows: add, change ends and mode, remove', async ({ page }) => {
+  await expect(page.locator('#levelArrows')).toBeVisible();
+  const before = await dashed(page);
+  await edit(page, () => page.click('#levelArrows button.add'));
+  expect(await opt(page, 'levelArrows')).toEqual([{ from: { category: 0 }, to: { category: 1 } }]);
+  expect(await has(page, '+24%')).toBe(true); // 97 → 120
+  expect(await dashed(page)).toBeGreaterThan(before); // the dotted guide
+  await edit(page, () => page.selectOption('[aria-label="Level arrow 1 mode"]', 'absolute'));
+  expect(await has(page, '+23m')).toBe(true);
+  await edit(page, () => page.selectOption('[aria-label="Level arrow 1 from series"]', '0'));
+  expect(await opt(page, 'levelArrows')).toEqual([{ from: { category: 0, series: 0 }, to: { category: 1 }, mode: 'absolute' }]);
+  expect(await has(page, '+78m')).toBe(true); // Enterprise 42 → total 120
+  await edit(page, () => page.selectOption('[aria-label="Level arrow 1 position"]', 'between'));
+  expect((await opt(page, 'levelArrows'))[0].position).toBe('between');
+  await edit(page, () => page.click('[aria-label="Remove level arrow 1"]'));
+  expect(await opt(page, 'levelArrows')).toBeUndefined();
+  expect(await has(page, '+78m')).toBe(false);
+});
+
+test('value lines: mean by default, a value with a custom label on the left, remove', async ({ page }) => {
+  await edit(page, () => page.click('#valueLines button.add'));
+  expect(await opt(page, 'valueLines')).toEqual([{ value: 'mean' }]);
+  expect(await has(page, 'Ø152m')).toBe(true); // (97 + 120 + 148 + 181 + 216) / 5
+  expect(await page.locator('#preview svg line[stroke-dasharray]').count()).toBeGreaterThan(0);
+  await edit(page, async () => { await page.fill('[aria-label="Value line 1 value"]', '200'); await page.press('[aria-label="Value line 1 value"]', 'Enter'); });
+  await edit(page, async () => { await page.fill('[aria-label="Value line 1 label"]', 'Target {value}'); await page.press('[aria-label="Value line 1 label"]', 'Enter'); });
+  await edit(page, () => page.selectOption('[aria-label="Value line 1 label side"]', 'left'));
+  expect(await opt(page, 'valueLines')).toEqual([{ value: 200, label: 'Target {value}', position: 'left' }]);
+  expect(await has(page, 'Target200m')).toBe(true);
+  await edit(page, () => page.click('[aria-label="Remove value line 1"]'));
+  expect(await opt(page, 'valueLines')).toBeUndefined();
+});
+
+test('100% charts: the indicator and the 100%= datasheet row', async ({ page }) => {
+  await edit(page, () => setType(page, 'percent'));
+  expect(await has(page, '100%')).toBe(true); // the indicator, on by default
+  await edit(page, () => page.selectOption('#percentIndicator', 'none'));
+  expect(await has(page, '100%')).toBe(false);
+  await edit(page, () => page.selectOption('#percentIndicator', 'right'));
+  expect(await has(page, '100%')).toBe(true);
+  await expect(page.locator('#sheet input[data-base]')).toHaveCount(0);
+  await edit(page, () => page.check('#percentBase'));
+  await expect(page.locator('#sheet input[data-base]')).toHaveCount(5);
+  expect(await opt(page, 'percentBase')).toEqual([null, null, null, null, null]);
+  await edit(page, () => page.fill('#sheet input[data-base="0"]', '200'));
+  expect(await opt(page, 'percentBase')).toEqual([200, null, null, null, null]);
+  expect(await has(page, '21%')).toBe(true); // Enterprise 42 of 200
+  await edit(page, () => page.click('#addCat'));
+  expect((await opt(page, 'percentBase')).length).toBe(6);
+  await edit(page, () => page.uncheck('#percentBase'));
+  await expect(page.locator('#sheet input[data-base]')).toHaveCount(0);
+  expect(await opt(page, 'percentBase')).toBeUndefined();
+  await edit(page, () => setType(page, 'stacked'));
+  await expect(page.locator('#percentIndicator')).toBeHidden();
+});
+
+test('category gaps and breaks, and a value axis break', async ({ page }) => {
+  const xs = async () => page.locator(`#preview svg rect[fill="#${NAVY}"]`).evaluateAll((els) => els.map((e) => +e.getAttribute('x')!).sort((a, b) => a - b));
+  const before = await xs();
+  await edit(page, () => page.locator('#categoryGaps input[value="1"]').check());
+  expect(await opt(page, 'categoryGaps')).toEqual([1]);
+  const after = await xs();
+  expect(after[2] - after[1]).toBeGreaterThan(1.5 * (after[1] - after[0]));
+  expect(after).not.toEqual(before);
+  const p0 = await paths(page);
+  await edit(page, () => page.locator('#categoryBreaks input[value="1"]').check());
+  expect(await opt(page, 'categoryBreaks')).toEqual([1]);
+  expect(await paths(page)).toBe(p0 + 3);
+  // Every column's first segment (42–96) spans 5–35: five broken bars.
+  await edit(page, async () => { await page.fill('#breakFrom', '5'); await page.fill('#breakTo', '35'); await page.press('#breakTo', 'Tab'); });
+  expect(await opt(page, 'axisBreak')).toEqual({ from: 5, to: 35 });
+  expect(await paths(page)).toBe(p0 + 3 + 15);
+  await edit(page, () => page.selectOption('#breakStyle', 'wiggle'));
+  expect(await opt(page, 'axisBreak')).toEqual({ from: 5, to: 35, style: 'wiggle' });
+  await edit(page, async () => { await page.fill('#breakTo', ''); await page.press('#breakTo', 'Tab'); });
+  expect(await opt(page, 'axisBreak')).toBeUndefined();
+});
+
+test('combo: a line on the secondary axis', async ({ page }) => {
+  await edit(page, () => setType(page, 'combo'));
+  await expect(page.locator('#secondaryAxis input')).toHaveCount(1);
+  const ticks = () => page.locator('#preview svg text[text-anchor="start"]').count();
+  const before = await ticks();
+  await edit(page, () => page.locator('#secondaryAxis input').check());
+  expect(await opt(page, 'secondaryAxis')).toEqual([3]);
+  expect(await ticks()).toBeGreaterThan(before + 2); // left-aligned tick labels of the right-hand axis
+  await edit(page, () => page.locator('#asLine input').nth(3).uncheck());
+  expect(await opt(page, 'secondaryAxis')).toBeUndefined(); // a column cannot use it
+});

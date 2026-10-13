@@ -1,4 +1,5 @@
 import type { Ctx } from '../common.ts';
+import { categoryBreakSymbol, slotLayout, slotUnits } from '../decorations.ts';
 import { axisFormatter, categoryHeight, categoryLabels, legend, num, text, valueAxis, valueTicks } from '../common.ts';
 import { niceTicks, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
@@ -73,7 +74,7 @@ export function layoutWaterfall(ctx: Ctx) {
   const legendH = legend(ctx, 'box', (s) => serColor(s) || ctx.color(s));
   const labelH = lh + pad * 0.3;
   const belowH = dmin < 0 ? labelH : 0;
-  const slot = (frame.w - axisW) / nCat;
+  const slot = (frame.w - axisW) / slotUnits(nCat, o.categoryGaps);
   const colW = slot / (1 + o.gap);
   const catH = categoryHeight(ctx, slot);
   const px = frame.x + axisW;
@@ -82,7 +83,7 @@ export function layoutWaterfall(ctx: Ctx) {
   const ph = frame.y + frame.h - catH - belowH - py;
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
-  const cx = (c: number) => px + slot * (c + 0.5);
+  const cx = slotLayout(nCat, o.categoryGaps, px, pw).centre;
   const xl = (c: number) => cx(c) - colW / 2;
   const plotBottom = yOf(dmin) + belowH;
 
@@ -113,6 +114,9 @@ export function layoutWaterfall(ctx: Ctx) {
 
   // Baseline over the bars so columns crossing zero still show it.
   ctx.add('axis', { kind: 'line', x1: px, y1: yOf(0), x2: px + pw, y2: yOf(0), color: style.axis, width: 0.75 });
+  for (const i of new Set(o.categoryBreaks ?? [])) {
+    if (i >= 0 && i < nCat - 1) categoryBreakSymbol(ctx, `break:cat:${i}`, false, (cx(i) + cx(i + 1)) / 2, yOf(0));
+  }
   categoryLabels(ctx, cats.map(cx), slot, plotBottom);
 
   // Labels: inside the segment when it fits, otherwise outside the column, never over a bar or another label.

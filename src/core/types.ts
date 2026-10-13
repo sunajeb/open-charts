@@ -41,8 +41,28 @@ export interface ChartOptions {
    * the index distance.
    */
   cagr?: { from: number; to: number; years?: number } | null;
-  /** Difference arrow between the totals of two categories. */
-  difference?: { from: number; to: number } | null;
+  /**
+   * Total difference arrow between the totals of two categories. `mode` (manual: Arrow modes):
+   * "absolute" (default, ↔, the signed difference), "relative" (→, change in percent from `from` to
+   * `to`) or "reverse" (←, change in percent from `to` to `from`).
+   */
+  difference?: { from: number; to: number; mode?: DiffMode } | null;
+  /** Level difference arrows between two segment tops / data points (or a value line); mode default "relative". */
+  levelArrows?: LevelArrowSpec[];
+  /** Horizontal reference lines at a value or at the mean of the column totals, labelled left or right. */
+  valueLines?: ValueLineSpec[];
+  /** 100% chart: the "100%" indicator beside the chart. Default: right, or left when series names are on the right (none when the left holds a value axis). */
+  percentIndicator?: 'left' | 'right' | 'none';
+  /** 100% chart: the datasheet's "100%=" row, one base per category (null = the column's sum). */
+  percentBase?: (number | null)[];
+  /** Category indices after which one extra category slot of space is inserted (repeat an index for more). */
+  categoryGaps?: number[];
+  /** Category indices after which the category axis shows a break symbol. */
+  categoryBreaks?: number[];
+  /** Value axis break: the range from–to is compressed and every bar that spans it shows the break. */
+  axisBreak?: AxisBreakSpec | null;
+  /** Combination chart: indices of line series drawn against a second value axis on the right. */
+  secondaryAxis?: number[];
   /** Show a value axis with ticks. Default: on for line; off for the other types that read it (their values are labelled on the chart). */
   valueAxis?: boolean;
   /** Line, scatter and bubble: force the value axis to include zero (true) or fit the data (false). Default: zero, unless the data sits in a narrow band far from it. */
@@ -87,6 +107,33 @@ export interface ChartOptions {
   today?: string;
   /** Pie and doughnut: what the slice labels show — shares (default), absolute values, or both ("118 (52%)"). */
   labelContent?: 'percent' | 'value' | 'both';
+}
+
+/** Difference arrow mode (manual: Arrow modes): relative →, absolute ↔, reverse ← (relative, other direction). */
+export type DiffMode = 'relative' | 'absolute' | 'reverse';
+/** End of a level difference arrow: the top of a segment / a data point (series omitted = the column total), or a value line. */
+export type LevelEnd = { category: number; series?: number } | { valueLine: number };
+export interface LevelArrowSpec {
+  from: LevelEnd;
+  to: LevelEnd;
+  /** Default "relative". */
+  mode?: DiffMode;
+  /** "beside" (default): right of the later column (below the later bar); "between": in the gap before it. */
+  position?: 'beside' | 'between';
+}
+export interface ValueLineSpec {
+  /** A value, or "mean": the arithmetic mean of the column totals (clustered: of the bars). */
+  value: number | 'mean';
+  /** Label text; "{value}" is replaced by the formatted value. Default: the value ("Ø value" for a mean). */
+  label?: string;
+  /** Label beside the chart: "right" (default) or "left". */
+  position?: 'left' | 'right';
+}
+export interface AxisBreakSpec {
+  from: number;
+  to: number;
+  /** "straight" (default) or "wiggle". */
+  style?: 'straight' | 'wiggle';
 }
 
 export interface ChartSpec {

@@ -26,6 +26,8 @@
   "$defs": {
     "hexColor": { "type": "string", "pattern": "^#?[0-9A-Fa-f]{6}$" },
     "categoryIndex": { "type": "integer", "minimum": 0 },
+    "diffMode": {"enum": ["relative", "absolute", "reverse"], "description": "relative: change in percent from \"from\" to \"to\" (→); absolute: the signed difference (↔); reverse: change in percent from \"to\" to \"from\" (←)."},
+    "levelEnd": {"anyOf": [{"type": "object", "additionalProperties": false, "required": ["category"], "properties": {"category": {"$ref": "#/$defs/categoryIndex"}, "series": {"type": "integer", "minimum": 0, "description": "Series index: the top of its segment / its point. Omitted: the column total (stacked and 100% only)."}}}, {"type": "object", "additionalProperties": false, "required": ["valueLine"], "properties": {"valueLine": {"type": "integer", "minimum": 0, "description": "Index into options.valueLines."}}}]},
     "range": {
       "type": "object",
       "additionalProperties": false,
@@ -93,7 +95,7 @@
             }
           ]
         },
-        "difference": { "description": "Chart types: stacked, percent.", "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/range" }] },
+        "difference": {"description": "Chart types: stacked, percent. Total difference arrow between two column totals; mode default \"absolute\".", "anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["from", "to"], "properties": {"from": {"$ref": "#/$defs/categoryIndex"}, "to": {"$ref": "#/$defs/categoryIndex"}, "mode": {"$ref": "#/$defs/diffMode"}}}]},
         "valueAxis": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, combo, mekkoxy.", "type": "boolean" },
         "zeroBased": { "description": "Chart types: line, scatter, bubble.", "type": "boolean" },
         "decimals": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table.", "type": "integer", "minimum": 0, "maximum": 10 },
@@ -138,7 +140,15 @@
         },
         "today": { "type": "string", "description": "Chart types: gantt. Date of a \"today\" line through every row." },
         "sizeLegend": { "type": ["boolean", "string"], "description": "Chart types: bubble. Size legend; a string adds a caption." },
-        "labelContent": { "enum": ["percent", "value", "both"], "description": "Chart types: pie, doughnut. Slice labels show shares (default), absolute values, or both." }
+        "labelContent": { "enum": ["percent", "value", "both"], "description": "Chart types: pie, doughnut. Slice labels show shares (default), absolute values, or both." },
+        "levelArrows": {"description": "Chart types: stacked, clustered, percent, line. Level difference arrows between two segment tops / points or a value line; mode default \"relative\".", "type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["from", "to"], "properties": {"from": {"$ref": "#/$defs/levelEnd"}, "to": {"$ref": "#/$defs/levelEnd"}, "mode": {"$ref": "#/$defs/diffMode"}, "position": {"enum": ["beside", "between"], "default": "beside"}}}},
+        "valueLines": {"description": "Chart types: stacked, clustered, line. Horizontal reference lines; \"mean\" = the mean of the column totals (clustered: of the bars).", "type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["value"], "properties": {"value": {"anyOf": [{"type": "number"}, {"const": "mean"}]}, "label": {"type": "string", "description": "Label text; {value} is replaced by the formatted value."}, "position": {"enum": ["left", "right"], "default": "right"}}}},
+        "percentIndicator": {"description": "Chart types: percent. The 100% indicator beside the chart.", "enum": ["left", "right", "none"]},
+        "percentBase": {"description": "Chart types: percent. The datasheet's 100%= row: one base per category, null = the column's sum.", "type": "array", "items": {"anyOf": [{"type": "number", "exclusiveMinimum": 0}, {"type": "null"}]}},
+        "categoryGaps": {"description": "Chart types: stacked, clustered, percent, waterfall, combo. One extra category slot after each listed category (repeat for more).", "type": "array", "items": {"$ref": "#/$defs/categoryIndex"}},
+        "categoryBreaks": {"description": "Chart types: stacked, clustered, percent, waterfall, combo. A category axis break symbol after each listed category.", "type": "array", "items": {"$ref": "#/$defs/categoryIndex"}},
+        "axisBreak": {"description": "Chart types: stacked, clustered. The value range from–to is compressed; bars spanning it show the break.", "anyOf": [{"type": "null"}, {"type": "object", "additionalProperties": false, "required": ["from", "to"], "properties": {"from": {"type": "number"}, "to": {"type": "number"}, "style": {"enum": ["straight", "wiggle"], "default": "straight"}}}]},
+        "secondaryAxis": {"description": "Chart types: combo. Indices of line series drawn against a second value axis on the right.", "type": "array", "items": {"type": "integer", "minimum": 0}}
       }
     }
   }

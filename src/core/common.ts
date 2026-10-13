@@ -272,15 +272,17 @@ export function legend(
 // ---- Decorations ------------------------------------------------------------------------------
 
 export type ArrowKind = 'cagr' | 'diff';
+/** Which ends of a bracket arrow carry a head: the "to" end, the "from" end, or both. */
+export type Heads = 'end' | 'start' | 'both';
 
 /** Bracket arrow from point A up to a shared line, across, and down to B, with a label bubble in the middle. */
-export function bracketArrow(ctx: Ctx, kind: ArrowKind, xa: number, ya: number, xb: number, yb: number, yLine: number, label: string) {
+export function bracketArrow(ctx: Ctx, kind: ArrowKind, xa: number, ya: number, xb: number, yb: number, yLine: number, label: string, heads: Heads = 'end') {
   const c = ctx.style.axis;
   const role = `arrow:${kind}`;
   ctx.add(role,
-    { kind: 'line', x1: xa, y1: ya, x2: xa, y2: yLine, color: c, width: 0.75 },
+    heads === 'end' ? { kind: 'line', x1: xa, y1: ya, x2: xa, y2: yLine, color: c, width: 0.75 } : { kind: 'line', x1: xa, y1: yLine, x2: xa, y2: ya, color: c, width: 0.75, arrowEnd: true },
     { kind: 'line', x1: xa, y1: yLine, x2: xb, y2: yLine, color: c, width: 0.75 },
-    { kind: 'line', x1: xb, y1: yLine, x2: xb, y2: yb, color: c, width: 0.75, arrowEnd: true },
+    { kind: 'line', x1: xb, y1: yLine, x2: xb, y2: yb, color: c, width: 0.75, ...(heads === 'start' ? {} : { arrowEnd: true }) },
   );
   const w = ctx.m.width(label, ctx.fs, true) + ctx.pad * 2;
   const h = ctx.lh + ctx.pad * 0.3;
@@ -291,13 +293,13 @@ export function bracketArrow(ctx: Ctx, kind: ArrowKind, xa: number, ya: number, 
 }
 
 /** Sideways bracket for horizontal bars: from A right to a shared vertical line, down, and back left to B. */
-export function bracketArrowH(ctx: Ctx, kind: ArrowKind, xa: number, ya: number, xb: number, yb: number, xLine: number, label: string) {
+export function bracketArrowH(ctx: Ctx, kind: ArrowKind, xa: number, ya: number, xb: number, yb: number, xLine: number, label: string, heads: Heads = 'end') {
   const c = ctx.style.axis;
   const role = `arrow:${kind}`;
   ctx.add(role,
-    { kind: 'line', x1: xa, y1: ya, x2: xLine, y2: ya, color: c, width: 0.75 },
+    heads === 'end' ? { kind: 'line', x1: xa, y1: ya, x2: xLine, y2: ya, color: c, width: 0.75 } : { kind: 'line', x1: xLine, y1: ya, x2: xa, y2: ya, color: c, width: 0.75, arrowEnd: true },
     { kind: 'line', x1: xLine, y1: ya, x2: xLine, y2: yb, color: c, width: 0.75 },
-    { kind: 'line', x1: xLine, y1: yb, x2: xb, y2: yb, color: c, width: 0.75, arrowEnd: true },
+    { kind: 'line', x1: xLine, y1: yb, x2: xb, y2: yb, color: c, width: 0.75, ...(heads === 'start' ? {} : { arrowEnd: true }) },
   );
   const { w, h } = arrowBubble(ctx, label);
   text(ctx, role, {
@@ -337,11 +339,11 @@ export function axisFormatter(ctx: Ctx, ticks: number[] | null, percent = false)
 }
 
 /** Left value axis: vertical line, tick marks and right-aligned tick labels. */
-export function valueAxis(ctx: Ctx, ticks: number[], yOf: (v: number) => number, px: number, axisW: number, fmt: (v: number) => string) {
-  const { style, frame, lh, pad } = ctx;
+export function valueAxis(ctx: Ctx, ticks: number[], yOf: (v: number) => number, px: number, axisW: number, fmt: (v: number) => string, left = ctx.frame.x) {
+  const { style, lh, pad } = ctx;
   ctx.add('axis', { kind: 'line', x1: px, y1: yOf(ticks[0]), x2: px, y2: yOf(ticks[ticks.length - 1]), color: style.axis, width: 0.75 });
   ticks.forEach((t, k) => {
     ctx.add(`axis:tick:${k}`, { kind: 'line', x1: px - 3, y1: yOf(t), x2: px, y2: yOf(t), color: style.axis, width: 0.75 });
-    text(ctx, `axis:tick:${k}`, { x: frame.x, y: yOf(t) - lh / 2, w: axisW - pad, h: lh, text: fmt(t), align: 'right', color: style.muted, role: 'axis' });
+    text(ctx, `axis:tick:${k}`, { x: left, y: yOf(t) - lh / 2, w: axisW - pad, h: lh, text: fmt(t), align: 'right', color: style.muted, role: 'axis' });
   });
 }

@@ -18,15 +18,15 @@ function priority(role: string): number {
   if (role.startsWith('label:series')) return 80;
   if (role === 'axis') return 75; // axis titles
   if (role.startsWith('label:total')) return 70;
-  if (role.startsWith('axis:tick')) return 60;
+  if (role.startsWith('axis:tick') || role.startsWith('axis:secondary:tick')) return 60;
   if (role.startsWith('shade:')) return 55;
   if (role.startsWith('label:value')) return 50;
-  if (role.startsWith('arrow:')) return 10;
+  if (role.startsWith('arrow:') || role.startsWith('valueline:') || role === 'indicator') return 10;
   return 40;
 }
 
 /** Roles whose shapes stand or fall together (swatch + name, leader + name, bracket + bubble). */
-const grouped = (role: string) => /^(arrow:|legend:|label:series:)/.test(role);
+const grouped = (role: string) => /^(arrow:|valueline:|indicator$|legend:|label:series:)/.test(role);
 
 const inFrame = (s: Shape, f: Frame) => {
   const b = bounds(s);
@@ -61,7 +61,7 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
     for (const i of idx) {
       const s = shapes[i];
       if (!inFrame(s, frame)) return 'outside the frame';
-      if (s.kind === 'line' && roles[i].startsWith('arrow:')) {
+      if (s.kind === 'line' && /^(arrow:|valueline:|indicator$)/.test(roles[i])) {
         const ln = s as LineShape;
         const hit = kept.find((k) => roles[k] !== roles[i] && segmentHitsBox(ln.x1, ln.y1, ln.x2, ln.y2, shrink(shapes[k] as TextShape, TOL)));
         if (hit != null) return `arrow crosses "${(shapes[hit] as TextShape).text}"`;

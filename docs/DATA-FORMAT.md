@@ -244,7 +244,7 @@ same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optio
 | [`seriesLabels`](#serieslabels) | `right` `legend` `none` | all except harvey, table | chosen per type and data |
 | [`totals`](#totals) | boolean | stacked, percent, mekko, area, doughnut, combo, mekkoxy | on for stacked, mekko, mekkoxy; off otherwise |
 | [`cagr`](#cagr) | `{from, to, years?}` or `null` | stacked, percent | none |
-| [`difference`](#difference) | `{from, to}` or `null` | stacked, percent | none |
+| [`difference`](#difference) | `{from, to, mode?}` or `null` | stacked, percent | none |
 | [`totalsAt`](#totalsat) | array of category indices | waterfall | the first category and the `"e"` cells, else first and last |
 | [`step`](#step) | boolean | line | off |
 | [`percentData`](#percentdata) | boolean | percent | off |
@@ -257,6 +257,14 @@ same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optio
 | [`shades`](#shades) | array of `{from, to, label?}` | gantt | none |
 | [`brackets`](#brackets) | array of `{from, to, label?}` | gantt | none |
 | [`today`](#today) | date | gantt | none |
+| [`levelArrows`](#levelarrows) | array of `{from, to, mode?, position?}` | stacked, clustered, percent, line | none |
+| [`valueLines`](#valuelines) | array of `{value, label?, position?}` | stacked, clustered, line | none |
+| [`percentIndicator`](#percentindicator) | `left` `right` `none` | percent | right; left when series names are on the right, none if a value axis is there too |
+| [`percentBase`](#percentbase) | array of numbers or `null`, one per category | percent | each column's sum |
+| [`categoryGaps`](#categorygaps) | array of category indices | stacked, clustered, percent, waterfall, combo | none |
+| [`categoryBreaks`](#categorybreaks) | array of category indices | stacked, clustered, percent, waterfall, combo | none |
+| [`axisBreak`](#axisbreak) | `{from, to, style?}` or `null` | stacked, clustered | none |
+| [`secondaryAxis`](#secondaryaxis) | array of series indices | combo | none |
 
 ### Numbers
 
@@ -436,8 +444,12 @@ The arrow reads `+25.1%` (totals 60 → 147 over four years, read from the label
 
 #### `difference`
 
-An arrow between the totals of two categories of a `stacked` or `percent` chart, labelled with the
-signed difference. Same `from` / `to` rules as `cagr`.
+A total difference arrow (reference manual: Total difference arrows) between the totals of two
+categories of a `stacked` or `percent` chart, drawn as a bracket above the columns. Same `from` / `to`
+rules as `cagr`. `mode` (manual: Arrow modes): `absolute` (default, a double-ended arrow labelled with
+the signed difference), `relative` (→, the change in percent from `from` to `to`) or `reverse` (←, the
+change in percent from `to` to `from`, the arrow pointing at `from`). The manual inserts a relative
+arrow; open-charts keeps `absolute` as the default so existing specs keep their numbers.
 
 ```json
 {
@@ -448,6 +460,148 @@ signed difference. Same `from` / `to` rules as `cagr`.
     { "name": "Services", "values": [24, 25, 27, 30] }
   ],
   "options": { "unit": "m", "difference": { "from": 0, "to": 3 } }
+}
+```
+
+#### `levelArrows`
+
+Level difference arrows (reference manual: Chart annotations → Level difference arrows) show the
+difference between two *levels*: the top of a segment, a data point, or a value line. Each arrow is
+`{from, to, mode?, position?}`; an end is `{category, series?}` — the top of that series' segment in
+the stack (its bar in a clustered chart, its point in a line chart; without `series`, the column
+total) — or `{valueLine: k}`, the k-th of [`valueLines`](#valuelines). Clustered and line charts need
+`series`. Typical uses: between two categories' totals, between the same segment level in two
+categories, between two series at one category (line chart).
+
+- `mode` (manual: Arrow modes): `relative` (default, → , change in percent from `from` to `to`),
+  `absolute` (↔, the signed difference) or `reverse` (←, change in percent from `to` to `from`).
+- `position`: `beside` (default) puts the arrow just right of the later column (below the later bar
+  in a horizontal chart); `between` puts it in the gap before the later column — combine with
+  [`categoryGaps`](#categorygaps) for room. Dotted guides run from each level to the arrow.
+- The label bubble sits on the arrow; "if the arrow is so small that the bubble would cover it up,
+  the bubble is automatically placed next to the arrow". An arrow that finds no room without
+  touching a label is left out and reported.
+
+```json
+{
+  "type": "stacked",
+  "categories": ["2021", "2022", "2023", "2024"],
+  "series": [
+    { "name": "Base", "values": [12, 18, 20, 22] },
+    { "name": "Upsell", "values": [5, 2, 4, 6] },
+    { "name": "New", "values": [4, 5, 6, 7] }
+  ],
+  "options": {
+    "levelArrows": [
+      { "from": { "category": 0 }, "to": { "category": 1 } },
+      { "from": { "category": 2, "series": 0 }, "to": { "category": 3, "series": 0 }, "mode": "absolute" }
+    ]
+  }
+}
+```
+
+#### `valueLines`
+
+Horizontal reference lines (manual: Value lines), each `{value, label?, position?}`. `value` is a
+number or `"mean"`: the arithmetic mean of the column totals (a clustered chart's columns are its
+bars; line charts take a number). The line is dashed across the plot, stepping around labels; the
+label sits beside the chart on the `right` (default) or `left`, after a small triangle. It shows the
+value — `Ø 27.8` for a mean — or `label`, in which `{value}` is replaced by the formatted value. A
+fixed value outside the data widens the value axis to show it. In horizontal bars the line is
+vertical and its label sits below (`right`) or above (`left`) the plot.
+
+```json
+{
+  "type": "clustered",
+  "categories": ["North", "South", "East", "West"],
+  "series": [{ "name": "Sales", "values": [4.35, 2.7, 6.68, 17.9] }],
+  "options": { "valueLines": [{ "value": "mean" }, { "value": 15, "label": "Target {value}", "position": "left" }] }
+}
+```
+
+#### `percentIndicator`
+
+100% charts: the "← 100%" indicator beside the chart (manual: 100% indicators; "for 100% stacked
+charts, the indicator appears by default"). `right` or `left` of the chart, or `none`. Default:
+right; left when series names take the right; none when the left also holds a value axis (or, in
+horizontal bars, when a value axis is shown), since the axis already reads 100%.
+
+#### `percentBase`
+
+100% charts: the datasheet's **100%=** row (manual: Absolute and relative values). One number per
+category, `null` for the column's own sum. With absolute values, shares are taken of the base, so a
+column may total more or less than 100%. With [`percentData`](#percentdata), the values are shares
+and the base is the absolute value that represents 100%: column totals then show the base.
+
+```json
+{
+  "type": "percent",
+  "categories": ["2023", "2024", "2025"],
+  "series": [
+    { "name": "Online", "values": [40, 45, 50] },
+    { "name": "Stores", "values": [60, 55, 50] }
+  ],
+  "options": { "percentData": true, "percentBase": [1200, 1350, 1500], "totals": true }
+}
+```
+
+#### `categoryGaps`
+
+Category indices after which a category gap is inserted (manual: Category gaps): "as wide as one
+column width plus one gap width". List an index twice for a double gap. The chart keeps its width,
+so the columns get narrower (the manual's Ctrl-drag behaviour).
+
+#### `categoryBreaks`
+
+Category indices after which the category axis shows a break symbol on the baseline (manual: Category
+axis breaks), e.g. a jump from 2014 to 2018.
+
+```json
+{
+  "type": "stacked",
+  "categories": ["2013", "2014", "2018"],
+  "series": [{ "name": "Units", "values": [22, 38, 27] }],
+  "options": { "categoryGaps": [1], "categoryBreaks": [1] }
+}
+```
+
+#### `axisBreak`
+
+A value axis break (manual: Value axis breaks) `{from, to, style?}`: the range `from`–`to` is
+compressed to the height of the break symbol so a few tall columns do not flatten the rest. It
+applies to every bar spanning the range and to the value axis; ticks are nice numbers below and above
+the break. No segment may end inside the range ("you can not add a break ... where there is a
+segment border") — such a break, or one outside the data, is ignored and reported. `style`:
+`straight` (default) or `wiggle`. Segment labels move into the larger visible part of a broken bar.
+
+```json
+{
+  "type": "stacked",
+  "categories": ["2013", "2014", "2015"],
+  "series": [
+    { "name": "A", "values": [2, 6, 12] },
+    { "name": "B", "values": [5, 7, 2] },
+    { "name": "C", "values": [4, 378, 351] }
+  ],
+  "options": { "valueAxis": true, "axisBreak": { "from": 40, "to": 330 } }
+}
+```
+
+#### `secondaryAxis`
+
+Combination charts: indices of line series (`"as": "line"`) drawn against a second value axis on the
+right (manual: Secondary axes), scaled independently. Their labels and ticks are formatted from their
+own values, without the chart's `unit`; the series are named in a legend.
+
+```json
+{
+  "type": "combo",
+  "categories": ["2021", "2022", "2023", "2024"],
+  "series": [
+    { "name": "Revenue", "values": [120, 150, 180, 210] },
+    { "name": "Margin (%)", "values": [8.5, 10.2, 12.1, 13.4], "as": "line" }
+  ],
+  "options": { "unit": "m", "secondaryAxis": [1] }
 }
 ```
 
