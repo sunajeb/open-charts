@@ -12,6 +12,7 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [Decorations: totals, arrows, value lines, gaps and breaks](#decorations-totals-arrows-value-lines-gaps-and-breaks)
 - [Colours and your deck's theme](#colours-and-your-decks-theme)
 - [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
+- [Agenda](#agenda)
 - [Resizing](#resizing)
 - [Hidden labels and why](#hidden-labels-and-why)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -31,7 +32,8 @@ cleanly it is **hidden and reported**, never drawn on top of something else.
 ## Working in PowerPoint
 
 Install the add-in first (see the [README](../README.md#install)). You then have an **open-charts**
-tab on the ribbon, before Home, with one group, **Charts**:
+tab on the ribbon, before Home, with two groups, **Charts** and **Agenda** (see [Agenda](#agenda)).
+The Charts group:
 
 | Control | What it does |
 |---|---|
@@ -481,6 +483,98 @@ In PowerPoint the group stays consistent: **Update chart**, **Apply** in the edi
 chart of the group re-lay out the other charts of the group on that slide as well. From the command
 line, a slide can hold several charts (`"charts": [...]`); without explicit frames they share the
 chart area side by side.
+
+## Agenda
+
+An agenda gives the deck a table of contents, chapters and subchapters. Each chapter starts with an
+**agenda slide** that shows the whole agenda with that chapter highlighted. When you add, remove,
+reorder or rename chapters, every agenda slide follows. The agenda is ordinary PowerPoint text boxes
+(one per chapter heading, with bullets and text levels) in a group, so the deck looks the same without
+open-charts.
+
+The **Agenda** group on the open-charts tab:
+
+| Control | What it does |
+|---|---|
+| **Chapter** | Inserts an agenda slide after the current slide: a new chapter. Its heading reads "Chapter" and is selected, so you can type the name straight away. With a heading selected, the new chapter goes after that chapter (after its slides). The slide is titled "Agenda"; change it if you like. |
+| **Table of Contents** | Inserts a slide listing the top-level chapters without highlighting, before the first chapter slide (after the current slide if there are no chapters yet). It fills in as you add chapters. |
+| **Update agenda** | Brings every agenda slide up to date. Most changes do this by themselves when you click elsewhere (see below). |
+| **Move up** / **Move down** | Moves the selected chapter (a selected heading, else the chapter of the current slide) one place; its slides move along: everything from its agenda slide up to the next agenda slide. |
+| **Demote** / **Promote** | Makes the chapter a subchapter, or one level less deep. |
+| **More › Split Agenda** | The current slide starts a new, independent agenda, e.g. the backup. A grey marker sits just above the slide (never shown in the slide show). |
+| **More › Join Agendas** | Removes the split on the current slide. |
+| **More › Remove Hidden Agenda Slides** | Deletes the agenda slides that are hidden (see below); their chapters stay in the agenda. |
+| **More › Insert Hidden Agenda Slides** | Puts those slides back, before their first subchapter's slide. |
+| **More › Agenda Placeholder** | In Slide Master view: marks where the agenda goes on a layout named `open-charts agenda` (see below). |
+
+**Renaming and nesting.** Click into a heading on *any* agenda slide and type: when you click
+elsewhere, every agenda slide shows the new name. A heading's text level is its chapter level:
+PowerPoint's **Increase/Decrease List Level** buttons (or Shift+Tab / Tab at the start of the heading)
+make it a subchapter or bring it back up, and every agenda slide follows. A new chapter takes the
+level of the chapter before it.
+
+**What updates by itself.** When you click elsewhere, open-charts notices agenda slides added,
+duplicated, moved or deleted (also in the Slide Sorter) and headings you renamed or nested on the
+current slide, and updates every agenda slide. A duplicated agenda slide becomes a new chapter of the
+same name; a deleted one removes its chapter. A changed fill, outline, colour, weight or size of a
+heading is picked up by **Update agenda** (see Styles).
+
+**Which chapters show.** Every agenda slide shows the top-level chapters. Subchapters show on the
+slide of their parent chapter and on the slides of the chapters at their own level (their siblings
+and, deeper down, the path to the current chapter). On a table of contents only top-level chapters
+show.
+
+**Hidden parent slides.** If there are no slides between a chapter and its first subchapter (the
+chapter has no content of its own), the chapter's agenda slide is set to **Hide Slide**, so the slide
+show does not stop on two agenda slides in a row. Add a slide between them and it is shown again.
+Slide numbers in the slide show skip the hidden slide; **Remove Hidden Agenda Slides** deletes such
+slides (the chapter stays in the agenda) and **Insert Hidden Agenda Slides** brings them back.
+
+**Several agendas.** Go to the first slide of the second part (typically a slide titled "Backup") and
+choose **Split Agenda**. Chapters after the split are not on the agenda slides before it and vice
+versa, and moving the last chapter before the split does not take the backup along. Put the split on
+that title slide rather than on the backup's first agenda slide: otherwise it moves and duplicates
+with that chapter.
+
+**Position.** The agenda starts centred on the slide. Move it on the first agenda slide before you
+add more: new agenda slides copy the closest agenda slide before them (its layout, master and
+shapes), so the agenda appears in the same place. The agenda keeps its width fitted to the longest
+heading.
+
+**Styles.** Each heading has one of twelve states, and every heading in the same state looks the
+same:
+
+| State | When |
+|---|---|
+| `current-top` | the current chapter, at top level |
+| `top-contains-current` | a top-level chapter that contains the current chapter |
+| `top` | a top-level chapter that does not contain the current chapter |
+| `current-sub` | the current chapter, not at top level |
+| `child-of-current-top` | an immediate child of the current chapter, which is top-level |
+| `in-subtree` | neither it nor the current chapter is top-level; not on the path to the current chapter, but a sibling of a chapter on that path, or an immediate child of the current chapter |
+| `under-current-top` | below the current top-level chapter, not an immediate child of it |
+| `same-top` | below the same top-level chapter as the current chapter |
+| `other` | any other chapter |
+| `toc-top` | in a table of contents, top level |
+| `toc-sub` | in a table of contents, not top level |
+| `path` | neither it nor the current chapter is top-level, and it is on the path from the top-level chapter to the current chapter |
+
+To restyle a state, format one heading in that state (fill, outline, font colour, bold, size) and
+click **Update agenda**: every heading in the same state, on every agenda slide, takes the new look.
+The defaults are the *flat* preset: grey boxes, the current chapter white on accent 1. From the
+command line, `"agenda": {"preset": "plain" | "boxed", "numbering": true, "styles": {...}}` sets the
+preset, numbered headings and per-state styles ([DATA-FORMAT.md › Agenda slides](DATA-FORMAT.md#agenda-slides)).
+
+**Default agenda layout.** To give agenda slides your template's look, add a custom layout in Slide
+Master view, name it exactly `open-charts agenda`, put on it only what every agenda slide should
+show, and click **More › Agenda Placeholder** to mark where the agenda goes (move and size the
+invisible rectangle it adds). **Chapter** then uses that layout and position for the first agenda
+slide; later ones copy the agenda slide before them.
+
+**From the command line.** In a deck JSON, `{"chapter": "Market"}` is an agenda slide (with
+`"level": 2` for a subchapter), `{"toc": true}` a table of contents and `"split": true` starts a new
+agenda. `examples/agenda.json` is a complete example; the .pptx it writes behaves in the add-in like
+one built there.
 
 ## Resizing
 
