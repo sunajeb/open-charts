@@ -204,6 +204,25 @@ Fixed on this branch:
   including osascript); Apply after quitting PowerPoint → `error: PowerPoint isn't running…`, and
   PowerPoint stays closed. The permission prompt was already allowed on this Mac, so the timeout path
   is covered by the simulated host, not live.
+- **O6 — Apply after PowerPoint was restarted froze PowerPoint — fixed.** Was (since O5, pre-existing at
+  6eb802e): quit PowerPoint, start it again, Edit data → Apply: PowerPoint stopped answering Apple events
+  for 20 s+, ApplyEdit never ran, the editor said "PowerPoint did not respond…", and later scripting
+  calls also timed out (-1712). Cause: the warm server outlives PowerPoint, and macOS attributes it (and
+  every osascript it runs) to the PowerPoint that spawned it (responsible pid: that PowerPoint while it
+  runs; after it quits, the server's osascript still carries PowerPoint's identity under its own pid).
+  An Apple event from such a process to the new PowerPoint goes through PowerPoint's own permission
+  check (`TCCAccessRequestIndirect` in the TCC log; PowerPoint's Apple-event thread waits on a semaphore
+  in `designatedCodeRequirementsCacheQueue`, main thread idle) and never gets through. A server spawned
+  by the running PowerPoint sends to itself and needs no check. Fix: the server records the PowerPoint
+  it started with (pgrep); once that process is gone and another PowerPoint runs, `/api/addin/ping`
+  (the new PowerPoint's startServer) and `/api/addin/run` answer 503 and the server exits, so the
+  bridge starts a fresh server from the new PowerPoint; an Apply that still reaches the old server
+  fails at once with "PowerPoint was restarted after this editor window opened…" instead of sending the
+  event. Live, minimal repro (insert, Edit data, Apply; quit PowerPoint; repeat): before,
+  session 2 `APPLY … failed after 20035 ms: timed out` every time (also at 6eb802e); after, `SERVER
+  retired: PowerPoint 45249 has quit` → `SERVER started (… PowerPoint 45480)` → session 2 `drawn` in
+  4.6 s. `e2e:powerpoint` now edits the same-scale pair's data and applies it in the third PowerPoint
+  session (drawn, partner `SYNC revenue 1 of 1`): 2.7 s and 3.8 s in two consecutive passing runs.
 - **O2 — Cosmetic layout:** combo line labels inside bars; pie "3%" box wider than its slice; boxed
   segment labels wider than narrow columns (section 2).
 - **O3 — Ungrouped chart message — fixed.** A selected shape that carries `OC_ROLE` with no group
