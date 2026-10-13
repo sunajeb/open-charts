@@ -210,6 +210,10 @@
   .gal-dir:hover, .gal-dir:focus-visible { color: var(--gal-arrow-on); background: var(--gal-hover); outline: none; }
   .gal-dir:hover::before, .gal-dir:focus-visible::before { transform: scale(1.35); }
   .gal-dir[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+  .gal-preview { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--rule); }
+  .gal-preview .cap { font-size: 11px; color: var(--muted); }
+  .gal-preview .pic { height: 170px; border-radius: 6px; overflow: hidden; background: #fff; display: grid; place-items: center; }
+  .gal-preview .pic svg { width: 100%; height: 100%; }
   /* Direction control in the Chart section: the same four arrows. */
   .dir-seg { display: inline-flex; gap: 2px; }
   .dir-seg button { width: 30px; height: 26px; padding: 0; justify-content: center; }
@@ -1300,6 +1304,9 @@ $('colorHex').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.pr
 $('colorHex').addEventListener('input', () => $('colorHex').removeAttribute('aria-invalid'));
 
 function buildGallery() {
+  const pane = document.createElement('div');
+  pane.className = 'gal-preview'; pane.id = 'galPreview'; pane.setAttribute('aria-hidden', 'true');
+  pane.innerHTML = '<div class="cap"></div><div class="pic"></div>';
   $('gallery').replaceChildren(...GALLERY.map((tile) => {
     const box = document.createElement('div');
     box.className = 'tile'; box.dataset.tile = tile.id;
@@ -1310,6 +1317,7 @@ function buildGallery() {
     b.title = tile.description;
     b.setAttribute('aria-label', tile.directions.length > 1 ? `${label}; Shift+arrow keys pick a direction` : label);
     b.onclick = () => pickTile(tile, 'up');
+    b.onmouseenter = b.onfocus = () => galleryPreview(tile, 'up');
     box.append(b);
     if (tile.directions.length > 1) {
       for (const d of ['up', 'down', 'left', 'right']) {
@@ -1319,26 +1327,65 @@ function buildGallery() {
         a.setAttribute('aria-label', `${label}: ${DIR_WORDS[d]}`);
         a.dataset.tip = `${label}: ${DIR_WORDS[d]}`;
         a.onclick = () => pickTile(tile, d);
+        a.onmouseenter = a.onfocus = () => galleryPreview(tile, d);
         box.append(a);
       }
     }
     return box;
-  }));
+  }), pane);
 }
 /** Draw the chart as a gallery tile, growing in direction `dir`: its type (data carried over), its options, its direction. */
 function pickTile(tile, dir) {
   closePops(true);
-  const c = chart();
-  if (c.type !== tile.type) setTypeQuiet(tile.type);
-  const o = opts();
+  asTile(chart(), tile, dir);
+  changed(true, 'type');
+}
+/** Turn chart `c` into a tile's chart growing `dir`: type (data carried over), the tile's options, the direction. */
+function asTile(c, tile, dir, live = true) {
+  if (c.type !== tile.type) setTypeQuiet(tile.type, c, live);
+  const o = (c.options ??= {});
   for (const [k, v] of Object.entries(tile.options)) { if (v === defaultOf(tile.type, k)) delete o[k]; else o[k] = v; }
   if (dir === 'up' || !dirsOf(tile.type).includes(dir)) delete o.direction; else o.direction = dir;
-  changed(true, 'type');
+  return c;
+}
+
+// Live preview in the gallery: hovering (or focusing) a tile or one of its arrows draws the current
+// data as that chart, in that direction, in the strip under the tiles. Debounced and cached.
+const galCache = new Map();
+let galTimer = 0, galKey = '';
+function galleryPreview(tile, dir) {
+  const key = `${tile.id}@${dir}`;
+  if (key === galKey) return;
+  galKey = key;
+  clearTimeout(galTimer);
+  galTimer = setTimeout(async () => {
+    const pane = $('galPreview');
+    pane.querySelector('.cap').textContent = dir === 'up' && tile.directions.length < 2 ? flatLabel(tile) : `${flatLabel(tile)} · ${DIR_WORDS[dir]}`;
+    const c = asTile(structuredClone(chart()), tile, dir, false);
+    const ckey = `${key}|${JSON.stringify(c)}`;
+    let svg = galCache.get(ckey);
+    if (!svg) {
+      try {
+        const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [{ chart: c }] }) });
+        if (!res.ok) return;
+        svg = (await res.json()).slides[0].svg;
+        if (galCache.size > 40) galCache.clear();
+        galCache.set(ckey, svg);
+      } catch { return; }
+    }
+    if (galKey !== key) return;
+    pane.querySelector('.pic').innerHTML = svg;
+    // Just the chart area of the slide (deck.ts CHART_FRAME, with a little air): a bigger thumbnail.
+    pane.querySelector('.pic svg')?.setAttribute('viewBox', '40 88 880 424');
+    pane.dataset.preview = key;
+  }, 120);
 }
 function openGallery() {
   if (!$('gallery').hidden) return closePops(true);
   closePops(false);
   const now = tileOf(chart()), dir = opts().direction ?? 'up';
+  galKey = '';
+  galleryPreview(now, dir);
   for (const t of $('gallery').querySelectorAll('.tile')) {
     const on = t.dataset.tile === now.id;
     t.querySelector('.gal-item').setAttribute('aria-pressed', String(on));
@@ -1430,8 +1477,8 @@ function setOpt(k, v, key = k) { if (v === undefined) delete opts()[k]; else opt
 
 function setType(to) { setTypeQuiet(to); changed(true, 'type'); }
 /** Change the chart type, carrying the data over, without re-rendering (the caller does). */
-function setTypeQuiet(to) {
-  const c = chart(), o = opts(), from = c.type;
+function setTypeQuiet(to, c = chart(), live = true) {
+  const o = (c.options ??= {}), from = c.type;
   // Options left at the old type's default follow the new type's default.
   for (const k of Object.keys(o)) if (o[k] === defaultOf(from, k)) delete o[k];
   convertData(c, from, to);
@@ -1443,6 +1490,7 @@ function setTypeQuiet(to) {
   // Harvey balls read 0–4 quarters (or 0–1): start from a small assessment grid if the data does not fit.
   if (to === 'harvey' && c.series.some((s) => s.values.some((v) => typeof v === 'number' && (v < 0 || v > 4)))) {
     Object.assign(c, structuredClone(HARVEY_SAMPLE));
+    if (!live) return;
     remapCategories(() => -1);
     invalid.clear(); focusCell = null;
   }

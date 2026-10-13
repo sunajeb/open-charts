@@ -960,8 +960,14 @@ test('numbers: prefix unit, magnitude, separators and an Excel format', async ({
 });
 
 test('gallery arrows: ◀ on Clustered draws bars growing left, ▼ on Stacked hangs the columns, ▶ on Line is a profile', async ({ page }) => {
-  // ◀: bars, all ending on one baseline at their right, the categories right of them.
+  // Hovering an arrow previews the current data as that chart, that way, under the tiles.
   await page.click('#typeBtn');
+  await page.hover('#gallery .tile[data-tile="clustered"] .gal-dir[data-dir="left"]');
+  await expect(page.locator('#galPreview')).toHaveAttribute('data-preview', 'clustered@left');
+  await expect(page.locator('#galPreview .cap')).toHaveText('Clustered Column/Bar · bars growing to the left');
+  expect(await page.locator('#galPreview .pic svg rect').count()).toBeGreaterThan(10);
+  await expect(page.locator('#typeBtn'), 'a preview changes nothing').toHaveAttribute('data-type', 'stacked');
+  // ◀: bars, all ending on one baseline at their right, the categories right of them.
   await edit(page, () => page.click('#gallery .tile[data-tile="clustered"] .gal-dir[data-dir="left"]'));
   let c = (await deck(page)).slides[0].chart;
   expect([c.type, c.options.direction]).toEqual(['clustered', 'left']);
