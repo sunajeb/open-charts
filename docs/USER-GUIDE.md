@@ -118,7 +118,7 @@ to the right place.
 **Permissions:** none. The handles are a transparent window of the open-charts pop-up helper; it
 watches where the mouse is (macOS needs no permission for that) and only catches a press that
 starts on a handle. It never asks for Accessibility or Input Monitoring and never sees your
-keyboard. (The live test, `tools/e2e-handles-live.ts`, moves the mouse itself and needs
+keyboard. (The live test, `npm run live -- handles`, moves the mouse itself and needs
 Accessibility for the terminal it runs in; users never do.)
 
 Windows: not yet (the handles are a panel of the Mac helper).
@@ -702,7 +702,7 @@ chart area side by side.
 **Undo.** Each open-charts action is one step of PowerPoint's undo (⌘Z): inserting a chart, Update
 chart, Apply from the datasheet, a change in the element toolbar, a direction button and every Chart
 tools command (Same scale re-draws several charts and is still one step). Measured in PowerPoint for
-Mac 16 with `npm run e2e:powerpoint`: one ⌘Z each takes the slide back to exactly where it was.
+Mac 16 with `npm run live -- chart-tools`: one ⌘Z each takes the slide back to exactly where it was.
 Resizing is two steps: your drag, then the re-layout open-charts does when you click elsewhere. The
 first ⌘Z gives you back the stretched drawing, the second the original size; after one ⌘Z, clicking
 elsewhere lays the stretched chart out again.

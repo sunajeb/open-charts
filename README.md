@@ -298,8 +298,9 @@ example at 40 sizes from 160 × 90 to 1400 × 800 pt; `npm run bench` reports la
 npm test                # unit tests, zero dependencies (includes the docs examples, test/docs.test.ts)
 npm run e2e             # editor end-to-end in Chromium (npm install; npx playwright install chromium)
 npm run goldens         # examples → .pptx → LibreOffice PDF → PNG, diffed against test/goldens/<platform>/
-npm run e2e:powerpoint  # macOS + PowerPoint: insert/update every chart type through the add-in
-npm run e2e:agenda      # macOS + PowerPoint: chapters, nesting, moves, split, sorter, hidden slides
+npm run live -- --list  # macOS + PowerPoint: the live scenarios (insert-all, edit-apply, resize, agenda, …)
+npm run live -- resize  # one or more scenarios, each < 2 min; --dry-run shows what would run
+npm run e2e:powerpoint  # all live scenarios after a fresh install (= npm run live -- --install all)
 npm run build:win       # dist/win: open-charts.exe (no Node needed), the .ppam, install scripts
 npm run bench           # layout and start-up times against the performance budgets
 npm run build:officejs  # Office.js add-in bundle; test/officejs.test.ts and test/e2e/officejs.spec.ts test it
@@ -311,6 +312,10 @@ because fonts render differently; `-- --update` rewrites them after you have rev
 `out/goldens/actual/`, and failures write red-on-grey diffs to `out/goldens/diff/`. CI runs unit
 tests and E2E on every PR, goldens nightly. A `windows-latest` job runs the unit tests on Windows. It
 builds and smoke-tests `open-charts.exe` and runs the install scripts against a temporary profile.
+The live PowerPoint for Mac scenarios (`tools/live/`) hold `/private/tmp/open-charts-ppt.lock`, refuse
+to start while PowerPoint has other presentations open (`--allow-open-docs`), stop at the first failed
+scenario (`--keep-going`), report a PowerPoint dialog that blocked a call, and write
+`out/live/report.json` and `report.md`; see [docs/ACCEPTANCE.md](docs/ACCEPTANCE.md#live-checks-in-powerpoint).
 The live PowerPoint for Windows run is `e2e-powerpoint-win.ps1` on a real PC
 ([docs/windows.md](docs/windows.md#acceptance-run-on-a-pc)).
 

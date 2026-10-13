@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Live tests
+
+- `npm run live -- <scenario...>` (`tools/live/`) replaces the 10-minute `e2e:powerpoint` script and the
+  separate live scripts: short independent scenarios (each under 2 minutes, a fresh presentation each)
+  in one PowerPoint session, a timeout on every call (a blocking PowerPoint dialog is read, dismissed
+  and reported), stop at the first failure unless `--keep-going`, one report in `out/live/`. Holds the
+  PowerPoint lock, refuses to run beside open presentations unless `--allow-open-docs`, never quits a
+  PowerPoint it did not start, reinstalls only with `--install`; `--list` and `--dry-run`.
+  `npm run e2e:powerpoint` runs them all.
+
 ### Drag handles (PowerPoint for Mac)
 
 - A selected chart shows handles you can drag: column gap width, the top of the value axis (new
@@ -18,7 +28,7 @@
   reorders and repeats slides (`each`), and sections follow. Charts take the template's theme
   colours and body font. Untouched parts stay byte-identical. Also `--dry-run`, `--strict`,
   `--each items.json -o "out/{field}.pptx"`, `--report` and `--style`. Example in
-  `examples/template/`; live check in `tools/fill-powerpoint.ts`.
+  `examples/template/`; live check: `npm run live -- fill`.
 - Style files (`--style style.json` on build and fill, `schema/style.schema.json`): a client's
   fonts, palette, colours, number defaults and element defaults (`style.elements`, the overrides
   vocabulary) for every chart type, with per-type overrides. Checked as untrusted input. Examples:

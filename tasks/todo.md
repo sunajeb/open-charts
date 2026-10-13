@@ -38,8 +38,9 @@ Rules for this plan
 - [ ] C6 IT deployment guide: Intune / Jamf / M365 admin center, coexistence with think-cell, macro trust settings
 
 ## D. Verification (live runs in approved windows only)
-- [ ] D1 Split tools/e2e-powerpoint.ts into short scenarios (insert-all, edit/apply, resize, chart tools,
+- [x] D1 Split tools/e2e-powerpoint.ts into short scenarios (insert-all, edit/apply, resize, chart tools,
       agenda, handles, restart, popup); each < 2 min, fail fast, one report; full set only per release
+      (`npm run live -- <scenario...>`, tools/live/; unit-tested and dry-run only: first live run is D2)
 - [ ] D2 Mac live run of all scenarios (one approved window)
 - [ ] D3 Windows live run on the owner's think-cell laptop (script → zip) and fixes
 - [ ] D4 Office.js live self-test (Mac) + Windows + PowerPoint on the web

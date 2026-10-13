@@ -7,8 +7,48 @@ Node 22.12.0 (nvm), Playwright Chromium 1243 (headless) for the editor, default 
 Accessibility was available to the terminal; Screen Recording was not used for evidence (all images
 below come from PowerPoint's own slide export, or from Playwright for the editor).
 
-Evidence from the run is in `out/e2e-powerpoint/` and `out/acceptance/` (not committed: `results.log`,
+Evidence from the run was in `out/e2e-powerpoint/` (now `out/live/<scenario>/`) and `out/acceptance/` (not committed: `results.log`,
 exported decks and PNGs). The images below are copied into `docs/acceptance/`.
+
+## Live checks in PowerPoint
+
+The live PowerPoint for Mac tests are short scenarios run by one runner (`tools/live/`; the owner
+approves a live window first). The sections below name the old scripts; each is now a scenario:
+
+| Scenario | Covers | Was |
+|---|---|---|
+| `install` | install, register and load the add-in (only with `--install` or by name) | step 1 of `e2e:powerpoint` |
+| `insert-all` | every gallery item, content placeholder, "not available", tags/shapes, PNG export | steps 3–4, 8 |
+| `edit-apply` | Edit data session, Apply, Cancel, ungrouped chart, Apply with PowerPoint closed / restarted | steps 5, 5b, 9b |
+| `resize` | re-layout after resize and move, too small placeholder and back | step 6 |
+| `chart-tools` | same scale, totals, CAGR, plain text, reset label, applicable commands, Cmd+Z counts | step 11 |
+| `directions` | direction buttons, refused direction, ribbon via accessibility | `tools/e2e-directions.ts` |
+| `agenda` | chapters, nesting, moves, split, sorter, hidden slides, contents | `npm run e2e:agenda` |
+| `popup` | Edit data pop-up timing, live typing, Escape | `tools/e2e-popup-live.ts` |
+| `handles` | drag handles: zoom/window mapping, gap drag, label pin | `tools/e2e-handles-live.ts` |
+| `theme` | colour scheme change, same-scale pair on Update/Apply/resize | step 10 |
+| `fill` | `open-charts fill` decks open without repair and export | `tools/fill-powerpoint.ts` |
+| `cli-compare` | add-in vs CLI writer rendering, pixel-compared | step 9 |
+
+```sh
+npm run live -- --list                    # the scenarios and their time budgets
+npm run live -- --dry-run all             # what would run; touches nothing
+npm run live -- resize chart-tools        # some scenarios in one PowerPoint session
+npm run live -- --install --keep-going all
+npm run e2e:powerpoint                    # = npm run live -- --install all
+```
+
+Each scenario starts from a new presentation and has a budget of at most 2 minutes; every
+AppleScript call has a short timeout. A call that does not answer reads and dismisses any PowerPoint
+dialog (System Events), reports its text and ends the scenario; the run stops there unless
+`--keep-going`. The runner holds `/private/tmp/open-charts-ppt.lock` for the whole run, refuses to
+start while PowerPoint has presentations open (`--allow-open-docs` runs beside them and leaves them
+alone), uses the installed add-in unless `--install` (and refuses if it is not the current build),
+closes only the presentations it made, and quits PowerPoint only if the run started it (so the
+`edit-apply` restart case runs only then). Report: `out/live/report.json` and `out/live/report.md`
+(timings, pass/fail per check); exit code 1 on a failure, 2 when the run was refused. Artifacts
+(decks, PNGs) are in `out/live/<scenario>/`. The Office.js pane's self-test stays
+`npm run officejs:live` (it needs a click in PowerPoint).
 
 ## Summary
 
@@ -242,10 +282,10 @@ property table, overrides merge, toolbar placement, routes end to end), `test/e2
 `test/popup-helper.test.ts` (the real helper, opt-in).
 
 **Live in PowerPoint:** not run yet: PowerPoint was in use (`/private/tmp/open-charts-ppt.lock` held)
-for the whole session. To run it: `node --experimental-strip-types --no-warnings tools/e2e-popup-live.ts`
-(installs this build, inserts a chart, Edit data → times the pop-up from the macro call to the server's
+for the whole session. To run it: `npm run live -- popup`
+(inserts a chart, Edit data → times the pop-up from the macro call to the server's
 `POPUP shown` line → types 77 with System Events → checks the live `APPLY … done` → Escape → checks the
-revert; quits PowerPoint). Still to confirm live: PowerPoint for Mac's `PointsToScreenPixelsX/Y` (if it
+revert). Still to confirm live: PowerPoint for Mac's `PointsToScreenPixelsX/Y` (if it
 answers nothing useful the pop-up goes to the right edge of PowerPoint's window), typing into the
 non-activating panel while PowerPoint stays the active app, and the toolbar's selection events.
 
@@ -465,10 +505,10 @@ posts CGEvents and needs Accessibility for its terminal.
 **Tests:** `test/handles.test.ts` — handles per chart/direction, gap/axis/label/level drag maths and
 reset, view from corners (points, Retina pixels, rounding, untrusted), screen handles at two zooms,
 ghost, controller end to end with a stand-in helper (coalesced ghosts, one apply on release, no-op
-click, double-click reset, hide). Live: `tools/e2e-handles-live.ts` (zoom 50/75/120 %, window moved,
+click, double-click reset, hide). Live: `npm run live -- handles` (zoom 50/75/120 %, window moved,
 CGEvent gap drag, two-click label select + drag).
 
-**Live result (PowerPoint for Mac, 2026-10-13, `tools/e2e-handles-live.ts`): Pass.**
+**Live result (PowerPoint for Mac, 2026-10-13, then `tools/e2e-handles-live.ts`, now the `handles` scenario): Pass.**
 
 | Check | Result |
 |---|---|
