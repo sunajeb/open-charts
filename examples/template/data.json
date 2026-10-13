@@ -1,0 +1,72 @@
+{
+  "$schema": "../../schema/fill.schema.json",
+  "values": {
+    "client": "Northwind Traders",
+    "project": "Growth review",
+    "date": "October 2026",
+    "source": "Company filings; team analysis",
+    "revenue_title": "Revenue grew 2.4x in four years, led by subscriptions",
+    "revenue_note": "Subscriptions passed licences in 2024; services stayed flat.",
+    "revenue": {
+      "type": "stacked",
+      "categories": ["2021", "2022", "2023", "2024", "2025"],
+      "series": [
+        { "name": "Licences", "values": [42, 45, 44, 41, 38] },
+        { "name": "Subscriptions", "values": [12, 24, 41, 62, 88] },
+        { "name": "Services", "values": [10, 11, 12, 12, 13] }
+      ],
+      "options": { "unit": "m", "cagr": { "from": 0, "to": 4 } }
+    },
+    "mix_title": "Online now carries half of sales; partners grew fastest",
+    "mix_left": {
+      "type": "percent",
+      "categories": ["2023", "2024", "2025"],
+      "series": [
+        { "name": "Online", "values": [38, 44, 50] },
+        { "name": "Stores", "values": [48, 40, 33] },
+        { "name": "Partners", "values": [14, 16, 17] }
+      ]
+    },
+    "mix_right": {
+      "type": "doughnut",
+      "categories": ["Online", "Stores", "Partners"],
+      "series": [{ "name": "Sales 2025", "values": [81, 54, 28] }],
+      "options": { "unit": "m", "totals": true }
+    },
+    "rev_25": "$163m",
+    "rev_26": "$188m",
+    "margin_25": "18.2%",
+    "margin_26": "19.5%",
+    "fte_25": "1,240",
+    "fte_26": "1,310"
+  },
+  "slides": [
+    { "slide": 1 },
+    { "slide": 2 },
+    { "slide": 3 },
+    { "slide": 4 },
+    {
+      "slide": 5,
+      "each": [
+        {
+          "region": "Americas", "headline": "subscriptions doubled in two years",
+          "region_comment": "Largest region; enterprise renewals above 95%.",
+          "region_sales": { "type": "clustered", "categories": ["2023", "2024", "2025"], "series": [{ "name": "Licences", "values": [20, 18, 16] }, { "name": "Subscriptions", "values": [18, 28, 37] }], "options": { "unit": "m" } }
+        },
+        {
+          "region": "EMEA", "headline": "growth slowed as licences declined",
+          "region_comment": "Public sector deals slipped into 2026.",
+          "region_sales": { "type": "clustered", "categories": ["2023", "2024", "2025"], "series": [{ "name": "Licences", "values": [15, 14, 13] }, { "name": "Subscriptions", "values": [14, 21, 30] }], "options": { "unit": "m" } }
+        },
+        {
+          "region": "Asia Pacific", "headline": "smallest region, fastest growth",
+          "region_comment": "Two new partners in Japan and Australia.",
+          "region_sales": { "type": "clustered", "categories": ["2023", "2024", "2025"], "series": [{ "name": "Licences", "values": [9, 9, 9] }, { "name": "Subscriptions", "values": [9, 13, 21] }], "options": { "unit": "m" } }
+        }
+      ]
+    },
+    { "slide": 6 },
+    { "slide": 7 },
+    { "slide": 8 }
+  ]
+}

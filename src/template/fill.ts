@@ -128,12 +128,14 @@ export function fillTemplate(template: Uint8Array, data: FillData, opts: FillOpt
 
 interface Edit { start: number; end: number; text: string }
 
-function fillSlide(pkg: Pkg, part: string, values: FillValues, at: { index: number; source: number }, opts: FillOptions, theme: Partial<ThemeColors>, themeFont: string | undefined, dataStyle: Partial<Style> | undefined, used: Set<string>, warnings: string[]): SlideReport {
+function fillSlide(pkg: Pkg, part: string, values: FillValues, where: { index: number; source: number }, opts: FillOptions, theme: Partial<ThemeColors>, themeFont: string | undefined, dataStyle: Partial<Style> | undefined, used: Set<string>, warnings: string[]): SlideReport {
   const xml = pkg.text(part);
   const root = parseXml(xml);
   const tree = findAll(root, 'p:spTree')[0];
-  const report: SlideReport = { ...at, charts: [], fields: [] };
+  const report: SlideReport = { ...where, charts: [], fields: [] };
   const edits: Edit[] = [];
+  /** Report entry → the slot's position on the slide, so the report lists slots in slide order. */
+  const at = new Map<number, number>();
 
   // 1. Chart slots: top-level shapes named chart:<name> or holding only {{chart:<name>}}.
   const slots: { name: string; shape: XmlNode; frame?: Frame }[] = [];
@@ -141,7 +143,7 @@ function fillSlide(pkg: Pkg, part: string, values: FillValues, at: { index: numb
     for (const s of n.children.filter(isShape)) {
       const name = slotName(s);
       if (name) {
-        if (nested) report.charts.push({ name, status: 'error', detail: 'inside a group: ungroup it or move it out of the group', issues: [] });
+        if (nested) at.set(report.charts.push({ name, status: 'error', detail: 'inside a group: ungroup it or move it out of the group', issues: [] }) - 1, s.start);
         else slots.push({ name, shape: s, frame: shapeFrame(pkg, part, s) });
       } else if (s.name === 'p:grpSp') visit(s, true);
     }
@@ -151,10 +153,10 @@ function fillSlide(pkg: Pkg, part: string, values: FillValues, at: { index: numb
   const items: { slot: typeof slots[number]; spec: ChartSpec; frame: Frame }[] = [];
   for (const slot of slots) {
     const v = values[slot.name];
-    if (v === undefined) { report.charts.push({ name: slot.name, frame: slot.frame, status: 'missing', detail: `no value "${slot.name}"`, issues: [] }); continue; }
+    if (v === undefined) { at.set(report.charts.push({ name: slot.name, frame: slot.frame, status: 'missing', detail: `no value "${slot.name}"`, issues: [] }) - 1, slot.shape.start); continue; }
     used.add(slot.name);
-    if (!isChartValue(v)) { report.charts.push({ name: slot.name, frame: slot.frame, status: 'error', detail: `"${slot.name}" is text; a chart slot needs a chart spec`, issues: [] }); continue; }
-    if (!slot.frame) { report.charts.push({ name: slot.name, status: 'error', detail: 'the shape has no size (and no placeholder to inherit one from)', issues: [] }); continue; }
+    if (!isChartValue(v)) { at.set(report.charts.push({ name: slot.name, frame: slot.frame, status: 'error', detail: `"${slot.name}" is text; a chart slot needs a chart spec`, issues: [] }) - 1, slot.shape.start); continue; }
+    if (!slot.frame) { at.set(report.charts.push({ name: slot.name, status: 'error', detail: 'the shape has no size (and no placeholder to inherit one from)', issues: [] }) - 1, slot.shape.start); continue; }
     const chart = migrate(v);
     // Style: file (for this type) < data style < chart style; the template's theme always wins, so
     // contrast is computed on the colours PowerPoint will draw.
@@ -174,17 +176,29 @@ function fillSlide(pkg: Pkg, part: string, values: FillValues, at: { index: numb
       const scene = scenes[k];
       const font = it.spec.style?.font ?? defaultStyle.font;
       const issues = [...checkScene(scene, { measurer: opts.measurer }).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`)];
-      report.charts.push({ name: it.slot.name, frame: it.frame, status: 'filled', issues });
+      at.set(report.charts.push({ name: it.slot.name, frame: it.frame, status: 'filled', issues }) - 1, it.slot.shape.start);
       if (opts.dryRun) return;
       const content = chartContent(it.spec, scene, font, undefined, `chart:${it.slot.name}`);
       edits.push({ start: it.slot.shape.start, end: it.slot.shape.end, text: groupXml(content, ids, font, addTags) });
     });
   }
 
+  report.charts = report.charts.map((c, i) => [c, at.get(i) ?? 0] as const).sort((a, b) => a[1] - b[1]).map(([c]) => c);
+
   // 2. Text fields everywhere else on the slide.
   const skip = items.map((it) => [it.slot.shape.start, it.slot.shape.end]);
   edits.push(...fieldEdits(xml, root, values, report, used, (n) => skip.some(([a, b]) => n.start >= a && n.end <= b)));
-  if (edits.length && !opts.dryRun) pkg.set(part, splice(xml, edits));
+  if (edits.length && !opts.dryRun) {
+    const next = splice(xml, edits);
+    pkg.set(part, next);
+    // Relationships only the replaced shapes used (an earlier fill's tags, a picture) go too; the
+    // parts they pointed at are collected with everything else no longer reachable.
+    const refs = (s: string) => new Set([...s.matchAll(/\br:(?:id|embed|link)="([^"]+)"/g)].map((m) => m[1]));
+    const gone = new Set(items.flatMap((it) => [...refs(xml.slice(it.slot.shape.start, it.slot.shape.end))]));
+    const still = refs(next);
+    const drop = [...gone].filter((id) => !still.has(id));
+    if (drop.length) pkg.setRels(part, [...pkg.rels(part).values()].filter((r) => !drop.includes(r.id)));
+  }
 
   // 3. Speaker notes.
   const notes = [...pkg.rels(part).values()].find((r) => r.type.endsWith('/notesSlide'));
@@ -241,15 +255,16 @@ function groupEdits(xml: string, runs: XmlNode[], values: FillValues, report: Sl
   const runAt = (pos: number) => { let k = 0; while (k + 1 < runs.length && starts[k + 1] <= pos) k++; return k; };
   const next = [...texts];
   let changed = false;
+  const found: SlideReport['fields'] = [];
   // Right to left, so earlier offsets stay valid.
   const matches = [...joined.matchAll(FIELD)].reverse();
   for (const m of matches) {
     const name = m[1];
     if (/^chart:/i.test(name)) continue;
     const v = values[name];
-    if (v === undefined || isChartValue(v)) { report.fields.push({ name, status: 'missing' }); continue; }
+    if (v === undefined || isChartValue(v)) { found.push({ name, status: 'missing' }); continue; }
     used.add(name);
-    report.fields.push({ name, status: 'filled' });
+    found.push({ name, status: 'filled' });
     const a = m.index!, b = a + m[0].length;
     const ra = runAt(a), rb = runAt(b - 1);
     const value = String(v);
@@ -261,7 +276,7 @@ function groupEdits(xml: string, runs: XmlNode[], values: FillValues, report: Sl
     }
     changed = true;
   }
-  report.fields.reverse();
+  report.fields.push(...found.reverse());
   if (!changed) return [];
   const edits: Edit[] = [];
   runs.forEach((r, k) => {
