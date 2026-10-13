@@ -6,7 +6,8 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMeasurer } from '../fonts.ts';
 import { handleRequest, parseRequest } from './engine.ts';
-import { httpSessions, serveAddin, stopServer } from './server.ts';
+import { httpSessions, saveSettings, serveAddin, stopServer } from './server.ts';
+import { ensureToken, tokenPath } from './token.ts';
 import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
@@ -50,6 +51,12 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
       console.log(`Wrote ${out} (${built.ppam.length} bytes, callback prefix ${built.prefix})`);
       return;
     }
+    case 'verbose': {
+      if (arg !== 'on' && arg !== 'off') { console.error(ADDIN_USAGE); process.exit(1); }
+      saveSettings({ verbose: arg === 'on' });
+      console.log(`Verbose logging ${arg} (${join(addinHome(), 'addin.log')}). The add-in picks it up when PowerPoint starts next.`);
+      return;
+    }
     case 'install':
       return stopServer().then(() => install(opts.register !== false));
     case 'uninstall':
@@ -73,6 +80,10 @@ function install(register: boolean) {
   mkdirSync(engine, { recursive: true });
   for (const p of ['src', 'vendor', 'package.json']) cpSync(join(ROOT, p), join(engine, p), { recursive: true });
   console.log(`Engine copied to ${engine}`);
+
+  // 1b. The local server's secret (src/addin/token.ts): kept across reinstalls, user-only permissions.
+  ensureToken(home);
+  console.log(`Server token in ${tokenPath(home)}`);
 
   // 2. The add-in, where PowerPoint's sandbox may read it (~/Library/Application Support/Microsoft).
   const built = buildAddin();
@@ -153,7 +164,7 @@ function uninstall() {
   try {
     osascript(unregisterScript(), 'pipe');
   } catch { /* PowerPoint not available: files are still removed */ }
-  for (const p of [join(SCRIPTS_DIR, 'open-charts.scpt'), PPAM_DIR, join(addinHome(), 'engine'), join(addinHome(), HELPER_APP)]) {
+  for (const p of [join(SCRIPTS_DIR, 'open-charts.scpt'), PPAM_DIR, join(addinHome(), 'engine'), join(addinHome(), HELPER_APP), tokenPath()]) {
     if (existsSync(p)) rmSync(p, { recursive: true, force: true });
   }
   removeLauncher();

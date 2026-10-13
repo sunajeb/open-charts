@@ -22,8 +22,9 @@
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getSession, setSession, type Session } from '../server.ts';
+import { withTokenBoot } from './token.ts';
 import { parseRequest, rememberContext, specKey, type AddinRequest } from './engine.ts';
-import { chartRect, clampInto, screenOf, type PopupHelper, type Rect, type ScreenInfo } from './popup.ts';
+import { chartRect, clampInto, screenOf, toolbarUrl, type PopupHelper, type Rect, type ScreenInfo } from './popup.ts';
 
 export interface ToolbarProperty { prop: string; group: string; value: string }
 interface Table { kindOf(role: string): string | undefined; propertiesFor(kind: string): string[]; info: Record<string, { group: string; value: string }> }
@@ -99,6 +100,8 @@ export function placeToolbar(sel: Rect | undefined, windows: Rect[], screens: Sc
 
 export interface ToolbarDeps {
   base: string;
+  /** The add-in server's token, for the page's URL fragment (src/addin/token.ts). */
+  token?: string;
   helper: PopupHelper;
   /** Runs an applied session in PowerPoint (the server's onSession for "applied"). */
   apply: (s: Session) => void;
@@ -118,7 +121,7 @@ export function toolbarRoutes(deps: ToolbarDeps) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = req.url ?? '';
     if (req.method === 'GET' && /^\/toolbar(\?|$)/.test(url)) {
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(readFileSync(TOOLBAR_HTML, 'utf8'));
+      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(deps.token ? withTokenBoot(readFileSync(TOOLBAR_HTML, 'utf8')) : readFileSync(TOOLBAR_HTML, 'utf8'));
       return true;
     }
     if (req.method === 'GET' && url.startsWith('/api/addin/properties')) {
@@ -148,7 +151,7 @@ export function toolbarRoutes(deps: ToolbarDeps) {
       if (!info || current?.id !== id) return true;
       const frame = placeToolbar(chartRect(req2.where, info.windows, info.screens), info.windows, info.screens);
       if (!frame) { deps.helper.hide('toolbar'); return true; }
-      deps.helper.showPanel?.('toolbar', `${deps.base}/toolbar`, { id, roles }, frame);
+      deps.helper.showPanel?.('toolbar', toolbarUrl(deps.base, deps.token), { id, roles }, frame);
       return true;
     }
     if (req.method === 'POST' && url === '/api/addin/format') {

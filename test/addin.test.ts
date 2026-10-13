@@ -9,7 +9,7 @@ import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { contextOf, DEFAULT_FRAME, handleRequest, layoutForApply, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { addinRoutes, applyErrorMessage, applyInPowerPoint, editorPage, outlivedPowerPoint, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
+import { addinRoutes, applyErrorMessage, applyInPowerPoint, outlivedPowerPoint, saveSettings, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
 import { HELPER_JXA, macroRunner } from '../src/addin/runner.ts';
 import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
@@ -226,16 +226,6 @@ test('relayout: nothing to do in place, a new frame after a resize', async () =>
   assert.equal(Object.fromEntries(half.tags).OC_FRAME, '48,96,432,204');
 });
 
-test('the editor page for a session: preloaded only for an editor without session support', () => {
-  const html = readFileSync(new URL('../src/web/editor.html', import.meta.url), 'utf8');
-  const page = editorPage('0123456789abcdef', { type: 'line', categories: ['a'], series: [{ name: 's', values: [1] }] });
-  if (html.includes('/api/session/')) assert.equal(page, undefined);
-  else {
-    assert.match(page!, /\/api\/session\/' \+ id/);
-    assert.ok(page!.indexOf('/api/session/') < page!.indexOf('<script', page!.indexOf('/api/session/')), 'boot script runs first');
-  }
-});
-
 test('ppam package: add-in content type, VBA and ribbon parts, one callback prefix', async () => {
   const built = buildAddin();
   const e = unzip(built.ppam);
@@ -427,6 +417,7 @@ test('Apply: the server lays the chart out for its context and ApplyEdit only dr
   const home = mkdtempSync(join(tmpdir(), 'oc-apply-fast-'));
   try {
     writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
+    saveSettings({ verbose: true }, home); // the macro's own lines (SYNC, APPLIED) are verbose ones
     const prepare = (a: Session, c: string) => layoutForApply(a, c, m);
     const calls: string[][] = [];
     const moved = `48,96,864,408\n100,96,432,204\n${theme}`;

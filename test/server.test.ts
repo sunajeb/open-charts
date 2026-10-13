@@ -50,7 +50,7 @@ test('session: create, read, apply, cancel; bad ids and unknown sessions are rej
 
     let r = await post('s1', { chart, title: 'Revenue' });
     assert.equal(r.status, 200);
-    assert.equal(r.headers.get('access-control-allow-origin'), '*');
+    assert.equal(r.headers.get('access-control-allow-origin'), null, 'no CORS: other sites cannot read sessions');
     let s = await r.json();
     assert.deepEqual([s.rev, s.state, s.title], [1, 'open', 'Revenue']);
 
