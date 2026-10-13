@@ -35,8 +35,10 @@ cleanly it is **hidden and reported**, never drawn on top of something else.
 ## Working in PowerPoint
 
 Install the add-in first (see the [README](../README.md#install)). You then have an **open-charts**
-tab on the ribbon, before Home, with two groups, **Charts** and **Agenda** (see [Agenda](#agenda)).
-The Charts group:
+tab on the ribbon, before Home, with the groups **Charts**, **Chart tools**, **Agenda** (see
+[Agenda](#agenda)) and **Help**. The first time you click in a presentation after installing, a short
+welcome says where to start and offers a sample deck: one chart of each type, with sample data, to
+try Edit data on. **Help › Welcome** shows it again. The Charts group:
 
 | Control | What it does |
 |---|---|
@@ -942,6 +944,15 @@ In the **Edit data** window from PowerPoint:
 | Esc twice | Cancel and close |
 
 ## Troubleshooting
+
+**Report a problem.** Click **Help › Report a problem** on the open-charts tab. It saves a zip with
+the add-in's log, its settings and the version numbers (open-charts, PowerPoint, your system) and
+shows it in Finder or Explorer. If a chart is selected, it asks whether to add that chart's data;
+nothing else from your slides goes in. Attach the zip to a new issue on GitHub
+(https://github.com/sunajeb/open-charts/issues) and say what you did. From Terminal:
+`open-charts addin report` (add `--spec chart.json` to include a chart's data). The zip is in
+`~/Library/Application Support/open-charts/reports` on the Mac, `%LOCALAPPDATA%\open-charts\reports` on
+Windows.
 
 **The open-charts tab is not on the ribbon.** Run the install again (see the README). If you
 installed with `--no-register`, load it yourself: in PowerPoint, *Tools › PowerPoint Add-ins…*,

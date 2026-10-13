@@ -44,7 +44,10 @@ async function main(argv: string[]): Promise<number> {
   try {
     release = acquireLock();
     // The scenarios read the add-in log's step lines, which are written only with verbose logging on.
-    restoreVerbose = (await import('../../src/addin/server.ts')).verboseUntilRestored();
+    const addinServer = await import('../../src/addin/server.ts');
+    restoreVerbose = addinServer.verboseUntilRestored();
+    // The first-run welcome dialog would block the scripted session: count it as shown.
+    addinServer.saveSettings({ welcomed: true });
     pp.wasRunning = pp.running();
     const openDocs = pp.openDocuments();
     preflight({ running: pp.wasRunning, openDocs, allowOpenDocs: o.allowOpenDocs });

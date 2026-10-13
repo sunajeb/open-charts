@@ -64,6 +64,8 @@ $auth = @{ 'X-OC-Token' = ((Get-Content -LiteralPath (Join-Path $home_ 'token') 
 # 2. Gallery items the engine can insert.
 $items = @(& $exe addin types | Where-Object { $_ -match '\savailable$' } | ForEach-Object { ($_ -split '\s+')[0] })
 Log "insertable items: $($items -join ', ')"
+# The first-run welcome dialog would block the scripted session: count it as shown.
+& $exe addin welcome | Out-Null
 
 # 3. PowerPoint.
 Log '--- PowerPoint'

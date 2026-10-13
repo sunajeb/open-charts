@@ -34,17 +34,25 @@ on engine(request)
 end engine
 
 -- Starts the warm engine in the background unless it is already up. The add-in calls this as it
--- loads, so the first chart inserted gets the fast path above. Returns at once: "OK", or "OK verbose"
--- when the user turned verbose logging on (`open-charts addin verbose on`, settings.json).
+-- loads, so the first chart inserted gets the fast path above. Returns at once: "OK", plus " verbose"
+-- when the user turned verbose logging on (`open-charts addin verbose on`) and " welcome" until the
+-- first-run welcome was shown (settings.json "welcomed": true, src/addin/support.ts).
 on startServer(ignored)
 	try
 		set serverCommand to "nohup " & my engineCommand() & " addin serve"
 		do shell script "{ /usr/bin/curl -sf --connect-timeout 0.3 --max-time 1 http://127.0.0.1:4174/api/addin/ping || " & serverCommand & "; } > /dev/null 2>&1 &"
+		set settingsFile to quoted form of (homeDir & "/settings.json")
+		set flags to "OK"
 		try
-			do shell script "/usr/bin/grep -Eq '\"verbose\": *true' " & quoted form of (homeDir & "/settings.json")
-			return "OK verbose"
+			do shell script "/usr/bin/grep -Eq '\"verbose\": *true' " & settingsFile
+			set flags to flags & " verbose"
 		end try
-		return "OK"
+		try
+			do shell script "/usr/bin/grep -Eq '\"welcomed\": *true' " & settingsFile
+		on error
+			set flags to flags & " welcome"
+		end try
+		return flags
 	on error message
 		return "failed: " & my oneLine(message)
 	end try

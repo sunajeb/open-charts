@@ -12,7 +12,8 @@ import { ENGINE_VERSION } from './version.ts';
 export const RELEASES_URL = 'https://api.github.com/repos/sunajeb/open-charts/releases/latest';
 export const CHECK_EVERY_MS = 24 * 60 * 60 * 1000;
 
-export interface Settings { updateCheck?: boolean }
+/** settings.json keys this file and the welcome (src/addin/support.ts) write. */
+export interface Settings { updateCheck?: boolean; welcomed?: boolean }
 export interface UpdateInfo {
   current: string;
   latest: string;

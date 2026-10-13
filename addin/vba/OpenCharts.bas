@@ -59,6 +59,8 @@ Private gAbortAuto As Boolean
 Private gSilent As Boolean
 ' The user turned verbose logging on (`open-charts addin verbose on`): Verbose lines are logged too.
 Private gVerbose As Boolean
+' The first-run welcome is due (settings.json has no "welcomed": true): shown on the first selection change.
+Private gWelcome As Boolean
 Private gLastMessage As String
 ' The chart last opened with Edit data, so Apply in the editor can update it in place.
 Private gEditShape As Object
@@ -107,9 +109,12 @@ Private Sub StartEngine()
     On Error Resume Next
 #If Mac Then
     ignored = AppleScriptTask(SCRIPT_FILE, "startServer", "")
-    gVerbose = (ignored = "OK verbose")
+    gVerbose = (InStr(ignored, " verbose") > 0)
+    gWelcome = (InStr(ignored, " welcome") > 0)
 #Else
-    gVerbose = InStr(Replace(WinReadText(Environ("LOCALAPPDATA") & SETTINGS_FILE), " ", ""), """verbose"":true") > 0
+    ignored = Replace(WinReadText(Environ("LOCALAPPDATA") & SETTINGS_FILE), " ", "")
+    gVerbose = InStr(ignored, """verbose"":true") > 0
+    gWelcome = InStr(ignored, """welcomed"":true") = 0
     WinStartServer 0
 #End If
 End Sub
@@ -192,6 +197,16 @@ End Sub
 Public Sub OnSelectionChange()
     gEventsOk = True
     If gBusy Then Exit Sub
+    ' The first-run welcome, once. Not from onLoad: a dialog there would hold up the install that
+    ' loads the add-in.
+    If gWelcome And Not gSilent Then
+        gWelcome = False
+        gBusy = True
+        On Error Resume Next
+        ShowWelcome
+        On Error GoTo 0
+        gBusy = False
+    End If
     gBusy = True
     gAutoBusy = True
     gAbortAuto = False
@@ -492,6 +507,10 @@ Private Sub Dispatch(ByVal id As String)
         SameScale True
     ElseIf id = "btnUnscale" Then
         SameScale False
+    ElseIf id = "btnWelcome" Then
+        ShowWelcome
+    ElseIf id = "btnReport" Then
+        ReportProblem
     Else
         Tell "This button is not known to this version of the add-in (" & id & ")."
     End If
@@ -1007,6 +1026,48 @@ NoBridge:
     Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & WIN_REINSTALL
 #End If
 End Function
+
+' The message (M records) of an engine answer that draws nothing; an error (E) is told and gives "".
+Private Function AnswerText(ByVal response As String) As String
+    Dim lines() As String, f() As String, i As Long
+    lines = Split(response, vbLf)
+    For i = 0 To UBound(lines)
+        f = Split(lines(i), vbTab)
+        If UBound(f) >= 1 Then
+            If f(0) = "E" Then Tell Unescape(f(1)): AnswerText = "": Exit Function
+            If f(0) = "M" Then AnswerText = AnswerText & IIf(AnswerText = "", "", vbLf) & Unescape(f(1))
+        End If
+    Next i
+End Function
+
+' ---- Help: welcome and Report a problem (src/addin/support.ts) -----------------------------
+
+' What open-charts is and where to start (first run, and the Welcome button). Yes opens the sample
+' deck: one chart of each type, written and opened by the engine.
+Private Sub ShowWelcome()
+    Dim text As String
+    text = AnswerText(Engine("welcome"))
+    If text = "" Or gSilent Then Exit Sub
+    If MsgBox(text, vbYesNo + vbInformation, TITLE) = vbYes Then text = AnswerText(Engine("sample"))
+End Sub
+
+' Zips the add-in log, settings and versions for support and shows the zip in Finder / Explorer. The
+' selected chart's data goes in only if the user says yes; nothing else from the slides does.
+Private Sub ReportProblem()
+    Dim chart As Object, arg As String, spec As String, app As String, text As String
+    Set chart = FindSelectedChart()
+    If Not chart Is Nothing And Not gSilent Then
+        If MsgBox("Include the selected chart's data in the report? It helps to reproduce the problem. Nothing else from your slides is included.", vbYesNo + vbQuestion, TITLE) = vbYes Then
+            arg = "spec"
+            spec = SpecOf(chart)
+        End If
+    End If
+    On Error Resume Next
+    app = Application.Version & " (build " & Application.Build & ") " & Application.OperatingSystem
+    On Error GoTo 0
+    text = AnswerText(Engine("report" & vbLf & arg & vbLf & vbLf & vbLf & "app=" & app & vbLf & spec))
+    If text <> "" Then Tell text
+End Sub
 
 Private Function Timing() As String
     Dim i As Long

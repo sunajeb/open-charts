@@ -42,8 +42,9 @@ export { addinHome };
 /**
  * Settings the user may change in <home>/settings.json (`open-charts addin verbose on|off`):
  *   verbose  also log timings and the pop-up/toolbar/drag-handle steps (off: results and errors only)
+ *   welcomed the first-run welcome was shown (src/addin/support.ts); the add-in shows it once
  */
-export interface Settings { verbose?: boolean }
+export interface Settings { verbose?: boolean; welcomed?: boolean }
 let settingsCache: { at: number; home: string; value: Settings } | undefined;
 export function settings(home = addinHome()): Settings {
   const now = Date.now();

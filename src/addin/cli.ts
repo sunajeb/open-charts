@@ -10,6 +10,7 @@ import { httpSessions, saveSettings, serveAddin, stopServer } from './server.ts'
 import { ensureToken, tokenPath } from './token.ts';
 import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
 import { buildAddin } from './package.ts';
+import { reportMessage, welcome, writeReport } from './support.ts';
 import { galleryItems, sampleFor } from './registry.ts';
 import { checkForUpdate, readSettings, writeSettings } from '../update.ts';
 import { HELPER_APP } from './popup.ts';
@@ -23,7 +24,7 @@ const ROOT = fileURLToPath(new URL('../../', import.meta.url));
 export { osascript, PPAM_DIR, registerScript, SCRIPTS_DIR };
 export const ADDIN_NAME = 'open-charts';
 
-export function addinMain(args: string[], opts: { out?: string; register?: boolean }): void | Promise<void> {
+export function addinMain(args: string[], opts: { out?: string; register?: boolean; spec?: string }): void | Promise<void> {
   const [sub, arg] = args;
   switch (sub) {
     case 'run': {
@@ -57,6 +58,15 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
       console.log(`Verbose logging ${arg} (${join(addinHome(), 'addin.log')}). The add-in picks it up when PowerPoint starts next.`);
       return;
     }
+    case 'report': {
+      // --spec adds a chart's data (a spec JSON file, e.g. from `open-charts import`) when you agree to share it.
+      const spec = opts.spec ? readFileSync(opts.spec, 'utf8') : undefined;
+      console.log(reportMessage(writeReport({ spec }), !!spec));
+      return;
+    }
+    case 'welcome':
+      console.log(welcome());
+      return;
     case 'install':
       return stopServer().then(() => install(opts.register !== false));
     case 'update':

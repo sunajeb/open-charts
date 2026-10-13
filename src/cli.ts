@@ -46,6 +46,7 @@ const { values, positionals } = parseArgs({
     help: { type: 'boolean', short: 'h' },
     port: { type: 'string', default: '4173' },
     'no-register': { type: 'boolean', default: false },
+    spec: { type: 'string' },
   },
 });
 
@@ -55,7 +56,7 @@ if (values.help) {
 } else if (command === 'addin') {
   try {
     const { addinMain } = await import('./addin/cli.ts');
-    await addinMain(positionals.slice(1), { out: values.out, register: !values['no-register'] });
+    await addinMain(positionals.slice(1), { out: values.out, register: !values['no-register'], spec: values.spec });
   } catch (err) {
     fail((err as Error).message);
   }

@@ -58,8 +58,8 @@ Rules for this plan
 - [ ] D6 Robustness: decks from older versions, charts edited by hand without the add-in, copy/paste across decks
 
 ## E. Supportability and first-run experience
-- [ ] E1 "Report a problem": zips add-in log, versions and the chart spec (no slide content unless the user agrees)
-- [ ] E2 First run: short welcome, sample deck, help links
+- [x] E1 "Report a problem": zips add-in log, versions and the chart spec (no slide content unless the user agrees)
+- [x] E2 First run: short welcome, sample deck, help links
 - [ ] E3 Review every user-facing message (plain, actionable)
 
 ## F. Release 1.0

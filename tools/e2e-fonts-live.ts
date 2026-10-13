@@ -61,7 +61,8 @@ if (process.platform !== 'darwin') { console.log('e2e:fonts runs on macOS with P
 
 const { addinMain, PPAM_DIR } = await import('../src/addin/cli.ts');
 const { buildAddin } = await import('../src/addin/package.ts');
-const { addinHome } = await import('../src/addin/server.ts');
+const { addinHome, saveSettings } = await import('../src/addin/server.ts');
+saveSettings({ welcomed: true }); // the first-run welcome dialog would block the scripted run
 const LOG = join(addinHome(), 'addin.log');
 const osa = (script: string, timeoutSec = 120): string =>
   execFileSync('osascript', ['-e', `with timeout of ${timeoutSec} seconds\n${script}\nend timeout`], { encoding: 'utf8' }).trim();

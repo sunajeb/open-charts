@@ -4,6 +4,7 @@
 //
 // Request, one field per line:
 //   1  op       insert | update | relayout | edit | detach | direction | command | types | agenda (src/addin/agenda.ts)
+//               | welcome | sample | report (src/addin/support.ts)
 //   2  arg      gallery item (insert; "<item>@<direction>" inserts in that direction), edit-session id
 //               (update, optional), element role (detach), the direction (direction: up | down | left
 //               | right) or chart command (command: core/commands.ts CHART_COMMANDS)
@@ -50,6 +51,7 @@ import { FORMAT_VERSION, num, record, shapeBounds, shapeRecord } from './format.
 import { galleryItems, sampleFor, typeLabel } from './registry.ts';
 import { reinstallCommand } from './launcher.ts';
 import { handleAgenda } from './agenda.ts';
+import { handleSupport } from './support.ts';
 import { parseWhere, type ChartWhere } from './popup.ts';
 
 export interface AddinRequest {
@@ -73,6 +75,8 @@ export interface AddinRequest {
   /** Command: the selected elements' roles (`roles=`) and the same-scale group (`group=`). */
   roles?: string[];
   group?: string;
+  /** Report a problem: PowerPoint's version and OS (`app=`). */
+  app?: string;
 }
 
 /** Context of one layout in PowerPoint: the slide's theme and the chart's same-scale group. */
@@ -117,7 +121,7 @@ export function parseRequest(text: string): AddinRequest {
   const scale = Number(params.scale);
   // base= / native= describe the shapes, screen= / window= where the chart is on screen (Edit data
   // pop-up): neither is the layout's context.
-  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|view|roles|group)=/.test(l)).map((l) => `${l}\n`).join('') : '';
+  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|view|roles|group|app)=/.test(l)).map((l) => `${l}\n`).join('') : '';
   const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
   const base = json(params.base), native = json(params.native);
   const where = parseWhere(params);
@@ -138,6 +142,7 @@ export function parseRequest(text: string): AddinRequest {
     ...(where ? { where } : {}),
     ...(params.roles ? { roles: params.roles.split(',').filter(Boolean) } : {}),
     ...('group' in params ? { group: params.group } : {}),
+    ...(params.app ? { app: params.app } : {}),
   };
 }
 
@@ -283,6 +288,10 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const { direction: _, ...rest } = chart.options ?? {};
         return respond({ ...chart, options: dir === 'up' ? rest : { ...rest, direction: dir } }, style, frame, m, env);
       }
+      case 'welcome':
+      case 'sample':
+      case 'report':
+        return handleSupport(req.op, req.arg, { app: req.app, spec: req.spec }, m);
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
       default:
