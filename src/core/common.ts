@@ -6,6 +6,7 @@ import { spread } from './place.ts';
 import { parseCategoryDate } from './dates.ts';
 import { TooSmall } from './minsize.ts';
 import { appliesTo, optionDefaults } from './spec.ts';
+import { sideways } from './direction.ts';
 
 /** Inputs to one layout that come from outside the chart's spec. */
 export interface LayoutHints {
@@ -53,11 +54,12 @@ export interface Ctx {
 export const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer, hints: LayoutHints = {}): Ctx {
-  const horizontal = spec.options?.orientation === 'horizontal';
+  const horizontal = sideways(spec.options ?? {});
   // seriesLabels is only a starting point here: chart types refine it from the data when it is unset.
   const defaults = {
     gap: 0.5,
-    seriesLabels: spec.type === 'clustered' || horizontal ? 'legend' : 'right',
+    // Bars: names beside the last bar would sit under it, so a legend (one waterfall series needs no names).
+    seriesLabels: spec.type === 'clustered' || (horizontal && spec.type !== 'waterfall') ? 'legend' : 'right',
     ...optionDefaults(spec.type),
   } as const;
   // The style's number defaults apply where the chart type reads them; the chart's own options win.
@@ -340,7 +342,7 @@ export function cagrLabel(ctx: Ctx, a: number, b: number, years: number): string
  * How many ticks a value axis gets (3-5): a short axis (a chart resized small) gets fewer, so tick
  * labels never crowd. Vertical axes by the frame height, horizontal ones by its width.
  */
-export function valueTicks(ctx: Ctx, horizontal = ctx.o.orientation === 'horizontal', length?: number): number {
+export function valueTicks(ctx: Ctx, horizontal = sideways(ctx.o), length?: number): number {
   const len = length ?? (horizontal ? ctx.frame.w : ctx.frame.h - ctx.lh * 3);
   return Math.max(3, Math.min(5, Math.floor(len / (horizontal ? ctx.fs * 5 : ctx.lh * 2.5))));
 }
@@ -387,6 +389,41 @@ export function axisWidth(ctx: Ctx, dmin: number, ticks: number[] | null, fmt: (
     widths.push(...wide.map((t) => ctx.m.width(wfmt(t), ctx.fs)));
   }
   return Math.max(...widths) + ctx.pad * 1.5;
+}
+
+// ---- Bars (direction left / right): categories down the side, values along the bottom ------------
+
+/** The category column of a bar chart: as wide as the longest label, at most 30% of the frame; labels wrap inside it. */
+export function barCategories(ctx: Ctx): { catW: number; fit: CategoryFit } {
+  const catW = Math.min(ctx.frame.w * 0.3, Math.max(...ctx.spec.categories.map((c) => ctx.m.width(c, ctx.fs))) + 2);
+  const fit = fitCategories(ctx, catW);
+  reportFit(ctx, fit);
+  return { catW, fit };
+}
+
+/** Category labels right-aligned in their column left of the bars, centred on their rows. */
+export function barCategoryLabels(ctx: Ctx, fit: CategoryFit, catW: number, cy: (c: number) => number) {
+  ctx.spec.categories.forEach((_, c) => {
+    if (fit.hidden.has(c)) return;
+    const lines = fit.lines[c];
+    const h = lines.length * fit.lh;
+    text(ctx, `label:category:c${c}`, { x: ctx.frame.x, y: cy(c) - h / 2, w: catW, h, text: lines.join('\n'), align: 'right', size: fit.size, role: 'category' });
+  });
+}
+
+/** Height of a value axis along the bottom (0 without ticks). */
+export const bottomAxisHeight = (ctx: Ctx, ticks: number[] | null) => (ticks ? ctx.lh + ctx.pad * 0.6 : 0);
+
+/** Value axis along the bottom at `y`: line, tick marks and centred tick labels (`shown`: the labelled ticks). */
+export function bottomValueAxis(ctx: Ctx, ticks: number[], xOf: (v: number) => number, y: number, fmt: (v: number) => string, shown = ticks) {
+  const { style, lh, pad, m, fs } = ctx;
+  ctx.add('axis', { kind: 'line', x1: xOf(ticks[0]), y1: y, x2: xOf(ticks[ticks.length - 1]), y2: y, color: style.axis, width: 0.75 });
+  shown.forEach((t, k) => {
+    const label = fmt(t);
+    const w = m.width(label, fs) + 2;
+    ctx.add(`axis:tick:${k}`, { kind: 'line', x1: xOf(t), y1: y, x2: xOf(t), y2: y + 3, color: style.axis, width: 0.75 });
+    text(ctx, `axis:tick:${k}`, { x: xOf(t) - w / 2, y: y + pad * 0.5, w, h: lh, text: label, color: style.muted, role: 'axis' });
+  });
 }
 
 /** Left value axis: vertical line, tick marks and right-aligned tick labels. */

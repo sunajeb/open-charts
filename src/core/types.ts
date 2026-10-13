@@ -77,8 +77,12 @@ export interface ChartOptions {
   locale?: string;
   /** Magnitude scaling shared by the whole chart: "auto" picks k / m / bn from the data. Default "none". */
   scale?: Scale;
-  /** Stacked, clustered and 100% charts: "horizontal" draws bars from the left. Default "vertical". */
-  orientation?: 'vertical' | 'horizontal';
+  /**
+   * Which way the chart grows (`DIRECTIONS` in spec.ts lists them per type): "up" columns (default),
+   * "down" columns hanging from the top, "right" bars from the left (a line: a profile chart), "left"
+   * bars from the right with the categories on the right. Replaces `orientation` ("horizontal" = "right").
+   */
+  direction?: 'up' | 'down' | 'left' | 'right';
   /** Mekko: stack every column to 100% (default) or keep absolute segment heights. Widths always encode totals. */
   mekko?: 'percent' | 'unit';
   /** Stacked, clustered, 100%, waterfall and combo: gap between columns as a fraction of the column width, 0–10. Default 0.5. */
