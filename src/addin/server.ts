@@ -14,7 +14,7 @@
 // one: it answers the new PowerPoint's ping and engine calls with 503 and exits, and the bridge
 // starts a fresh server from the new PowerPoint.
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
 import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -139,6 +139,25 @@ if application "Microsoft PowerPoint" is not running then error "PowerPoint is n
 tell application "Microsoft PowerPoint" to return run VB macro macro name "${prefix}_ApplyEdit" list of parameters {item 1 of argv, item 2 of argv, item 3 of argv}
 end run`;
 
+/** The apply script compiled for add-in build `prefix` (osascript then skips compiling it, which loads PowerPoint's dictionary). */
+export const compiledApplyScript = (prefix: string, home = addinHome()) => join(home, `apply-${prefix}.scpt`);
+
+/** Compiles the apply script for the installed add-in in the background (server start); drops other builds'. */
+export function precompileApply(home = addinHome()) {
+  let prefix = '';
+  try { prefix = JSON.parse(readFileSync(join(home, 'addin.json'), 'utf8')).prefix; } catch { return; }
+  const file = compiledApplyScript(prefix, home);
+  try {
+    for (const f of readdirSync(home)) if (/^apply-.*\.scpt$/.test(f) && join(home, f) !== file) rmSync(join(home, f), { force: true });
+  } catch { /* nothing to tidy */ }
+  if (!prefix || existsSync(file)) return;
+  const tmp = `${file}.${process.pid}.tmp`;
+  execFile('osacompile', ['-o', tmp, '-e', applyScript(prefix)], { timeout: 30_000 }, (err) => {
+    if (err) { rmSync(tmp, { force: true, recursive: true }); return; } // Apply compiles the source each time instead
+    try { renameSync(tmp, file); } catch { /* another server won */ }
+  });
+}
+
 /**
  * ApplyEdit's answer: log lines (SYNC …, APPLIED …), and the chart's context ("CONTEXT", tab for
  * newline): after drawing, the context of the new chart; without an APPLIED line, the chart's
@@ -180,7 +199,7 @@ export function applyErrorMessage(err: { message: string; killed?: boolean }): s
 /** Runs an AppleScript with arguments: what it printed, or the error. */
 type Run = (script: string, timeoutMs: number, args: string[]) => Promise<{ message: string; killed?: boolean } | string | undefined>;
 const osascriptRun: Run = (script, timeoutMs, args) =>
-  new Promise((resolve) => execFile('osascript', ['-e', script, ...args], { timeout: timeoutMs, maxBuffer: 1 << 20 }, (err, out, stderr) =>
+  new Promise((resolve) => execFile('osascript', [...(script.endsWith('.scpt') ? [script] : ['-e', script]), ...args], { timeout: timeoutMs, maxBuffer: 1 << 20 }, (err, out, stderr) =>
     resolve(err ? { message: `${err.message}\n${stderr}`, killed: err.killed } : out)));
 
 /** Lays an applied session's chart out for a chart context (layoutForApply with the server's measurer). */
@@ -213,6 +232,8 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
     return fail(RESTARTED_MESSAGE);
   }
   const t = Date.now();
+  const compiled = compiledApplyScript(prefix, home);
+  const script = existsSync(compiled) ? compiled : applyScript(prefix);
   let layoutMs = 0;
   const lay = async (context: string | undefined) => {
     if (context === undefined || !prepare) return '';
@@ -224,7 +245,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   let response = await lay(context);
   if (response) settle();
   let sent = Date.now();
-  let result = await run(applyScript(prefix), APPLY_TIMEOUT_MS, [s.id, context ?? '', response]);
+  let result = await run(script, APPLY_TIMEOUT_MS, [s.id, context ?? '', response]);
   let answer = typeof result === 'string' ? parseApplyAnswer(result) : undefined;
   if (answer && !answer.applied && answer.context !== undefined && prepare) {
     // The chart is not where (or as) it was when the response was laid out: lay it out for now.
@@ -232,7 +253,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
     response = await lay(context);
     if (response) settle();
     sent = Date.now();
-    result = await run(applyScript(prefix), APPLY_TIMEOUT_MS, [s.id, '*', response]);
+    result = await run(script, APPLY_TIMEOUT_MS, [s.id, '*', response]);
     answer = typeof result === 'string' ? parseApplyAnswer(result) : undefined;
   }
   const back = Date.now(), ms = back - t;
@@ -325,6 +346,7 @@ export function serveAddin(port = ADDIN_PORT) {
   const owner = powerPointPid();
   const outlived = () => outlivedPowerPoint(owner);
   log(`SERVER started (pid ${process.pid}, PowerPoint ${owner ?? 'not running'})`);
+  precompileApply();
   const retire = () => { log(`SERVER retired: PowerPoint ${owner} has quit, a new one is running`); process.exit(0); };
   const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`), outlived, retire);
   return serve(port, {}, {
