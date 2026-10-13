@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-charts.dev/schema/style/1.json",
+  "title": "open-charts style file, version 1",
+  "description": "A client deck's look for every chart type: `open-charts build deck.json --style style.json`, `open-charts fill template.pptx data.json --style style.json`. The same keys as a deck's `style`, plus a name and per-chart-type overrides. Appearance only. Limits enforced by parseStyleFile(): at most 256 KB, font names at most 64 characters, at most 64 palette colours.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string", "maxLength": 200 },
+    "name": { "type": "string", "maxLength": 200 },
+    "description": { "type": "string", "maxLength": 2000 },
+    "font": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/font" },
+    "fontSize": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/fontSize" },
+    "text": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/text" },
+    "muted": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/muted" },
+    "axis": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/axis" },
+    "background": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/background" },
+    "palette": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/palette" },
+    "positive": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/positive" },
+    "negative": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/negative" },
+    "theme": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/theme" },
+    "numbers": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/numbers" },
+    "labels": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/labels" },
+    "lines": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/lines" },
+    "types": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Style overrides for one chart type, over the file's own keys.",
+      "properties": {
+        "stacked": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "clustered": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "percent": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "waterfall": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "mekko": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "line": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "area": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "area100": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "pie": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "doughnut": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "harvey": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "combo": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "mekkoxy": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "scatter": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "bubble": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "table": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" },
+        "gantt": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style" }
+      }
+    }
+  }
+}

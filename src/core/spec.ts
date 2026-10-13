@@ -4,6 +4,7 @@ import type { ChartOptions, ChartSpec } from './types.ts';
 import { LOCALES } from './numbers.ts';
 import { COLOR_NAMES, isColor } from './theme.ts';
 import { parseCategoryDate } from './dates.ts';
+import { LABEL_KINDS, LINE_KINDS, LINE_WIDTH } from './look.ts';
 
 export const SPEC_VERSION = 1;
 
@@ -120,7 +121,7 @@ export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart', 'charts'] as const;
 /** Keys of one entry of a slide's `charts` (several charts on one slide). */
 export const SLIDE_CHART_KEYS = ['frame', 'chart'] as const;
-export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers'] as const;
+export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers', 'labels', 'lines'] as const;
 /** Keys of `style.numbers`: number defaults for every chart. */
 export const STYLE_NUMBER_KEYS = ['locale', 'decimals', 'scale'] as const;
 
@@ -245,12 +246,12 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
     if (!isObj(spec.options)) e.add(['options'], 'must be an object');
     else validateOptions(e, spec.options, type as string, nCat, Array.isArray(spec.series) ? spec.series : []);
   }
-  if (spec.style !== undefined) validateStyle(e, spec.style);
+  if (spec.style !== undefined) checkStyle(e, spec.style);
   return e.list;
 }
 
 /** A style (on a deck or a chart): fonts, colours (hex or theme slots), theme colours, number defaults. */
-function validateStyle(e: Errors, st: unknown) {
+function checkStyle(e: Errors, st: unknown) {
   if (!isObj(st)) { e.add(['style'], 'must be an object'); return; }
   e.unknown(st, STYLE_KEYS, ['style']);
   if (st.font !== undefined && (typeof st.font !== 'string' || !st.font)) e.add(['style', 'font'], 'must be a font name');
@@ -280,6 +281,35 @@ function validateStyle(e: Errors, st: unknown) {
       e.unknown(st.numbers, STYLE_NUMBER_KEYS, ['style', 'numbers']);
     }
   }
+  if (st.labels !== undefined) {
+    if (!isObj(st.labels)) e.add(['style', 'labels'], `must be an object of label colours (${LABEL_KINDS.join(', ')})`);
+    else {
+      e.unknown(st.labels, LABEL_KINDS, ['style', 'labels']);
+      for (const k of LABEL_KINDS) if (st.labels[k] !== undefined) checkColor(e, st.labels[k], ['style', 'labels', k]);
+    }
+  }
+  if (st.lines !== undefined) {
+    if (!isObj(st.lines)) e.add(['style', 'lines'], `must be an object of line styles (${LINE_KINDS.join(', ')})`);
+    else {
+      e.unknown(st.lines, LINE_KINDS, ['style', 'lines']);
+      for (const k of LINE_KINDS) {
+        const l = st.lines[k];
+        if (l === undefined) continue;
+        if (!isObj(l)) { e.add(['style', 'lines', k], 'must be an object with color, width and/or dash'); continue; }
+        e.unknown(l, ['color', 'width', 'dash'], ['style', 'lines', k]);
+        if (l.color !== undefined) checkColor(e, l.color, ['style', 'lines', k, 'color']);
+        if (l.width !== undefined && (typeof l.width !== 'number' || !(l.width >= LINE_WIDTH.min && l.width <= LINE_WIDTH.max))) e.add(['style', 'lines', k, 'width'], `must be a number of points ${LINE_WIDTH.min}–${LINE_WIDTH.max}, got ${describe(l.width)}`);
+        if (l.dash !== undefined && typeof l.dash !== 'boolean') e.add(['style', 'lines', k, 'dash'], `must be true or false, got ${describe(l.dash)}`);
+      }
+    }
+  }
+}
+
+/** Every problem in a style object (deck, chart or style file), paths under `base`. Never throws. */
+export function validateStyle(style: unknown, base = ''): SpecError[] {
+  const e = new Errors(base);
+  checkStyle(e, style);
+  return e.list.map((x) => ({ ...x, path: x.path.replace(`${base}/style`, base) || '/' }));
 }
 const THEME_SLOT_KEYS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'] as const;
 
@@ -499,7 +529,7 @@ export function validateDeck(deck: unknown): SpecError[] {
   if (deck.specVersion !== undefined && deck.specVersion !== SPEC_VERSION) {
     e.add(['specVersion'], `unsupported specVersion ${describe(deck.specVersion)}; this engine reads version ${SPEC_VERSION}`);
   }
-  if (deck.style !== undefined) validateStyle(e, deck.style);
+  if (deck.style !== undefined) checkStyle(e, deck.style);
   if (!Array.isArray(deck.slides)) { e.add(['slides'], 'must be an array of slides'); return e.list; }
   const out = e.list;
   deck.slides.forEach((s, i) => {

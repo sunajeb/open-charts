@@ -173,7 +173,14 @@ export interface Style {
   theme?: Partial<Record<'accent1' | 'accent2' | 'accent3' | 'accent4' | 'accent5' | 'accent6' | 'dk1' | 'lt1' | 'dk2' | 'lt2', string>>;
   /** Number defaults for every chart; a chart's own options win. */
   numbers?: Pick<ChartOptions, 'locale' | 'decimals' | 'scale'>;
+  /** Label colours by kind (appearance only; see core/look.ts). Labels coloured for contrast keep theirs. */
+  labels?: Partial<Record<'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration', string>>;
+  /** Line styles by kind (appearance only; see core/look.ts). */
+  lines?: Partial<Record<'axis' | 'gridline' | 'connector' | 'leader' | 'decoration', LineLook>>;
 }
+
+/** A line style: colour (hex or theme colour), width in points, dashed or solid. Every key optional. */
+export interface LineLook { color?: string; width?: number; dash?: boolean }
 
 export interface Frame { x: number; y: number; w: number; h: number }
 

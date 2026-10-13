@@ -30,6 +30,7 @@ const { values, positionals } = parseArgs({
     svg: { type: 'boolean', default: false },
     strict: { type: 'boolean', default: false },
     report: { type: 'string' },
+    style: { type: 'string' },
     json: { type: 'boolean', default: false },
     help: { type: 'boolean', short: 'h' },
     port: { type: 'string', default: '4173' },
@@ -80,6 +81,17 @@ if (values.help) {
   await run();
 }
 
+/** The `--style` file, checked as untrusted input (size, keys, values); exits with every problem listed. */
+async function loadStyle() {
+  if (!values.style) return undefined;
+  const { parseStyleFile } = await import('./core/style-file.ts');
+  try {
+    return parseStyleFile(readFileSync(values.style, 'utf8'), values.style);
+  } catch (err) {
+    fail((err as Error).message);
+  }
+}
+
 function fail(msg: string): never {
   console.error(msg);
   process.exit(1);
@@ -94,7 +106,7 @@ async function run() {
   const out = values.out ?? positionals[0].replace(/\.json$/, '');
   mkdirSync(dirname(out), { recursive: true });
 
-  const { pptx, slides } = buildDeck(deck, createMeasurer(values.font, values['bold-font']));
+  const { pptx, slides } = buildDeck(deck, createMeasurer(values.font, values['bold-font']), await loadStyle());
   writeFileSync(`${out}.pptx`, pptx);
   console.log(`Wrote ${out}.pptx (${slides.length} slide${slides.length === 1 ? '' : 's'})`);
 

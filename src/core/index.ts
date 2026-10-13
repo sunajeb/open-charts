@@ -6,6 +6,7 @@ import { resolveColor, resolveStyle, themeOf } from './theme.ts';
 import { appliesTo, prepareSpec } from './spec.ts';
 import { resolveCollisions } from './resolve.ts';
 import { restoreRoles, visibleSeries } from './visible.ts';
+import { applyLooks } from './look.ts';
 import { minimumSize, placeholder, TooSmall } from './minsize.ts';
 import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
@@ -28,13 +29,14 @@ export { minimumSize, TooSmall } from './minsize.ts';
 export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
 export {
-  SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, InvalidSpecError, OPTIONS, LIMITS, appliesTo, optionDefaults, editorSpec,
+  SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, validateStyle, InvalidSpecError, OPTIONS, LIMITS, appliesTo, optionDefaults, editorSpec,
   CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES,
 } from './spec.ts';
 export type { SpecError, OptionInfo, OptionKey } from './spec.ts';
 export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
 export type { NumberStyle, Locale } from './numbers.ts';
 export { parseCategoryDate, years360, cagrYears } from './dates.ts';
+export { applyLooks, LABEL_KINDS, LINE_KINDS, LINE_WIDTH } from './look.ts';
 export { THEME_SLOTS, MAPPED_SLOTS, COLOR_NAMES, DEFAULT_THEME, isColor, isColorName, themeOf, resolveColor, resolveStyle, colorHex, colorSlot } from './theme.ts';
 export type { ThemeSlot, ThemeColors, ColorName } from './theme.ts';
 
@@ -116,7 +118,9 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
     ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
     restoreRoles(ctx.roles, index);
-    return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}) };
+    const scene: Scene = { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}) };
+    applyLooks(scene, style); // appearance only, after every placement decision
+    return scene;
   }
   return placeholder(s, frame, size, m, style, why);
 }
@@ -156,3 +160,5 @@ export function layoutGroup(items: GroupItem[], m: Measurer, style: Style = defa
   }
   return scenes;
 }
+export { parseStyleFile, validateStyleFile, mergeStyles, styleFor, fileStyle, InvalidStyleFileError, STYLE_FILE_KEYS, STYLE_FILE_LIMITS } from './style-file.ts';
+export type { StyleFile } from './style-file.ts';

@@ -65,7 +65,37 @@
             "decimals": { "type": "integer", "minimum": 0, "maximum": 10 },
             "scale": { "enum": ["none", "auto", "k", "m", "bn"] }
           }
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Label colours by kind (appearance only). Labels the engine coloured for contrast on a fill keep theirs.",
+          "properties": {
+            "value": { "$ref": "#/$defs/color" }, "total": { "$ref": "#/$defs/color" }, "category": { "$ref": "#/$defs/color" },
+            "series": { "$ref": "#/$defs/color", "description": "Series names beside the chart and legend entries." },
+            "axis": { "$ref": "#/$defs/color", "description": "Value-axis tick labels and axis titles." },
+            "decoration": { "$ref": "#/$defs/color", "description": "Labels of arrows, value lines, the 100% indicator, Gantt brackets." }
+          }
+        },
+        "lines": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Line styles by kind (appearance only).",
+          "properties": {
+            "axis": { "$ref": "#/$defs/lineLook" }, "gridline": { "$ref": "#/$defs/lineLook" }, "connector": { "$ref": "#/$defs/lineLook" },
+            "leader": { "$ref": "#/$defs/lineLook" },
+            "decoration": { "$ref": "#/$defs/lineLook", "description": "Arrows, value lines, the 100% indicator, Gantt brackets and today line." }
+          }
         }
+      }
+    },
+    "lineLook": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "$ref": "#/$defs/color" },
+        "width": { "type": "number", "minimum": 0.25, "maximum": 6, "description": "Points." },
+        "dash": { "type": "boolean" }
       }
     },
     "categoryIndex": { "type": "integer", "minimum": 0 },
