@@ -26,8 +26,9 @@ Rules for this plan
 - [x] B3 Add-in sends the deck/theme font; engine measures with it; Office.js measures with the browser
 - [ ] B4 Font test set (Arial, Calibri, Aptos, Georgia, Helvetica Neue, Segoe UI, Times + owner's corporate
       font): unit + goldens; one live scenario comparing PowerPoint's rendering
-      — offline done (test/fonts.test.ts, goldens fonts-*, e2e); live: `npm run e2e:fonts` pending an
-      approved window; owner's corporate font and Segoe UI (not on this Mac) still to add
+      — offline done (test/fonts.test.ts, goldens fonts-*, e2e); live `npm run e2e:fonts` 2026-10-13:
+      8 fonts incl. theme fonts, every label within 0.63 % of the engine's width, none overflows.
+      Owner's corporate font and Segoe UI (not on this Mac) still to add
 
 ## C. Install, sign, deploy, update
 - [x] C1 Mac: bundled engine binary (no Node; arm64 + x64) + pop-up helper + .ppam in one per-user .pkg; uninstaller
@@ -46,12 +47,10 @@ Rules for this plan
 - [x] D1 Split tools/e2e-powerpoint.ts into short scenarios (insert-all, edit/apply, resize, chart tools,
       agenda, handles, restart, popup); each < 2 min, fail fast, one report; full set only per release
       (`npm run live -- <scenario...>`, tools/live/; unit-tested and dry-run only: first live run is D2)
-- [ ] D2 Mac live run of all scenarios (one approved window)
-      (first full run 2026-10-13: install, insert-all, resize, directions, agenda, popup, theme, fill
-      PASS; an update now reloads in a running PowerPoint. Fixed after it: edit-apply and cli-compare
-      (charts carry the deck font), chart-tools (pop-up left open took the Cmd+Z presses; label checks).
-      Rerun chart-tools, handles, edit-apply, cli-compare while the Mac is idle; handles showed
-      "no trusted view" while another app was in front)
+- [x] D2 Mac live run of all scenarios: all 12 PASS (2026-10-13; last full run 11/12, the one failure
+      was a lost engine answer, fixed and insert-all rerun PASS). Bugs the runs found and fixed:
+      Mac VBA `Not` on a PowerPoint True of 1 (label commands saw no label), PowerPoint relaunched by
+      a re-measure as it quit, AppleScriptTask returning "" now and then, updates needing a restart
 - [ ] D3 Windows live run on the owner's think-cell laptop (script → zip) and fixes
 - [ ] D4 Office.js live self-test (Mac) + Windows + PowerPoint on the web
 - [ ] D5 Test matrix: older PowerPoint 16.x, Intel Mac, non-English Office, two monitors / scaling,

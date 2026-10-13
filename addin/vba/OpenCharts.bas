@@ -2524,7 +2524,8 @@ Public Sub OCPREFIX_TextBounds(ByVal n As String)
                         If s.TextFrame2.HasText Then
                             Set tr = s.TextFrame2.TextRange
                             Report "TEXT " & TagValue(s, "OC_ROLE") & "|" & tr.Font.Name & "|" & Fmt(tr.BoundWidth) & "|" & _
-                                Fmt(s.Width) & "|" & Fmt(tr.BoundHeight) & "|" & Fmt(s.Height)
+                                Fmt(s.Width) & "|" & Fmt(tr.BoundHeight) & "|" & Fmt(s.Height) & "|" & _
+                                Fmt(tr.Characters(1, tr.Length).BoundWidth) & "|" & tr.Length & "|" & Replace(tr.Text, " ", "_")
                         End If
                     End If
                 Next i

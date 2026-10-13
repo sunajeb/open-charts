@@ -103,7 +103,9 @@ try {
     const drawn = macro('TextBounds', '1').split('\n').map((l) => l.match(/TEXT (.*)$/)?.[1]).filter((x): x is string => !!x);
     let worst = 0, n = 0;
     for (const line of drawn) {
-      const [role, fontName, bw, boxW, bh] = line.split('|');
+      // The text's own characters (the whole range's BoundWidth also counts the paragraph mark, about a space wider).
+      const [role, fontName, bwAll, boxW, bh, , bwChars] = line.split('|');
+      const bw = bwChars || bwAll;
       const want = e.labels.get(role);
       if (!want) continue;
       n++;
