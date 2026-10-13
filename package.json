@@ -16,12 +16,19 @@
     "goldens": "node --experimental-strip-types --no-warnings test/goldens/run.ts",
     "bench": "node --experimental-strip-types --no-warnings scripts/bench.ts",
     "bench:accept": "node --experimental-strip-types --no-warnings test/bench/accept.ts",
-    "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts"
+    "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts",
+    "build:officejs": "node --experimental-strip-types --no-warnings scripts/build-officejs.ts",
+    "officejs:cert": "node --experimental-strip-types --no-warnings scripts/officejs-cert.ts",
+    "officejs:serve": "node --experimental-strip-types --no-warnings src/officejs/server.ts",
+    "officejs:sideload": "node --experimental-strip-types --no-warnings scripts/officejs-sideload.ts",
+    "officejs:live": "node --experimental-strip-types --no-warnings tools/officejs-live.ts",
+    "build:popup": "node --experimental-strip-types --no-warnings scripts/build-popup.ts"
   },
   "engines": {
     "node": ">=22.6"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@playwright/test": "^1.63.0",
+    "esbuild": "^0.25.12"
   }
 }
