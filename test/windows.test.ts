@@ -77,7 +77,7 @@ test('VBA: Windows declares compile on 32- and 64-bit Office, 127.0.0.1 only, no
   assert.match(win64, /Shell """" & exe & """ addin serve", vbHide/);
   assert.match(win64, /Private Const ENGINE_EXE As String = "\\open-charts\\open-charts\.exe"/);
   // The same messages and silent Apply: only the reinstall hint differs.
-  assert.match(win64, /"open-charts can't reach its chart engine \(" & Err\.Description & "\)\." & vbLf & vbLf & WIN_REINSTALL/);
+  assert.match(win64, /"open-charts is not responding \(" & Err\.Description & "\)\." & vbLf & vbLf & WIN_REINSTALL/);
   assert.match(win64, /Report "EXPORT OK " & dest/);
   // ApplyEdit (run by the server through COM) is the same code on both.
   const body = (src: string) => src.slice(src.indexOf('Public Function OCPREFIX_ApplyEdit'), src.indexOf('Private Function Fmt3'));

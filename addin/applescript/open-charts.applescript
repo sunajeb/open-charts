@@ -29,7 +29,7 @@ on engine(request)
 		do shell script "nohup " & engineCmd & " addin serve > /dev/null 2>&1 &"
 		return do shell script "printf '%s' " & requestText & " | " & engineCmd & " addin run -" without altering line endings
 	on error message
-		return "OC" & tab & "1" & linefeed & "E" & tab & "The open-charts engine failed: " & my oneLine(message) & linefeed
+		return "OC" & tab & "1" & linefeed & "E" & tab & "open-charts could not start (" & my oneLine(message) & "). Install open-charts again, then restart PowerPoint." & linefeed
 	end try
 end engine
 

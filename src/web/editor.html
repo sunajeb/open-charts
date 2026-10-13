@@ -288,7 +288,7 @@
     <button id="applyBtn" class="primary" type="button" data-mode="session office" aria-keyshortcuts="Meta+Enter Control+Enter"><span id="applyLabel">Apply to slide</span> <kbd style="color:inherit;border-color:currentColor;opacity:.8">⌘↵</kbd></button>
   </div>
 </header>
-<div class="apply-alert office-banner" id="officeBanner" data-mode="office" data-kind="wait" hidden><span id="officeBannerText"></span><button id="relayoutBtn" class="primary" type="button" hidden>Re-layout to new size</button></div>
+<div class="apply-alert office-banner" id="officeBanner" data-mode="office" data-kind="wait" hidden><span id="officeBannerText"></span><button id="relayoutBtn" class="primary" type="button" hidden>Fit to new size</button></div>
 <div class="apply-alert" id="applyAlert" role="alert" hidden><span id="applyAlertText"></span><button id="applyAlertClose" class="ghost" type="button">Dismiss</button></div>
 
 <div class="app">
@@ -1840,7 +1840,7 @@ function download(blob, name) {
 }
 async function errorText(res) {
   const t = await res.text();
-  try { return JSON.parse(t).error ?? t; } catch { return t || `HTTP ${res.status}`; }
+  try { return JSON.parse(t).error ?? t; } catch { return t || `open-charts did not answer (error ${res.status}). Try again.`; }
 }
 let toastTimer = 0;
 function toast(text, warn = false) {
@@ -1879,7 +1879,7 @@ async function slideOutcome(rev) {
     if (waited > APPLY_GIVE_UP_MS) return { state: 'error', message: 'PowerPoint did not confirm the update. Check the slide; if the chart did not change, click it once and choose Update chart.' };
     try {
       const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { cache: 'no-store' });
-      if (res.status === 404) return { state: 'error', message: 'This edit session is no longer available (the add-in was restarted). Choose Edit data on the chart in PowerPoint again.' };
+      if (res.status === 404) return { state: 'error', message: 'This window lost its link to PowerPoint (open-charts was restarted). Close it, select the chart and click Edit data again.' };
       const s = res.ok ? await res.json() : null;
       if (s && s.rev > rev && ['drawn', 'error', 'cancelled'].includes(s.state)) return s;
     } catch { /* the server is busy or restarting: keep waiting */ }
@@ -1935,7 +1935,7 @@ async function loadSession() {
   $('loadingText').textContent = 'Loading chart from PowerPoint…';
   try {
     const res = await fetch(`/api/session/${encodeURIComponent(session.id)}`, { cache: 'no-store' });
-    if (res.status === 404) return fatal('This edit session is no longer available', 'Close this window and choose Edit data on the chart in PowerPoint again.');
+    if (res.status === 404) return fatal('This chart is no longer available for editing', 'Close this window, select the chart in PowerPoint and click Edit data again.');
     if (!res.ok) throw new Error(await errorText(res));
     const s = await res.json();
     deck = toDeck(structuredClone(s.chart));
@@ -2099,7 +2099,7 @@ function officeApply() {
 }
 if (office) {
   $('revertBtn').onclick = () => officeHostCall('Reverting…', () => office.revert());
-  $('relayoutBtn').onclick = () => officeHostCall('Re-laying out…', () => office.relayout());
+  $('relayoutBtn').onclick = () => officeHostCall('Updating the slide…', () => office.relayout());
   window.OC_EDITOR = {
     load(c, info = {}) {
       officeLoading = true;
@@ -2120,7 +2120,7 @@ if (office) {
       title.replaceChildren();
       if (st.mode === 'edit') title.append('Editing ', Object.assign(document.createElement('b'), { textContent: st.title || 'chart' }));
       else title.append(st.mode === 'insert' ? 'New chart: Insert draws it on the current slide' : 'open-charts');
-      const banner = st.resized ? 'This chart was resized: re-layout plans its labels for the new size.' : st.note ?? '';
+      const banner = st.resized ? 'This chart was resized. Click Fit to new size to lay its labels out again.' : st.note ?? '';
       $('officeBanner').hidden = !banner;
       $('officeBannerText').textContent = banner;
       $('relayoutBtn').hidden = !st.resized;
@@ -2267,6 +2267,17 @@ function showSlide(s) {
   const a = document.activeElement;
   if (a?.dataset?.r !== undefined) showCellTip(a);
 }
+/** A validation error as the user reads it: series and category names instead of JSON paths. */
+function plainError(msg, ch) {
+  const q = (s) => `“${s}”`;
+  return String(msg).replace(/^Invalid chart spec:\n/, 'This data can\'t be drawn yet:\n')
+    .replace(/^\s*\/(series|categories)\/(\d+)(?:\/(values|name)(?:\/(\d+))?)?[^:\n]*:/gm, (all, kind, a, field, b) => {
+      const cat = (i) => ch.categories[i] ?? `column ${+i + 1}`;
+      if (kind === 'categories') return `Category ${q(cat(a))}:`;
+      const s = ch.series[a]?.name ?? `row ${+a + 1}`;
+      return b !== undefined ? `${s} / ${cat(b)}:` : `Series ${q(s)}${field === 'name' ? ' name' : ''}:`;
+    });
+}
 function showError(msg) {
   hasError = true;
   $('previewPanel').classList.add('stale'); $('staleBanner').hidden = false;
@@ -2285,7 +2296,7 @@ function showError(msg) {
     }
   }
   markCellErrors();
-  renderNotes([{ text: msg, cls: 'error', cell: first }]);
+  renderNotes([{ text: plainError(msg, ch), cls: 'error', cell: first }]);
   $('marks').replaceChildren();
 }
 

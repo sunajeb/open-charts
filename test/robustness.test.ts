@@ -63,12 +63,12 @@ test('a chart from a newer open-charts, or damaged tags, gives a plain message, 
     // OC_SPEC chunk missing (VBA SpecOf joins what is there), hand-edited into something else.
     for (const bad of [JSON.stringify(V0).slice(0, 40), 'null', '[]', '{}', '"x"', '42']) {
       const r = await ask(`${o}\n${arg}\n${F}\n\n${bad}`);
-      assert.deepEqual(r.errors, ['This chart\'s data (OC_SPEC tag) is damaged and cannot be read.'], `${op} ${bad}`);
+      assert.deepEqual(r.errors, ['This chart\'s data is damaged, so open-charts can\'t change it. Insert the chart again, or choose Help › Report a problem.'], `${op} ${bad}`);
     }
   }
   // Valid JSON that is not a valid chart: where the problem is, in words.
   const r = await ask(`update\n\n${F}\n\n${JSON.stringify({ ...V0, options: {}, series: [{ name: 'Sales', values: ['x', 5] }] })}`);
-  assert.match(r.errors[0], /^This chart's data \(OC_SPEC tag\) is not valid, so it cannot be laid out:\n\/series\/0\/values\/0: /);
+  assert.match(r.errors[0], /^This chart's data has a problem, so it can't be drawn\. Choose Help › Report a problem and include the chart's data\. Details:\n\/series\/0\/values\/0: /);
 });
 
 /** `bytes` with every part's text passed through `edit` (a deck changed outside open-charts). */

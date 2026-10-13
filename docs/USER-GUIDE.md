@@ -219,7 +219,7 @@ Then **Home › open-charts** opens the pane.
   as long as the same chart stays selected. PowerPoint's own Undo also works, but may need several
   presses for one Apply.
 - **Resize.** After you resize a chart, selecting it shows *This chart was resized* with
-  **Re-layout to new size**, which lays it out again for the new size with its stored data (text
+  **Fit to new size**, which lays it out again for the new size with its stored data (text
   keeps its size, labels are re-placed). Moving a chart needs nothing.
 
 The preview, the issue list and every datasheet feature are the ones described below
@@ -966,7 +966,7 @@ click to the chart engine and draw the shapes it returns. Click **Enable Macros*
 Preferences › Security & Privacy*, set *Macro Security* to warn you (or to enable macros), restart
 PowerPoint and click **Enable Macros** when asked.
 
-**"open-charts can't reach its chart engine".** The add-in calls Node through a small script that
+**"open-charts is not responding".** The add-in calls Node through a small script that
 the install placed in PowerPoint's scripts folder. Run the install again from Terminal and restart
 PowerPoint:
 
@@ -979,7 +979,7 @@ PowerPoint shows the same line.) This also fixes **Node not found** after you up
 nvm): the install records the path of the Node that ran it. Check `node --version` is 22.6 or newer
 first.
 
-**"This add-in and its engine do not match".** You updated open-charts but not the installed copy.
+**"Parts of open-charts do not match".** You updated open-charts but not the installed copy.
 Run the command the message shows (the install command above).
 
 **"Select an open-charts chart first".** Click the chart once (select the whole group, not a shape
@@ -1035,7 +1035,7 @@ Settings… › Trusted Locations*. `%APPDATA%\Microsoft\AddIns\` should be list
 it when it is missing). If your organisation disables all macros, the add-in cannot run until IT
 allows macros from trusted locations.
 
-**"open-charts can't reach its chart engine".** The add-in starts
+**"open-charts is not responding".** The add-in starts
 `%LOCALAPPDATA%\open-charts\open-charts.exe` and talks to it on `127.0.0.1:4174`.
 - *…open-charts.exe is missing*: run `install.ps1` again.
 - *…did not start within 20 seconds*: an antivirus scan or an application-control policy is holding

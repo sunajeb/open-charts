@@ -190,7 +190,7 @@ export async function installUpdate(info: UpdateInfo, deps: InstallDeps = {}): P
   if (policyUpdateOff()) throw new Error('Updates are managed by your IT department.');
   const get = async (url: string) => {
     const res = await (deps.fetch ?? fetch)(url, { headers: { 'user-agent': `open-charts/${info.current}` }, signal: AbortSignal.timeout(300_000) });
-    if (!res.ok) throw new Error(`Download failed: HTTP ${res.status} for ${url}`);
+    if (!res.ok) throw new Error(`Download failed (error ${res.status} for ${url}). Check your internet connection and try again, or download it from ${info.url}`);
     return new Uint8Array(await res.arrayBuffer());
   };
   const want = expectedSha256(new TextDecoder().decode(await get(info.sumsUrl)), info.asset);

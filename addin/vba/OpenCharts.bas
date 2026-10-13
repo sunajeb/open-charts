@@ -35,7 +35,7 @@ Private Const ENGINE_EXE As String = "\open-charts\open-charts.exe"
 ' The server's per-install token ("X-OC-Token: <hex>", src/addin/token.ts) and the user's settings.
 Private Const TOKEN_FILE As String = "\open-charts\token"
 Private Const SETTINGS_FILE As String = "\open-charts\settings.json"
-Private Const WIN_REINSTALL As String = "Run install.ps1 from the open-charts-win folder again (README, Install on Windows), then restart PowerPoint."
+Private Const WIN_REINSTALL As String = "Install open-charts again: run install.ps1 in the open-charts-win folder you downloaded, then restart PowerPoint."
 #If VBA7 Then
 Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
 #Else
@@ -512,13 +512,13 @@ Private Sub Dispatch(ByVal id As String)
     ElseIf id = "btnReport" Then
         ReportProblem
     Else
-        Tell "This button is not known to this version of the add-in (" & id & ")."
+        Tell "This button doesn't work with this version of open-charts (" & id & "). Install the latest open-charts, then restart PowerPoint."
     End If
     gBusy = False
     Exit Sub
 Failed:
     gBusy = False
-    Tell "Something went wrong: " & Err.Description
+    Tell "Something went wrong: " & Err.Description & vbLf & vbLf & "Try again. If it keeps happening, choose Help " & ChrW(&H203A) & " Report a problem."
 End Sub
 
 Private Sub InsertChart(ByVal itemId As String)
@@ -1013,17 +1013,18 @@ Private Function Engine(ByVal request As String) As String
     gEngineMs = gEngineMs + (Timer - t) * 1000
     On Error GoTo 0
     If Left$(result, 3) <> "OC" & vbTab Then
-        Tell "The chart engine gave an unexpected answer:" & vbLf & Left$(result, 300)
+        Report "ENGINE unexpected answer: " & Left$(result, 300)
+        Tell "open-charts could not finish this. Try again; if it keeps happening, choose Help " & ChrW(&H203A) & " Report a problem."
         Exit Function
     End If
     Engine = result
     Exit Function
 NoBridge:
 #If Mac Then
-    Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & _
-        "Open Terminal and run:" & vbLf & REINSTALL & vbLf & "then restart PowerPoint."
+    Tell "open-charts is not responding (" & Err.Description & ")." & vbLf & vbLf & _
+        "To fix it, open Terminal, run this, then restart PowerPoint:" & vbLf & REINSTALL
 #Else
-    Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & WIN_REINSTALL
+    Tell "open-charts is not responding (" & Err.Description & ")." & vbLf & vbLf & WIN_REINSTALL
 #End If
 End Function
 
@@ -1136,7 +1137,7 @@ Private Function WinEngine(ByVal request As String) As String
     If ok Then WinEngine = result: Exit Function
     If Not WinStartServer(20000) Then
         If Dir(Environ("LOCALAPPDATA") & ENGINE_EXE) = "" Then Err.Raise vbObjectError + 1, , Environ("LOCALAPPDATA") & ENGINE_EXE & " is missing"
-        Err.Raise vbObjectError + 2, , "the engine did not start within 20 seconds"
+        Err.Raise vbObjectError + 2, , "open-charts.exe did not start within 20 seconds"
     End If
     result = WinHttp("run", request, 30000, ok)
     If Not ok Then Err.Raise vbObjectError + 3, , result
@@ -1189,7 +1190,7 @@ Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeo
         ok = True
         WinHttp = http.responseText
     Else
-        WinHttp = "the engine answered " & http.Status & ": " & Left$(http.responseText, 200)
+        WinHttp = "error " & http.Status & ": " & Left$(http.responseText, 200)
     End If
     Exit Function
 Failed:
@@ -2171,11 +2172,11 @@ Private Sub AgendaPlaceholder()
     Set lay = ActiveWindow.View.Slide
     On Error GoTo 0
     If lay Is Nothing Then
-        Tell "Agenda Placeholder works on a slide layout: choose View > Slide Master, select the layout named """ & AGENDA_LAYOUT & """, then click Agenda Placeholder again."
+        Tell "Agenda Placeholder works on a slide layout: choose View " & ChrW(&H203A) & " Slide Master, select the layout named """ & AGENDA_LAYOUT & """, then click Agenda Placeholder again."
         Exit Sub
     End If
     If TypeName(lay) <> "CustomLayout" Then
-        Tell "Agenda Placeholder works on a slide layout: choose View > Slide Master, select the layout named """ & AGENDA_LAYOUT & """, then click Agenda Placeholder again."
+        Tell "Agenda Placeholder works on a slide layout: choose View " & ChrW(&H203A) & " Slide Master, select the layout named """ & AGENDA_LAYOUT & """, then click Agenda Placeholder again."
         Exit Sub
     End If
     For Each shp In lay.Shapes
