@@ -27,6 +27,31 @@ export function chartTags(spec: object, frame: Frame, font: string, chunk = SPEC
   return tags;
 }
 
+/**
+ * A long tag value as tags: `name` when it fits, else `name_0`..`name_n` plus `name_N` (the count),
+ * like OC_SPEC. Used for OC_BASE (last-rendered formatting per role, core/overrides.ts).
+ */
+export function chunkedTags(name: string, value: string, chunk = SPEC_CHUNK): Tags {
+  if (value.length <= chunk) return [[name, value]];
+  const parts = splitChunks(value, chunk);
+  return [...parts.map((p, i): [string, string] => [`${name}_${i}`, p]), [`${name}_N`, String(parts.length)]];
+}
+
+/** Reassembles a chunked tag (see chunkedTags); undefined when absent. Names match case-insensitively. */
+export function chunkedValue(tags: Record<string, string>, name: string): string | undefined {
+  const t = upper(tags), key = name.toUpperCase();
+  if (t[key] !== undefined) return t[key];
+  if (t[`${key}_N`] === undefined) return undefined;
+  const n = Number(t[`${key}_N`]);
+  const parts: string[] = [];
+  for (let i = 0; i < n; i++) {
+    const p = t[`${key}_${i}`];
+    if (p === undefined) throw new Error(`${name} chunk ${i} of ${n} is missing`);
+    parts.push(p);
+  }
+  return parts.join('');
+}
+
 function splitChunks(s: string, size: number): string[] {
   const out: string[] = [];
   for (let i = 0; i < s.length;) {
