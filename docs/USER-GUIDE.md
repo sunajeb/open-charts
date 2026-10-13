@@ -10,6 +10,8 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [Chart types](#chart-types)
 - [Numbers: units, decimals, magnitudes, separators](#numbers-units-decimals-magnitudes-separators)
 - [Decorations: totals, CAGR and difference arrows](#decorations-totals-cagr-and-difference-arrows)
+- [Colours and your deck's theme](#colours-and-your-decks-theme)
+- [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
 - [Resizing](#resizing)
 - [Hidden labels and why](#hidden-labels-and-why)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -72,7 +74,8 @@ The datasheet is the same in the add-in's **Edit data** window and in the standa
 
 - **Columns are categories** (years, regions, slices, activities). The header row holds their names.
 - **Rows are series** (segments, lines, groups). The first column holds their names, with a colour
-  swatch to change the series colour.
+  swatch to change the series colour: a **theme colour** (Accent 1–6, which follows the deck's
+  theme), one of the fixed accents, any hex colour, or **Automatic** (the next palette colour).
 - A one-line hint above the sheet says what rows and columns mean for the current chart type.
 - **Paste from Excel.** Copy a range in Excel and paste it into a cell: it fills the sheet from that
   cell, adding rows and columns as needed. Paste into the top-left corner cell to replace the whole
@@ -311,6 +314,37 @@ minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail 
   otherwise the arrow is left out and reported.
 - **Difference arrow** (stacked and 100%): the signed difference between two column totals.
 - **Total columns** (waterfall): which categories stand on the baseline.
+
+## Colours and your deck's theme
+
+Charts use your presentation's theme colours by default: series in Accent 1, 2, 3 … in turn, text in
+the theme's text colour, the thin separators between segments in its background colour. A chart
+inserted into a client's deck therefore takes the client's colours, and changing the theme (Design ›
+Variants › Colors, or a new template) recolours the chart along with PowerPoint's own shapes —
+nothing to update. Labels on a dark segment turn white; the add-in decides that with the slide's
+actual theme colours.
+
+The greys of axes and secondary text and the green/red of waterfall increases and decreases are fixed
+colours that do not change with the theme. A series colour you pick from **Theme colours** follows the
+theme too; one you pick as a hex colour stays exactly that colour.
+
+Decks written by the command line come with the open-charts theme (navy to grey, near-black text).
+A `style` in the deck can change that theme, the palette, fonts and default number formats for every
+chart — see [DATA-FORMAT.md › Style](DATA-FORMAT.md#style).
+
+## Two charts on a slide, same scale
+
+Consultants often put two charts side by side — a revenue bridge next to the revenue history, two
+regions — and the reader compares column heights across them. That only works when both use the
+same scale. Give the charts the same **scale group** (`"scaleGroup": "revenue"` in their options,
+see [DATA-FORMAT.md › scaleGroup](DATA-FORMAT.md#scalegroup)): the chart with the largest values for
+its size keeps its scale, and the others draw one unit exactly as long, leaving room above their
+columns. Stacked, clustered, waterfall, line, area and combination charts can share a scale.
+
+In PowerPoint the group stays consistent: **Update chart**, **Apply** in the editor and resizing one
+chart of the group re-lay out the other charts of the group on that slide as well. From the command
+line, a slide can hold several charts (`"charts": [...]`); without explicit frames they share the
+chart area side by side.
 
 ## Resizing
 

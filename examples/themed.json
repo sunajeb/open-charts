@@ -1,0 +1,36 @@
+{
+  "style": {
+    "theme": {
+      "dk1": "1B1B1B", "lt1": "FFFFFF", "dk2": "0E4D64", "lt2": "E8F1F2",
+      "accent1": "0E4D64", "accent2": "137177", "accent3": "188977", "accent4": "39A96B", "accent5": "8FC1A9", "accent6": "C9DFD2"
+    },
+    "palette": ["accent1", "accent2", "accent3", "accent4"],
+    "negative": "B23A48",
+    "numbers": { "locale": "de-DE" }
+  },
+  "slides": [
+    {
+      "title": "Gross margin by segment (theme colours, German number format)",
+      "chart": {
+        "type": "stacked",
+        "categories": ["2021", "2022", "2023", "2024"],
+        "series": [
+          { "name": "Services", "values": [12.4, 14.1, 16.8, 19.2] },
+          { "name": "Software", "values": [8.2, 9.6, 11.3, 13.9] },
+          { "name": "Hardware", "values": [6.1, 5.8, 5.2, 4.9] },
+          { "name": "One-offs", "values": [1.2, 0.8, 1.5, 0.7], "color": "A6A6A6" }
+        ],
+        "options": { "unit": " Mio. €", "cagr": { "from": 0, "to": 3 } }
+      }
+    },
+    {
+      "title": "Margin bridge 2023 to 2024",
+      "chart": {
+        "type": "waterfall",
+        "categories": ["2023", "Price", "Mix", "Volume", "Costs", "2024"],
+        "series": [{ "name": "Change", "values": [34.8, 3.1, 1.6, 2.4, -3.2, "e"] }],
+        "options": { "unit": " Mio. €" }
+      }
+    }
+  ]
+}

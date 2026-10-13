@@ -1,0 +1,55 @@
+{
+  "slides": [
+    {
+      "title": "Price and volume added 19m between 2023 and 2024",
+      "charts": [
+        {
+          "chart": {
+            "type": "stacked",
+            "categories": ["2022", "2023", "2024"],
+            "series": [
+              { "name": "Core", "values": [20, 30, 47] },
+              { "name": "New", "values": [5, 6, 8] }
+            ],
+            "options": { "scaleGroup": "revenue", "unit": "m" }
+          }
+        },
+        {
+          "chart": {
+            "type": "waterfall",
+            "categories": ["2023", "Price", "Volume", "2024"],
+            "series": [{ "name": "Change", "values": [36, 9, 10, "e"] }],
+            "options": { "scaleGroup": "revenue", "unit": "m" }
+          }
+        }
+      ]
+    },
+    {
+      "title": "Asia is about a third of Europe's size, at one scale",
+      "charts": [
+        {
+          "frame": { "x": 48, "y": 96, "w": 520, "h": 408 },
+          "chart": {
+            "type": "clustered",
+            "categories": ["2022", "2023", "2024"],
+            "series": [
+              { "name": "Europe", "values": [120, 130, 140] }
+            ],
+            "options": { "scaleGroup": "region", "valueAxis": true, "seriesLabels": "none" }
+          }
+        },
+        {
+          "frame": { "x": 600, "y": 96, "w": 312, "h": 408 },
+          "chart": {
+            "type": "clustered",
+            "categories": ["2022", "2023", "2024"],
+            "series": [
+              { "name": "Asia", "values": [40, 44, 47], "color": "accent2" }
+            ],
+            "options": { "scaleGroup": "region", "valueAxis": true, "seriesLabels": "none" }
+          }
+        }
+      ]
+    }
+  ]
+}

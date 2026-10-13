@@ -4,13 +4,14 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { editorHtml, getSession, serve, type Session } from '../src/server.ts';
 import { editorSpec } from '../src/core/spec.ts';
+import { DEFAULT_THEME, defaultStyle } from '../src/core/index.ts';
 
 test('the editor page carries the engine option table, per-type defaults and limits before its script', () => {
   const html = editorHtml();
   const m = /<script>window\.OC_SPEC = (.*?);<\/script>/.exec(html);
   assert.ok(m, 'OC_SPEC is set');
   assert.ok(html.indexOf(m[0]) < html.indexOf('<script>', html.indexOf(m[0]) + m[0].length), 'before the editor script');
-  assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify(editorSpec())));
+  assert.deepEqual(JSON.parse(m[1]), JSON.parse(JSON.stringify({ ...editorSpec(), palette: defaultStyle.palette, theme: DEFAULT_THEME })));
   const spec = editorSpec();
   assert.equal(spec.defaults.mekko.totals, true);
   assert.equal(spec.defaults.line.valueAxis, true);
