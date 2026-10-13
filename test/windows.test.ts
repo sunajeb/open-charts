@@ -125,7 +125,8 @@ else require('readline').createInterface({ input: process.stdin }).on('line', (l
   process.stdout.write(JSON.stringify(reply) + '\\n');
 });`;
     const runner = macroRunner(process.execPath, ['-e', fake]);
-    const hung = await runner.run('x', [], 300);
+    // Long enough for node to start the first helper even on a loaded machine (it must record its run).
+    const hung = await runner.run('x', [], 3000);
     assert.ok('error' in hung && hung.error.killed, 'a helper that never answers times out');
     assert.equal(await runner.ping(10_000), true, 'and a fresh helper takes the next request');
     assert.deepEqual(await runner.connect(5000), { out: 'not running' });

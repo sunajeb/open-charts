@@ -39,7 +39,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
     case 'types':
       for (const g of galleryItems()) {
         const s = sampleFor(g.id);
-        console.log(`${g.id.padEnd(12)} ${g.label.padEnd(18)} ${'spec' in s ? 'available' : 'not yet'}`);
+        console.log(`${g.id.padEnd(12)} ${g.label.replace(/\s*\n\s*/g, ' ').padEnd(22)} ${'spec' in s ? 'available' : 'not yet'}`);
       }
       return;
     case 'build': {
