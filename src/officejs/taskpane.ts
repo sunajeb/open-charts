@@ -8,12 +8,12 @@
 //   the chart was resized            → banner: "Re-layout to new size"
 // Path B (native shapes in a group) where the PowerPoint can draw the scene, else Path A (the
 // writer's slide via insertSlidesFromBase64), see plan.ts.
-import type { ChartSpec, Frame, Measurer, ThemeColors } from '../core/index.ts';
+import type { ChartSpec, Frame, ThemeColors } from '../core/index.ts';
 import type { DeckSpec } from '../deck.ts';
 import { parseFrame, specJson } from '../render/tags.ts';
 import { ENGINE_VERSION } from '../version.ts';
 import { buildChart, chartDeck, CHART_FRAME, fromBase64, renderDeck, resolveFrame, toBase64, type StoredSpec } from './engine.ts';
-import { loadMeasurer } from './measure.ts';
+import { loadMeasurer, specFonts, type BrowserMeasurer } from './measure.ts';
 import { samples } from '../core/samples.ts';
 import { hostCaps, NO_CAPS, planScene, type HostCaps } from './plan.ts';
 import { drawPathB, exportSlides, insertSlide, readSelection, replaceSlide, REPLACE_MARKER, slideTheme, type SelectedChart } from './powerpoint.ts';
@@ -37,7 +37,13 @@ export function log(event: string, data: Record<string, unknown> = {}) {
 // ---- State --------------------------------------------------------------------------------------
 let caps: HostCaps = NO_CAPS;
 let officeReady = false;
-const measurer: Promise<Measurer> = loadMeasurer().catch((e) => { log('fonts-error', { message: String(e) }); throw e; });
+const measurer: Promise<BrowserMeasurer> = loadMeasurer().catch((e) => { log('fonts-error', { message: String(e) }); throw e; });
+/** The measurer, with the fonts of these charts (and styles) loaded. */
+async function measurerFor(...specs: (Parameters<typeof specFonts>[0])[]): Promise<BrowserMeasurer> {
+  const m = await measurer;
+  await m.load(specs.flatMap(specFonts));
+  return m;
+}
 
 interface Bound { chart: SelectedChart; spec: StoredSpec; frame: Frame; resized: boolean }
 let bound: Bound | null = null;
@@ -78,7 +84,7 @@ async function refresh(force = false) {
     let spec: StoredSpec;
     try { spec = JSON.parse(json); } catch { publish('This chart\'s data (OC_SPEC tag) is damaged and cannot be read.'); return; }
     theme = await slideTheme(caps, sel.chart.slideId);
-    const m = await measurer;
+    const m = await measurerFor(spec);
     const { frame, resized } = resolveFrame(spec, parseFrame(sel.chart.tags.OC_FRAME), sel.chart.bounds, m, theme);
     const same = bound?.chart.id === sel.chart.id || rebinding;
     if (!same) history = [];
@@ -95,7 +101,7 @@ async function refresh(force = false) {
 // ---- Drawing ---------------------------------------------------------------------------------------
 async function draw(spec: StoredSpec, frame: Frame, replace?: SelectedChart): Promise<string> {
   const t0 = performance.now();
-  const m = await measurer;
+  const m = await measurerFor(spec);
   const target = replace?.slideId ?? slideId;
   theme = await slideTheme(caps, target);
   const built = buildChart(spec, frame, m, theme);
@@ -144,7 +150,7 @@ async function run<T>(what: string, f: () => Promise<T>): Promise<T> {
 // ---- The host the editor talks to (src/web/editor.html, ?host=office) -------------------------------
 w.OC_HOST = {
   async render(payload: DeckSpec & { slides: { title?: string; chart: ChartSpec }[] }) {
-    const m = await measurer;
+    const m = await measurerFor(payload, ...payload.slides.map((s) => s.chart));
     const frame = bound?.frame ?? CHART_FRAME;
     const deck: DeckSpec = {
       style: payload.style,

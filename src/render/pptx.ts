@@ -5,6 +5,7 @@
 import type { PathShape, Scene, Shape, TextShape } from '../core/types.ts';
 import { flattenPath, pathBounds, rectGeom } from '../core/path.ts';
 import { colorHex, colorSlot, colorTheme, DEFAULT_THEME, type ThemeColors } from '../core/theme.ts';
+import { resolveFont, type ThemeFonts } from '../core/fonts.ts';
 import type { Tags } from './tags.ts';
 import { zip } from './zip.ts';
 
@@ -14,6 +15,8 @@ export interface SceneContent {
   altText: string;
   /** Group-level tags, normally chartTags(...). */
   tags?: Tags;
+  /** The chart's font, when it is not the deck's (a chart's own style.font). */
+  font?: string;
 }
 
 export interface SlideContent {
@@ -163,7 +166,7 @@ function slideXml(slide: SlideContent, font: string, addTags: AddTags): string {
   if (slide.title) {
     body += textXml({ kind: 'text', x: 36, y: 24, w: SLIDE.w - 72, h: 44, text: slide.title, size: 24, color: '1A1A1A', bold: true, align: 'left', valign: 'top' }, ids.next(), font, TITLE_NAME);
   }
-  for (const s of slide.scenes) body += groupXml(s, ids, font, addTags);
+  for (const s of slide.scenes) body += groupXml(s, ids, s.font ?? font, addTags);
   const cust = slide.tags?.length ? `<p:custDataLst><p:tags r:id="${addTags(slide.tags)}"/></p:custDataLst>` : '';
   return `${XML}<p:sld ${NS}${slide.hidden ? ' show="0"' : ''}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${body}</p:spTree>${cust}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
 }
@@ -173,14 +176,18 @@ const rels = (items: [string, string][]) =>
 
 const EMPTY_TREE = '<p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree>';
 
-/** theme1.xml of a CLI deck: the style's theme colours (default: the open-charts theme) and font. */
-function theme(font: string, t: ThemeColors): string {
+/**
+ * theme1.xml of a CLI deck: the style's theme colours (default: the open-charts theme) and fonts: the
+ * style's `themeFonts`, else its font for both (a theme font name there stands for Arial).
+ */
+function theme(font: string, t: ThemeColors, fonts: ThemeFonts = {}): string {
+  const major = fonts.major ?? resolveFont(font, { font, themeFonts: fonts }), minor = fonts.minor ?? resolveFont(font, { font, themeFonts: fonts });
   const clr = (n: string, v: string) => `<a:${n}><a:srgbClr val="${v}"/></a:${n}>`;
   const solid = '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>';
-  return `${XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="open-charts"><a:themeElements><a:clrScheme name="open-charts">${(['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'] as const).map((k) => clr(k, t[k])).join('')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme><a:fontScheme name="open-charts"><a:majorFont><a:latin typeface="${esc(font)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${esc(font)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="open-charts"><a:fillStyleLst>${solid}${solid}${solid}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350">${solid}</a:ln><a:ln w="12700">${solid}</a:ln><a:ln w="19050">${solid}</a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${solid}${solid}${solid}</a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`;
+  return `${XML}<a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="open-charts"><a:themeElements><a:clrScheme name="open-charts">${(['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'] as const).map((k) => clr(k, t[k])).join('')}${clr('hlink', '0563C1')}${clr('folHlink', '954F72')}</a:clrScheme><a:fontScheme name="open-charts"><a:majorFont><a:latin typeface="${esc(major)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="${esc(minor)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="open-charts"><a:fillStyleLst>${solid}${solid}${solid}</a:fillStyleLst><a:lnStyleLst><a:ln w="6350">${solid}</a:ln><a:ln w="12700">${solid}</a:ln><a:ln w="19050">${solid}</a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst>${solid}${solid}${solid}</a:bgFillStyleLst></a:fmtScheme></a:themeElements><a:objectDefaults/><a:extraClrSchemeLst/></a:theme>`;
 }
 
-export function writePptx(slides: SlideContent[], font = 'Arial', themeColors: ThemeColors = DEFAULT_THEME): Uint8Array {
+export function writePptx(slides: SlideContent[], font = 'Arial', themeColors: ThemeColors = DEFAULT_THEME, themeFonts?: ThemeFonts): Uint8Array {
   const n = slides.length;
   const tagParts: string[] = [];
   const slideFiles: { name: string; data: string }[] = [];
@@ -219,7 +226,7 @@ export function writePptx(slides: SlideContent[], font = 'Arial', themeColors: T
     data: `${XML}<p:sldLayout ${NS} type="blank" preserve="1"><p:cSld name="Blank">${EMPTY_TREE}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>`,
   });
   files.push({ name: 'ppt/slideLayouts/_rels/slideLayout1.xml.rels', data: rels([['slideMaster', '../slideMasters/slideMaster1.xml']]) });
-  files.push({ name: 'ppt/theme/theme1.xml', data: theme(font, themeColors) });
+  files.push({ name: 'ppt/theme/theme1.xml', data: theme(font, themeColors, themeFonts) });
   files.push(...slideFiles);
   tagParts.forEach((data, i) => files.push({ name: `ppt/tags/tag${i + 1}.xml`, data }));
   return zip(files);

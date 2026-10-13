@@ -1,5 +1,5 @@
 import type { ChartSpec, Frame, Scene, Style } from './core/index.ts';
-import { checkScene, defaultStyle, layoutGroup, fileStyle, mergeStyles, migrate, scaleGroupOf, styleFor, themeOf, type StyleFile } from './core/index.ts';
+import { checkScene, defaultStyle, layoutGroup, fileStyle, measurerFor, mergeStyles, migrate, resolveFont, scaleGroupOf, styleFor, themeOf, type StyleFile } from './core/index.ts';
 import type { Measurer } from './core/text.ts';
 import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
 import { chartTags, chunkedTags } from './render/tags.ts';
@@ -120,14 +120,14 @@ export function buildDeck(deck: DeckSpec, m: Measurer, styleFile?: StyleFile): {
       const title = s.title ?? deck.agenda?.title ?? 'Agenda';
       return {
         charts: [],
-        slide: { title, scene: a.content!.scene, scenes: [a.content!.scene], svg: sceneToSvg([a.content!.scene], SLIDE, title, style.font), issues: [] },
+        slide: { title, scene: a.content!.scene, scenes: [a.content!.scene], svg: sceneToSvg([a.content!.scene], SLIDE, title, resolveFont(style.font, style)), issues: [] },
         content: [a.content!],
         extra: { title, tags: a.tags, hidden: a.hidden },
       };
     }
     if (!s.chart && !s.charts) {
       const scene: Scene = { frame: CHART_FRAME, shapes: [], hidden: [] };
-      return { charts: [], slide: { title: s.title, scene, scenes: [], svg: sceneToSvg([], SLIDE, s.title, style.font), issues: [] }, content: [], extra: { title: s.title, tags: agenda[i]?.tags } };
+      return { charts: [], slide: { title: s.title, scene, scenes: [], svg: sceneToSvg([], SLIDE, s.title, resolveFont(style.font, style)), issues: [] }, content: [], extra: { title: s.title, tags: agenda[i]?.tags } };
     }
     // Older (v0) specs lose options their chart type does not use; say so instead of failing.
     const migrated: string[] = [];
@@ -137,19 +137,20 @@ export function buildDeck(deck: DeckSpec, m: Measurer, styleFile?: StyleFile): {
     const issues = [
       ...migrated.map((w) => `warning: ${w}`),
       ...scenes.flatMap((scene, k) => [
-        ...checkScene(scene, { measurer: m }).map((i) => `${i.kind}: ${at(k)}${i.detail}`),
+        ...checkScene(scene, { measurer: measurerFor(m, resolveFont(charts[k].chart.style?.font ?? style.font, { ...style, ...charts[k].chart.style })) }).map((i) => `${i.kind}: ${at(k)}${i.detail}`),
         ...scene.hidden.map((h) => `hidden: ${at(k)}${h}`),
+        ...(scene.warnings ?? []).filter((w) => w.startsWith('font "')).map((w) => `warning: ${at(k)}${w}`),
       ]),
     ];
     const font = (k: number) => charts[k].chart.style?.font ?? style.font;
     return {
       charts,
-      slide: { title: s.title, scene: scenes[0], scenes, svg: sceneToSvg(scenes, SLIDE, s.title, font(0)), issues },
+      slide: { title: s.title, scene: scenes[0], scenes, svg: sceneToSvg(scenes, SLIDE, s.title, resolveFont(font(0), { ...style, ...charts[0]?.chart.style })), issues },
       content: scenes.map((scene, k) => chartContent(charts[k].chart, scene, font(k), deckStyle)),
       extra: { title: s.title, tags: agenda[i]?.tags } as { title?: string; tags?: Tags; hidden?: boolean },
     };
   });
-  const pptx = writePptx(built.map((b) => ({ ...b.extra, scenes: b.content })), style.font, themeOf(style));
+  const pptx = writePptx(built.map((b) => ({ ...b.extra, scenes: b.content })), style.font, themeOf(style), style.themeFonts);
   return { pptx, slides: built.map((b) => b.slide) };
 }
 
@@ -167,7 +168,7 @@ export function chartContent(chart: ChartSpec, scene: Scene, font: string, style
   // OC_BASE: the formatting this layout draws, per role, so the next update can tell what the user
   // changed with PowerPoint's own tools and keep it as an override (core/overrides.ts mergeNativeEdits).
   if (scene.roles?.length && scene.roles[0] !== 'placeholder') tags.push(...chunkedTags('OC_BASE', JSON.stringify(baseOf(scene.shapes, scene.roles, font))));
-  return { scene, name, altText: altText(chart), tags };
+  return { scene, name, altText: altText(chart), tags, font };
 }
 
 /** A scale (pt per unit) as plain decimal digits, 8 significant: VBA's Val() reads no exponent. */

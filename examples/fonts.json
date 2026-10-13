@@ -1,0 +1,56 @@
+{
+  "style": { "themeFonts": { "major": "Caladea", "minor": "Carlito" } },
+  "slides": [
+    {
+      "title": "Liberation Serif (Times New Roman widths): EBITDA bridge",
+      "chart": {
+        "type": "waterfall",
+        "categories": ["EBITDA 2023", "Volume", "Price", "Mix", "Raw materials", "Personnel", "EBITDA 2024"],
+        "series": [{ "name": "Change", "values": [412, 38, 21, -9, -27, -18, "e"] }],
+        "options": { "unit": "m" },
+        "style": { "font": "Liberation Serif" }
+      }
+    },
+    {
+      "title": "Carlito (Calibri widths): long category names",
+      "chart": {
+        "type": "stacked",
+        "categories": ["North America", "Western Europe", "Asia Pacific (excluding Japan)", "Japan", "Latin America", "Middle East and Africa"],
+        "series": [
+          { "name": "Enterprise", "values": [96, 74, 58, 31, 22, 14] },
+          { "name": "Mid-market", "values": [41, 37, 29, 12, 15, 9] },
+          { "name": "SMB", "values": [26, 21, 18, 8, 11, 6] }
+        ],
+        "options": { "unit": "m", "totals": true },
+        "style": { "font": "Carlito" }
+      }
+    },
+    {
+      "title": "Caladea (Cambria widths): eight quarters",
+      "chart": {
+        "type": "clustered",
+        "categories": ["Q1 2024", "Q2 2024", "Q3 2024", "Q4 2024", "Q1 2025", "Q2 2025", "Q3 2025", "Q4 2025"],
+        "series": [
+          { "name": "Plan", "values": [12.4, 13.1, 13.8, 15.2, 15.9, 16.4, 17.0, 18.3] },
+          { "name": "Actual", "values": [12.1, 13.5, 14.2, 14.9, 16.3, 16.1, 17.8, 19.0] }
+        ],
+        "options": { "decimals": 1 },
+        "style": { "font": "Caladea" }
+      }
+    },
+    {
+      "title": "The theme's body font: +mn-lt = Carlito",
+      "chart": {
+        "type": "mekko",
+        "categories": ["Retail banking", "Corporate banking", "Wealth management", "Insurance"],
+        "series": [
+          { "name": "Leader", "values": [42, 31, 18, 25] },
+          { "name": "Challenger", "values": [28, 22, 12, 19] },
+          { "name": "Others", "values": [30, 27, 20, 21] }
+        ],
+        "options": { "unit": "bn" },
+        "style": { "font": "+mn-lt" }
+      }
+    }
+  ]
+}

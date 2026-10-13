@@ -2,7 +2,7 @@
 //   node --experimental-strip-types --no-warnings scripts/resize-report.ts [name-regex] [-v]
 import { layoutChart } from '../src/core/index.ts';
 import { createMeasurer } from '../src/fonts.ts';
-import { allCases, allFrames, resizeProblems } from '../test/resize-matrix.ts';
+import { allCases, allFrames, chartMeasurer, resizeProblems } from '../test/resize-matrix.ts';
 
 const m = createMeasurer();
 const args = process.argv.slice(2);
@@ -21,7 +21,7 @@ for (const c of allCases()) {
   for (const f of allFrames()) {
     total++;
     let probs: string[];
-    try { probs = resizeProblems(layoutChart(c.spec, f, m), m, ref); } catch (e) { probs = [`exception: ${(e as Error).message.split('\n')[0]}`]; }
+    try { probs = resizeProblems(layoutChart(c.spec, f, m), chartMeasurer(c.spec, m), ref); } catch (e) { probs = [`exception: ${(e as Error).message.split('\n')[0]}`]; }
     if (!probs.length) continue;
     bad++;
     const t = c.spec.type;

@@ -127,7 +127,8 @@ export function labelSpec(ctx: Ctx, role: string, own: string, size = ctx.fs, bo
   const st = ctx.ov?.get(role);
   const t = st ? labelContent(contentSource(ctx), role, st, own) ?? own : own;
   const sz = st?.size ?? size, b = st?.bold ?? bold;
-  const w = ctx.m.width(t, sz, b), h = t.split('\n').length * ctx.m.lineHeight(sz);
+  const m = st?.font !== undefined && ctx.ov?.measure ? ctx.ov.measure(st.font) : ctx.m;
+  const w = m.width(t, sz, b), h = t.split('\n').length * m.lineHeight(sz);
   const rot = st?.rotate === 90 || st?.rotate === -90;
   return { text: t, size: sz, bold: b, w: rot ? h : w, h: rot ? w : h, ...(st ? { st } : {}) };
 }

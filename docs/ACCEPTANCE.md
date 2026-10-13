@@ -524,3 +524,24 @@ under 5 ms; the commit costs one ApplyEdit (0.4–0.7 s), during which the ghost
 
 **Limits:** keyboard zoom (⌘+/⌘−) is not noticed until the next click; no handles yet for CAGR /
 difference arrows (no position option), legend, rotation or axis minimum; Windows has none.
+
+## 14. Any font (tasks B1–B4)
+
+Offline evidence (2026-10-13, this Mac: PowerPoint for Mac's DFonts present, Segoe UI absent):
+
+| Check | Evidence | Result |
+|---|---|---|
+| Metrics read from the font tables equal opentype.js's | `test/fonts.test.ts`: Liberation Sans, Arial, Georgia, Verdana, Times New Roman, Calibri, Aptos (every code point, advance, units per em) | Pass |
+| Widths equal the browser's own text shaping, kerning off | canvas `measureText` in Chromium vs Node for Arial, Helvetica, Helvetica Neue, Georgia, Times New Roman, Verdana, Avenir Next, Futura, Courier New and STIX Two Text (variable: bold from HVAR at wght 700), regular and bold | Pass, identical to 0.00 % |
+| Resolver: family / typographic family / full name, bold, italic, `.ttc`, variable bold, CFF, hashed cloud-font file in a subfolder, index cached and refreshed | `test/fonts.test.ts` with synthetic fonts | Pass |
+| Theme fonts: `+mn-lt` / `+mj-lt` lay out as the deck's fonts; add-in `majorfont=` / `minorfont=` | `test/fonts.test.ts` | Pass |
+| Missing font: substitute (Liberation Sans → Arial, Carlito → Calibri, Caladea → Cambria) or wide stand-in, reported once | `test/fonts.test.ts`, goldens `fonts-*` | Pass |
+| Quality gate: every chart type × 3 frames × Arial, Helvetica, Helvetica Neue, Georgia, Times New Roman, Verdana, Calibri, Aptos, Cambria, Courier New, a missing font | `test/fonts.test.ts` | 0 overlaps / overflows; an Arial-measured mekko drawn in Verdana does overflow (the reason for this work) |
+| Office.js: server metrics → byte-identical scene to Node (Georgia, Verdana, Times New Roman); canvas widths equal Node's | `test/e2e/officejs.spec.ts` (Chromium) | Pass |
+| Goldens in Liberation Serif, Carlito, Caladea and `+mn-lt` (LibreOffice renders these exact fonts) | `test/goldens/darwin/fonts-1…4.png`, looked at | Pass |
+
+**Live (pending, owner-approved window):** `npm run e2e:fonts` opens a deck with charts in Arial,
+Georgia, Verdana, Times New Roman, Helvetica Neue, Calibri, Aptos and `+mn-lt` (theme Georgia /
+Verdana), runs Update chart on each, reads every label's `BoundWidth` back from PowerPoint and
+compares it with the engine's width (within 2 %, no label wider than its box). `--dry-run` shows the
+plan without PowerPoint. Report: `out/e2e-fonts/report.txt`, PNGs in `out/e2e-fonts/png`.

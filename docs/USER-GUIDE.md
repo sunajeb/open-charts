@@ -11,6 +11,7 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [Numbers: units, decimals, magnitudes, separators](#numbers-units-decimals-magnitudes-separators)
 - [Decorations: totals, arrows, value lines, gaps and breaks](#decorations-totals-arrows-value-lines-gaps-and-breaks)
 - [Colours and your deck's theme](#colours-and-your-decks-theme)
+- [Fonts](#fonts)
 - [A client's look: style files](#a-clients-look-style-files)
 - [Fill a template](#fill-a-template)
 - [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
@@ -253,9 +254,9 @@ size) is not read back by the pane yet and is replaced; the `.ppam` add-in keeps
 Element overrides the pane cannot draw as shapes (pattern fills, theme fonts) send the chart through
 the re-inserted slide.
 
-**Fonts.** Text is measured with the bundled Liberation Sans, which has Arial's widths, so Arial
-charts fit exactly. Charts in another font are measured as if they were Arial; labels may be a little
-tighter or looser than planned.
+**Fonts.** Arial is measured with the bundled Liberation Sans (same widths), so Arial charts fit
+exactly. Other fonts: see [Fonts](#fonts) — exact when the pane is served by `npm run officejs:serve`,
+else with the browser's copy of the font, else a wider stand-in, which the chart reports.
 
 ### Troubleshooting the pane
 
@@ -602,6 +603,52 @@ theme too; one you pick as a hex colour stays exactly that colour.
 Decks written by the command line come with the open-charts theme (navy to grey, near-black text).
 A `style` in the deck can change that theme, the palette, fonts and default number formats for every
 chart — see [DATA-FORMAT.md › Style](DATA-FORMAT.md#style).
+
+## Fonts
+
+Charts can use any font. open-charts measures every label in the font PowerPoint will draw it in, so
+labels fit and line up in Arial, Calibri, Aptos, Georgia, Helvetica Neue, Segoe UI, Times New Roman,
+Verdana or a corporate font alike. Set the font in the editor's style, in a deck's or a style file's
+`style.font`, or on the command line:
+
+```sh
+open-charts examples/deck.json --font Georgia -o out/deck
+```
+
+**Theme fonts.** `+mn-lt` (body) and `+mj-lt` (headings) stand for the presentation's theme fonts,
+like PowerPoint's "Body" and "Headings" entries. The add-in reads them from the deck it draws in;
+the command line and `fill` take them from the template's theme or from `style.themeFonts`.
+
+**Where fonts are found.** Fonts installed for the computer or for you, and Microsoft Office's own
+fonts, which PowerPoint uses but the system does not list:
+
+| | Folders searched |
+|---|---|
+| Mac | `/System/Library/Fonts` (and `Supplemental`), `/Library/Fonts`, `~/Library/Fonts`, PowerPoint's own fonts (`Microsoft PowerPoint.app/Contents/Resources/DFonts`: Calibri, Cambria, Aptos, …), Office's downloaded cloud fonts (`~/Library/Group Containers/UBF8T346G9.Office/FontCache`) |
+| Windows | `C:\Windows\Fonts`, fonts installed for you only (`%LOCALAPPDATA%\Microsoft\Windows\Fonts`), Office's downloaded cloud fonts (`%LOCALAPPDATA%\Microsoft\FontCache\4\CloudFonts`) |
+| Linux | `/usr/share/fonts`, `/usr/local/share/fonts`, `~/.local/share/fonts`, `~/.fonts` |
+
+TrueType and OpenType fonts (`.ttf`, `.otf`), collections (`.ttc`, `.otc`) and variable fonts all
+work; a family without a bold file is made bold from its weight axis, or measured slightly wider.
+open-charts reads the fonts' names once and keeps an index in its cache folder (`~/.cache/open-charts`),
+refreshed when a font folder changes; set `OPEN_CHARTS_FONT_DIRS` to search other folders instead.
+Office downloads a cloud font (such as Aptos Display) the first time a deck uses it; until then it is
+missing on that computer. macOS may keep other apps out of Office's folder; then cloud fonts are
+missing too.
+
+**A missing font.** If a font is not installed, text is measured with a font of exactly the same
+widths when there is one (Arial ↔ Liberation Sans ↔ Helvetica, Times New Roman ↔ Liberation Serif,
+Calibri ↔ Carlito, Cambria ↔ Caladea, Courier New ↔ Liberation Mono), else with a wider stand-in
+that leaves labels room to spare. You are told once: the command line and `fill` print
+`warning: font "…" is not installed here`, and the add-in shows the message the first time on that
+computer. Install the font (or open the deck once in PowerPoint so Office downloads it) and update
+the chart for an exact layout.
+
+**Office.js pane.** The pane measures Arial with its own copy of Liberation Sans. Other fonts are
+measured exactly when the pane is served by `npm run officejs:serve` (it reads the fonts on your
+computer); otherwise with the browser's copy of the font when it has one (exact widths, estimated
+line spacing), else as above. Office's private fonts (Calibri, Aptos) are usually not visible to the
+browser.
 
 ## A client's look: style files
 

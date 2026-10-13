@@ -1,16 +1,17 @@
 // Text measurement and line breaking. Pure: fonts arrive as bytes (see src/fonts.ts for the Node loader).
+// Metrics come from the font's own tables (core/sfnt.ts: TrueType and CFF outlines, collections,
+// variable fonts); opentype.js only shapes the scripts that need it (Arabic, Hebrew, ...).
 import { parse } from '../../vendor/opentype.module.js';
+import { bytesReader, extractFace, faceMetrics } from './sfnt.ts';
 
 interface FontTables {
   hhea?: { ascender: number; descender: number; lineGap: number };
   os2?: { usWinAscent: number; usWinDescent: number; sTypoAscender: number; sTypoDescender: number; sTypoLineGap: number; fsSelection: number };
-  cmap?: { glyphIndexMap: Record<string, number> };
 }
+/** The parts of an opentype.js font this module reads. */
 interface Font {
   unitsPerEm?: number;
   tables?: FontTables;
-  names?: { fontFamily?: { en?: string } };
-  glyphs?: { get(i: number): { advanceWidth?: number } | undefined };
   getAdvanceWidth(text: string, size: number, options?: { kerning?: boolean }): number;
 }
 
@@ -19,12 +20,28 @@ export interface Measurer {
   lineHeight(size: number): number;
   /** Family name read from the font file, when known. */
   family?: string;
+  /**
+   * The measurer for another font family (theme fonts already resolved: core/fonts.ts). Absent:
+   * this measurer stands for every font (one font file given by path, older callers).
+   */
+  forFont?(family: string): Measurer;
+  /** Set when the family asked for was not found and this measurer stands in for it. */
+  fallback?: FontFallback;
+}
+
+/** A font that could not be found, and what measures it instead (core/fonts.ts). */
+export interface FontFallback {
+  requested: string;
+  /** The font measured instead. */
+  used: string;
+  /** No metric-compatible substitute: a conservative estimate (wider and taller than most fonts). */
+  wide: boolean;
 }
 
 /**
- * Single-spaced line height as a multiple of the font size, the way PowerPoint (GDI / DirectWrite)
- * computes it: typo metrics when OS/2 asks for them (USE_TYPO_METRICS), else win ascent + descent
- * plus whatever extra leading hhea.lineGap adds on top. Arial: (1854 + 434 + 67) / 2048 ≈ 1.1499.
+ * Single-spaced line height of an opentype.js font as a multiple of the font size (the same rule
+ * core/sfnt.ts applies to the tables): typo metrics when OS/2 asks for them (USE_TYPO_METRICS), else
+ * win ascent + descent plus whatever extra leading hhea.lineGap adds on top. Arial ≈ 1.1499.
  */
 export function lineHeightFactor(font: Font): number {
   const em = font.unitsPerEm || 2048;
@@ -56,18 +73,17 @@ export interface FontMetrics {
   advances: number[];
 }
 
-export function fontMetrics(bytes: ArrayBuffer): FontMetrics {
-  return metricsOf(parse(bytes) as Font);
+/**
+ * Metrics of face `index` of a font file (a collection holds several); `wght` picks an instance of
+ * a variable font (default: its default instance). The same numbers opentype.js reads (test/fonts).
+ */
+export function fontMetrics(bytes: ArrayBuffer, index = 0, wght?: number): FontMetrics {
+  return faceMetrics(bytesReader(bytes), index, wght);
 }
 
-function metricsOf(font: Font): FontMetrics {
-  const map = font.tables?.cmap?.glyphIndexMap ?? {};
-  const codes = Object.keys(map).map(Number).sort((a, b) => a - b);
-  const adv = (g: number) => font.glyphs?.get(g)?.advanceWidth ?? 0;
-  return {
-    v: 1, family: font.names?.fontFamily?.en, unitsPerEm: font.unitsPerEm || 2048, lineHeight: lineHeightFactor(font),
-    notdef: adv(0), codes, advances: codes.map((c) => adv(map[c])),
-  };
+/** opentype.js over face `index` of a font file; null when it cannot read it (e.g. CFF2 outlines). */
+function shaperFont(bytes: ArrayBuffer, index = 0): Font | null {
+  try { return parse(extractFace(bytes, index)) as Font; } catch { return null; }
 }
 
 // Scripts whose glyphs change with context (Hebrew, Arabic, Syriac, ... and their presentation forms):
@@ -86,11 +102,11 @@ const SHAPED = /[֐-ࣿיִ-﷿ﹰ-﻿]/;
  */
 export function measurerFromMetrics(
   regular: FontMetrics, bold?: FontMetrics | null,
-  fontBytes?: () => { regular: ArrayBuffer; bold?: ArrayBuffer | null } | null,
+  fontBytes?: () => { regular: ArrayBuffer; bold?: ArrayBuffer | null; index?: number; boldIndex?: number } | null,
 ): Measurer {
   return build(regular, bold, () => {
     const b = fontBytes?.();
-    return b ? [parse(b.regular) as Font, b.bold ? (parse(b.bold) as Font) : null] : [];
+    return b ? [shaperFont(b.regular, b.index), b.bold ? shaperFont(b.bold, b.boldIndex) : null] : [];
   });
 }
 
@@ -134,11 +150,9 @@ function build(regular: FontMetrics, bold: FontMetrics | null | undefined, fonts
   };
 }
 
-/** Measurer over font bytes (parsed once). Widths are measured without kerning, as PowerPoint draws them. */
+/** Measurer over font bytes. Widths are measured without kerning, as PowerPoint draws them. */
 export function measurerFromFonts(regularBytes: ArrayBuffer, boldBytes?: ArrayBuffer | null): Measurer {
-  const regular = parse(regularBytes) as Font;
-  const bold = boldBytes ? (parse(boldBytes) as Font) : null;
-  return build(metricsOf(regular), bold && metricsOf(bold), () => [regular, bold]);
+  return measurerFromMetrics(fontMetrics(regularBytes), boldBytes ? fontMetrics(boldBytes) : null, () => ({ regular: regularBytes, bold: boldBytes }));
 }
 
 // Break opportunities (a small UAX #14 subset): after spaces (consumed), after hyphens, slashes and

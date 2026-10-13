@@ -538,7 +538,7 @@ test('VBA hygiene: test-only entry points are marked, grouped last and unreachab
   const server = ['ApplyEdit', 'SelectionInfo']; // the add-in server runs these (src/addin/server.ts)
   const product = new Set(['Auto_Open', 'OnSelectionChange', ...server, ...callbacks]);
   const tests = publics.filter((p) => !product.has(p.name));
-  assert.deepEqual(tests.map((p) => p.name).sort(), ['AgendaDump', 'AgendaEdit', 'AgendaSelect', 'AgendaSorter', 'ConvertToPlainText', 'ExportCopy', 'Probe', 'ResizeChart', 'Run', 'SelectChart', 'SelectCharts', 'SelectRole']);
+  assert.deepEqual(tests.map((p) => p.name).sort(), ['AgendaDump', 'AgendaEdit', 'AgendaSelect', 'AgendaSorter', 'ConvertToPlainText', 'ExportCopy', 'Probe', 'ResizeChart', 'Run', 'SelectChart', 'SelectCharts', 'SelectRole', 'TextBounds']);
   for (const t of tests) {
     assert.ok(t.at > header, `${t.name} is in the test-only section`);
     // Only its own definition names it: no other add-in code calls it.

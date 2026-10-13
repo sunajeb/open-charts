@@ -13,6 +13,8 @@ import type { ChartSpec } from '../../src/core/types.ts';
 import { buildChart, chartDeck, CHART_FRAME, toBase64 } from '../../src/officejs/engine.ts';
 import { writePptx } from '../../src/render/pptx.ts';
 import { readCharts } from '../../src/ooxml/pptx-read.ts';
+import { createMeasurer, familyMetrics, findFont } from '../../src/fonts.ts';
+import { defaultStyle, layoutChart } from '../../src/core/index.ts';
 
 const ORIGIN = 'https://oc.test';
 const OFFICE_JS = 'https://appsforoffice.microsoft.com/lib/1/hosted/office.js';
@@ -105,6 +107,52 @@ test('WebKit: byte-identical layout, and the task pane inserts a chart', async (
   } finally {
     await browser.close();
   }
+});
+
+// Fonts other than Arial (B3): with the metrics service of the local server, the same scene as Node;
+// without it, the browser's own copy of the font: widths exactly Node's, line spacing estimated.
+const nodeFonts = createMeasurer();
+const FONT_SET = ['Georgia', 'Verdana', 'Times New Roman', 'Helvetica Neue', 'Courier New', 'STIX Two Text', 'Calibri', 'Segoe UI'].filter((f) => findFont(f));
+
+test('fonts: with the server\'s metrics the browser lays out other fonts exactly as Node', async ({ page }) => {
+  test.skip(!FONT_SET.length, 'none of the test fonts is installed');
+  await serve(page);
+  await page.route(`${ORIGIN}/fonts/metrics**`, (r) => {
+    const found = familyMetrics(new URL(r.request().url()).searchParams.get('family')!);
+    return r.fulfill({ contentType: 'application/json', body: JSON.stringify(found) });
+  });
+  await page.goto(`${ORIGIN}/parity.html`);
+  const fonts = FONT_SET.slice(0, 3);
+  const browser = await page.evaluate(async ({ frame, fonts }) => {
+    const e = await import('/engine.js');
+    const m = await e.loadMeasurer(location.href);
+    await m.load(fonts);
+    return fonts.map((font: string) => JSON.stringify(e.layoutChart(e.samples.waterfall, frame, m, { ...e.defaultStyle, font })));
+  }, { frame: CHART_FRAME, fonts });
+  fonts.forEach((font, i) => expect(browser[i], font).toBe(JSON.stringify(layoutChart(samples.waterfall!, CHART_FRAME, nodeFonts, { ...defaultStyle, font }))));
+});
+
+test('fonts: a font the server does not have is measured on a canvas when the browser has it (widths exactly Node\'s)', async ({ page }) => {
+  test.skip(!FONT_SET.length, 'none of the test fonts is installed');
+  await serve(page);
+  await page.route(`${ORIGIN}/fonts/metrics**`, (r) => r.fulfill({ contentType: 'application/json', body: 'null' }));
+  await page.goto(`${ORIGIN}/parity.html`);
+  const texts = ['Revenue 2024 (EUR m)', 'North America', '−12.5%', 'Wf AV To Ty'];
+  const got = await page.evaluate(async ({ fonts, texts }) => {
+    const e = await import('/engine.js');
+    const m = await e.loadMeasurer(location.href);
+    await m.load(fonts);
+    return fonts.map((f: string) => { const fm = m.forFont(f); return { fallback: !!fm.fallback, w: texts.map((t: string) => [fm.width(t, 12), fm.width(t, 12, true)]), lh: fm.lineHeight(10) }; });
+  }, { fonts: FONT_SET, texts });
+  FONT_SET.forEach((font, i) => {
+    const fm = nodeFonts.forFont!(font);
+    if (got[i].fallback) { test.info().annotations.push({ type: 'note', description: `${font}: not visible to the browser (fallback)` }); return; }
+    texts.forEach((t, k) => {
+      expect(got[i].w[k][0], `${font} "${t}"`).toBeCloseTo(fm.width(t, 12), 6);
+      if (findFont(font, { bold: true })) expect(got[i].w[k][1], `${font} bold "${t}"`).toBeCloseTo(fm.width(t, 12, true), 6);
+    });
+    expect(Math.abs(got[i].lh - fm.lineHeight(10)) / fm.lineHeight(10), `${font} line height`).toBeLessThan(0.25);
+  });
 });
 
 test('outside PowerPoint the pane previews but cannot insert', async ({ page }) => {

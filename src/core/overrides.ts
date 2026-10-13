@@ -262,6 +262,8 @@ export function compileOverrides(o: Overrides | undefined): (role: string) => El
 export interface OverrideCtx {
   get(role: string): ElementStyle | undefined;
   theme: ThemeColors & LinkColors;
+  /** The measurer for an element's own font (theme fonts resolved); absent: the chart's measures it. */
+  measure?(font: string): Measurer;
 }
 
 /** Data a label's content is computed from: the chart as laid out, and its number formatting. */
@@ -354,9 +356,11 @@ export function styleText(t: TextShape, st: ElementStyle, role: string, src: Con
   const out: TextShape = { ...t };
   const content = labelContent(src, role, st, t.text);
   if (content != null) out.text = content;
-  if (st.size !== undefined) { out.size = st.size; out.lineHeight = m.lineHeight(st.size); }
-  if (st.bold !== undefined) { if (st.bold) out.bold = true; else delete out.bold; }
   if (st.font !== undefined) out.font = st.font;
+  // Measured in the element's own font when it has one (an override).
+  if (st.font !== undefined && ov.measure) m = ov.measure(st.font);
+  if (st.size !== undefined || (st.font !== undefined && ov.measure)) out.lineHeight = m.lineHeight(out.size = st.size ?? out.size);
+  if (st.bold !== undefined) { if (st.bold) out.bold = true; else delete out.bold; }
   if (st.color !== undefined) out.color = paint(st.color, ov);
   if (!hasMark) {
     if (st.fill !== undefined) { if (st.fill === 'none') delete out.fill; else out.fill = paint(st.fill, ov); }

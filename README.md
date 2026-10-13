@@ -270,7 +270,7 @@ node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o o
 | `  --svg` | Also writes `out/deck-<n>.svg` previews. |
 | `  --strict` | Exit code 1 if any label had to be hidden (the deck is still written). |
 | `  --report report.json` | Writes the layout issues per slide as JSON. |
-| `  --font Arial.ttf --bold-font "Arial Bold.ttf"` | Measure text with these font files. |
+| `  --font Georgia` | The charts' font (charts with their own font keep it). Any installed font works; text is measured in it ([fonts](docs/USER-GUIDE.md#fonts)). `--font file.ttf [--bold-font file.ttf]` measures every font with that one file instead. |
 | `  --style style.json` | Apply a style file: a client deck's fonts, colours, number defaults and element styles ([style files](docs/DATA-FORMAT.md#style-files)). |
 | `open-charts fill <template.pptx> <data.json> [-o out.pptx]` | Fills your own template: shapes named `chart:<name>` become charts laid out in that shape's frame, `{{name}}` in any text becomes a value; slides can be picked, reordered and repeated per item. Untouched parts stay byte-identical ([fill a template](docs/USER-GUIDE.md#fill-a-template)). |
 | `  --dry-run` | Reports every slot, frame and missing value; writes nothing. |
@@ -322,8 +322,8 @@ chart spec (JSON) → layout engine (src/core) → scene (exact shapes) → Powe
 ```
 
 - **Engine.** The layout engine is pure TypeScript with no Office code. It measures text with real
-  font metrics (Arial, or the metric-compatible Liberation Sans), so what it plans matches what
-  PowerPoint draws. It decides every position and checks its own work: labels never overlap and
+  font metrics, in each chart's own font (any font installed, Office's own included; theme fonts
+  resolved to the deck's), so what it plans matches what PowerPoint draws. It decides every position and checks its own work: labels never overlap and
   nothing spills outside the chart area. A label that can't fit is hidden and reported, never drawn
   on top of something else.
 - **Scene.** The result is a list of exact shapes (rectangles, lines, paths, text boxes), each with a

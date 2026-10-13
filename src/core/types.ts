@@ -178,7 +178,13 @@ export interface ChartSpec {
  * Inside a scene, a colour that came from a slot reads "1F3A5F@accent1" (see core/theme.ts).
  */
 export interface Style {
+  /** Font family of the chart's text, or a theme font: `+mn-lt` (body) / `+mj-lt` (headings). */
   font: string;
+  /**
+   * The deck's theme fonts, which `+mj-lt` / `+mn-lt` stand for when measuring (default: `font`).
+   * The add-in sets them from the presentation it draws in.
+   */
+  themeFonts?: { major?: string; minor?: string };
   fontSize: number;
   text: string;
   muted: string;

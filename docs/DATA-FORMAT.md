@@ -860,7 +860,8 @@ optional.
 
 | Key | Type | Default |
 |---|---|---|
-| `font` | font name | `Arial` |
+| `font` | font family, or `+mn-lt` / `+mj-lt` (the deck's theme body / heading font) | `Arial` |
+| `themeFonts` | object: `major` (headings) and `minor` (body) font families, what `+mj-lt` / `+mn-lt` stand for | `font` for both; in PowerPoint, the deck's theme fonts |
 | `fontSize` | points, 4–72 | `12` |
 | `text` | colour, labels | `tx1` (the theme's text colour) |
 | `muted` | colour, secondary text | `595959` |
@@ -921,8 +922,31 @@ instead, so label contrast always matches what is drawn.
 the [options](#numbers) of those names. A chart's own options win, and a default only applies to
 chart types that read that option.
 
-Labels on a dark fill switch to white automatically. Text is measured with Arial metrics (or the
-metric-compatible Liberation Sans) unless you pass other fonts to the command line with `--font`.
+Labels on a dark fill switch to white automatically.
+
+### Fonts
+
+Text is measured in the font it is drawn in: the chart's `font` (default Arial), or an element's own
+`font` override. A theme font — `+mn-lt` (body) or `+mj-lt` (headings) — is the deck's: in
+PowerPoint the add-in reads the presentation's theme fonts, elsewhere `themeFonts` names them
+(default: `font`). The font is looked up among the fonts installed on the computer, including
+Microsoft Office's own fonts and the cloud fonts it downloads (Calibri, Aptos, …); see the
+[user guide](USER-GUIDE.md#fonts).
+
+```json
+{
+  "type": "clustered",
+  "categories": ["2023", "2024"],
+  "series": [{ "name": "Revenue", "values": [40, 52] }],
+  "style": { "font": "+mn-lt", "themeFonts": { "major": "Aptos Display", "minor": "Aptos" } }
+}
+```
+
+A font that is not installed is measured with a metric-compatible substitute when there is one
+(Arial ↔ Liberation Sans, Arimo, Helvetica; Times New Roman ↔ Liberation Serif, Tinos; Courier New ↔
+Liberation Mono, Cousine; Calibri ↔ Carlito; Cambria ↔ Caladea), else with a wider stand-in (Arial
+widths + 15 %, lines at least 1.3 em apart) so labels have room in any likely font; the chart then
+carries a warning: `font "…" is not installed here: …`.
 
 ## Overrides
 

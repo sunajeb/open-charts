@@ -22,7 +22,7 @@ import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getSession, serve, setSession, type Session } from '../server.ts';
-import { createMeasurer } from '../fonts.ts';
+import { createMeasurer, reportOnce } from '../fonts.ts';
 import type { Measurer } from '../core/index.ts';
 import { contextOf, handleRequest, layoutForApply, parseRequest, rememberContext, type Sessions } from './engine.ts';
 import { macroRunner, type MacroResult } from './runner.ts';
@@ -316,7 +316,7 @@ export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = ()
       for await (const c of req) chunks.push(c as Buffer);
       const request = parseRequest(Buffer.concat(chunks).toString('utf8'));
       const timed = timedSessions(sessions);
-      const out = await handleRequest(request, m(), timed);
+      const out = await handleRequest(request, m(), timed, reportOnce);
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(out);
       const ms = performance.now() - t0;
       if (request.op !== 'types') debug(`ENGINE ${request.op} ${Math.round(ms)} ms (sessions ${Math.round(timed.ms)} ms, layout ${Math.round(ms - timed.ms)} ms)`);

@@ -13,6 +13,8 @@
 //      theme=RRGGBB,… the slide's theme colours in ThemeColorScheme order (dk1 lt1 dk2 lt2
 //                     accent1…accent6 hlink folHlink): theme slots resolve to these, so label
 //                     contrast is decided on the colours PowerPoint will show
+//      majorfont=F, minorfont=F  the deck's theme fonts (headings, body): +mj-lt / +mn-lt in the
+//                     style or an element's override measure as these
 //      scale=N        same-scale group: the smallest own scale (OC_SCALE, pt per unit) of the
 //                     other charts in this chart's group on the slide
 //      base=JSON      the chart's OC_BASE tag (update, relayout): its formatting as last drawn
@@ -38,7 +40,7 @@
 //          data (totals, cagr, difference, unpin, scaleGroup: core/commands.ts runCommand); laid
 //          out like update, keeping formatting changed in PowerPoint (base= / native=)
 import { createHash } from 'node:crypto';
-import { defaultStyle, detachElement, runCommand, kindOf, layoutChart, mergeNativeEdits, migrate, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
+import { defaultStyle, detachElement, runCommand, kindOf, layoutChart, mergeNativeEdits, migrate, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors, type ThemeFonts } from '../core/index.ts';
 import { chartContent } from '../deck.ts';
 import { directionsOf, type Direction } from '../core/spec.ts';
 import { shapeName } from '../render/pptx.ts';
@@ -54,6 +56,8 @@ export interface AddinRequest {
   op: string; arg: string; frame?: Frame; bounds?: Frame; spec: string;
   /** The slide's theme colours (from `theme=`); they win over the spec's `style.theme`. */
   theme?: Partial<ThemeColors>;
+  /** The deck's theme fonts (`majorfont=`, `minorfont=`): what +mj-lt / +mn-lt stand for. */
+  themeFonts?: ThemeFonts;
   /** Same-scale group: the smallest own scale of the other charts in the group (from `scale=`). */
   ptPerUnit?: number;
   /** The chart's OC_BASE and its shapes as they are now (`base=`, `native=`): native edits to keep. */
@@ -72,7 +76,11 @@ export interface AddinRequest {
 }
 
 /** Context of one layout in PowerPoint: the slide's theme and the chart's same-scale group. */
-interface Env { theme?: Partial<ThemeColors>; hints: LayoutHints }
+interface Env {
+  theme?: Partial<ThemeColors>; themeFonts?: ThemeFonts; hints: LayoutHints;
+  /** True when a message should be shown now (a missing font is reported once): see handleRequest. */
+  notify?: (message: string) => boolean;
+}
 
 /** ThemeColorScheme order (msoThemeColorSchemeIndex 1–12); the last two are not slots. */
 const SCHEME_ORDER = ['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'] as const;
@@ -113,6 +121,9 @@ export function parseRequest(text: string): AddinRequest {
   const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
   const base = json(params.base), native = json(params.native);
   const where = parseWhere(params);
+  const themeFonts: ThemeFonts = {
+    ...(params.majorfont ? { major: params.majorfont } : {}), ...(params.minorfont ? { minor: params.minorfont } : {}),
+  };
   return {
     op: (lines[0] ?? '').trim(),
     arg: (lines[1] ?? '').trim(),
@@ -120,6 +131,7 @@ export function parseRequest(text: string): AddinRequest {
     bounds: parseFrame(lines[3]?.trim()),
     spec: lines.slice(i).join('\n').trim(),
     ...(params.theme ? { theme: parseTheme(params.theme) } : {}),
+    ...(themeFonts.major || themeFonts.minor ? { themeFonts } : {}),
     ...(params.scale && scale > 0 && Number.isFinite(scale) ? { ptPerUnit: scale } : {}),
     ...(context ? { context } : {}),
     ...(base && typeof base === 'object' && !Array.isArray(base) && Array.isArray(native) ? { base, native } : {}),
@@ -165,7 +177,7 @@ export async function layoutForApply(s: Session, context: string, m: Measurer): 
  */
 export function sceneFor(chart: object, context: string, m: Measurer): { scene: Scene; frame: Frame; relayout: (spec: ChartSpec) => Scene } {
   const req = parseRequest(`update\n\n${context}`);
-  const env: Env = { theme: req.theme, hints: req.ptPerUnit ? { ptPerUnit: req.ptPerUnit } : {} };
+  const env: Env = { theme: req.theme, themeFonts: req.themeFonts, hints: req.ptPerUnit ? { ptPerUnit: req.ptPerUnit } : {} };
   const first = splitSpec(chart as ChartSpec & { style?: Partial<Style> });
   const frame = resolveFrame(first.chart, first.style, req.frame, req.bounds, m, env);
   const relayout = (spec: ChartSpec) => { const s = splitSpec(spec as ChartSpec & { style?: Partial<Style> }); return layout(s.chart, s.style, frame, m, env); };
@@ -180,8 +192,10 @@ export const specKey = (spec: string) => createHash('sha1').update(spec).digest(
 
 const SELECT_FIRST = 'Select an open-charts chart first, then try again.';
 
-export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: Sessions): Promise<string> {
-  const env: Env = { theme: req.theme, hints: req.ptPerUnit ? { ptPerUnit: req.ptPerUnit } : {} };
+export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: Sessions, notify?: (message: string) => boolean): Promise<string> {
+  // A missing font is reported when the user acts on a chart, not on the automatic re-layout.
+  const tell = req.op === 'relayout' ? undefined : notify;
+  const env: Env = { theme: req.theme, themeFonts: req.themeFonts, hints: req.ptPerUnit ? { ptPerUnit: req.ptPerUnit } : {}, notify: tell };
   try {
     switch (req.op) {
       case 'insert': {
@@ -300,7 +314,9 @@ function splitSpec(parsed: ChartSpec & { style?: Partial<Style> }): { chart: Cha
 function layout(chart: ChartSpec, style: Partial<Style> | undefined, frame: Frame, m: Measurer, env: Env = { hints: {} }): Scene {
   // Theme slots resolve to the slide's own theme colours: PowerPoint draws them in those.
   const theme = env.theme ? { ...style?.theme, ...env.theme } : style?.theme;
-  return layoutChart(chart, frame, m, { ...defaultStyle, ...style, ...(theme ? { theme } : {}) }, env.hints);
+  // Theme fonts: the deck's, as PowerPoint will draw them (not stored with the chart).
+  const themeFonts = env.themeFonts ? { ...style?.themeFonts, ...env.themeFonts } : style?.themeFonts;
+  return layoutChart(chart, frame, m, { ...defaultStyle, ...style, ...(theme ? { theme } : {}), ...(themeFonts ? { themeFonts } : {}) }, env.hints);
 }
 
 /** Bounds of the chart group as drawn by the add-in: the shapes plus its invisible frame rectangle. */
@@ -335,6 +351,8 @@ function respond(chart: ChartSpec, style: Partial<Style> | undefined, frame: Fra
   const font = style?.font ?? defaultStyle.font;
   const content = chartContent(chart, scene, font, style);
   const lines = [header(), record('G', content.name, content.altText), record('F', [frame.x, frame.y, frame.w, frame.h].map(num).join(','))];
+  // A font that is not installed here: tell the user (once on this computer: the caller's notify).
+  for (const w of scene.warnings ?? []) if (w.startsWith('font "') && env?.notify?.(w)) lines.push(record('M', w));
   for (const [k, v] of content.tags ?? []) lines.push(record('T', k, v));
   scene.shapes.forEach((s, i) => {
     const role = scene.roles?.[i] ?? '';
