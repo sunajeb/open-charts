@@ -167,6 +167,22 @@ function fakeHelper() {
 
 const tick = () => new Promise((r) => setImmediate(r));
 
+test('controller: re-measures only while PowerPoint shows a window (a macro then would start it again)', async () => {
+  const { helper, sent } = fakeHelper();
+  let windows = win;
+  helper.info = async () => ({ windows, screens });
+  let measured = 0;
+  const c = handlesController({ helper, measurer: () => m, apply: () => {}, now: () => 0, measure: async () => { measured++; return undefined; } });
+  c.event({ event: 'remeasure' });
+  await tick(); await tick();
+  assert.equal(measured, 1, 'a window: measured');
+  windows = [];
+  c.event({ event: 'remeasure' });
+  await tick(); await tick();
+  assert.equal(measured, 1, 'no window (PowerPoint closing or quitting): no macro');
+  assert.equal(sent.at(-1)?.hide, true, 'the handles are hidden');
+});
+
 test('controller: selection shows handles; a drag sends ghosts and applies once on release; reset', async () => {
   const { helper, sent } = fakeHelper();
   const applied: Session[] = [];

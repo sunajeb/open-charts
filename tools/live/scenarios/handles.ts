@@ -10,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { tokenHeaders } from '../../../src/addin/token.ts';
 import { sleep } from '../powerpoint.ts';
 import type { Ctx } from '../scenarios.ts';
 
@@ -56,7 +57,7 @@ export async function run(ctx: Ctx) {
   }
   const mouse = (...a: number[]) => execFileSync(exe, a.map(String), { timeout: 10_000 });
 
-  const state = async (): Promise<State> => (await fetch('http://127.0.0.1:4174/api/addin/handles', { signal: AbortSignal.timeout(3000) })).json() as Promise<State>;
+  const state = async (): Promise<State> => (await fetch('http://127.0.0.1:4174/api/addin/handles', { headers: tokenHeaders(), signal: AbortSignal.timeout(3000) })).json() as Promise<State>;
   const until = async (ok: (s: State) => boolean, ms = 8000) => {
     let s: State = {};
     for (const end = Math.min(Date.now() + ms, pp.deadline); Date.now() < end; await new Promise((r) => setTimeout(r, 150))) {

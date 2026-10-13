@@ -651,12 +651,14 @@ End Function
 
 ' OC_ROLE values of the selected pieces of `chart`, comma-separated; "" when the whole chart is selected.
 Private Function SelectedRoles(ByVal chart As Object) As String
-    Dim sel As Object, i As Long, r As String, out As String
+    Dim sel As Object, i As Long, r As String, out As String, shp As Object
     On Error Resume Next
     Set sel = ActiveWindow.Selection
-    If Not sel.HasChildShapeRange Then Exit Function
+    ' Compared, never negated with Not: PowerPoint for Mac can answer True as 1, and Not 1 is -2 (still True).
+    If sel.HasChildShapeRange = 0 Then Exit Function
     For i = 1 To sel.ChildShapeRange.Count
-        r = TagValue(sel.ChildShapeRange(i), "OC_ROLE")
+        Set shp = sel.ChildShapeRange(i)
+        r = TagValue(shp, "OC_ROLE")
         If r <> "" And r <> "frame" Then out = out & IIf(out = "", "", ",") & r
     Next i
     SelectedRoles = out
@@ -980,6 +982,12 @@ Private Function Engine(ByVal request As String) As String
     t = Timer
 #If Mac Then
     result = AppleScriptTask(SCRIPT_FILE, SCRIPT_HANDLER, request)
+    ' AppleScriptTask now and then hands back "" although the engine answered (never a valid answer;
+    ' an engine request only lays out, so asking again is safe).
+    If result = "" Then
+        Report "ENGINE empty answer from AppleScriptTask, asked again"
+        result = AppleScriptTask(SCRIPT_FILE, SCRIPT_HANDLER, request)
+    End If
 #Else
     result = WinEngine(request)
 #End If
@@ -2047,7 +2055,7 @@ Private Function NewAgendaSlide(ByVal pos As Long) As Object
             End If
         End If
     Next k
-    If Not sld.Shapes.HasTitle Then
+    If sld.Shapes.HasTitle = 0 Then ' msoFalse (Not on a Mac True of 1 would still be True)
         ' A layout without a title: a title text box like the CLI writes.
         Set shp = sld.Shapes.AddTextbox(1, 36, 24, pres.PageSetup.SlideWidth - 72, 44)
         shp.Name = "Title"
@@ -2316,10 +2324,13 @@ Public Sub OCPREFIX_SelectRole(ByVal n As String, ByVal role As String)
                 For i = 1 To shp.GroupItems.Count
                     If TagValue(shp.GroupItems(i), "OC_ROLE") = role Then shp.GroupItems(i).Select: Exit Sub
                 Next i
+                Report "SELECTROLE " & role & " not in chart " & n
             End If
         End If
     Next shp
+    Exit Sub
 Failed:
+    Report "SELECTROLE " & role & ": " & Err.Description
 End Sub
 
 ' Test only: logs where the n-th chart is on screen ("WHERE screen=left,top,right,bottom"), and which
@@ -2338,8 +2349,27 @@ Public Sub OCPREFIX_Probe(ByVal n As String)
         If CommandApplies(CStr(c)) Then out = out & " " & c
     Next c
     Report "APPLIES" & out
+    Report "SELECTION " & ProbeSelection()
     Report "VISIBLECALLS " & gVisibleCalls
 End Sub
+
+' Test only: what PowerPoint reports as selected (type, pieces of a group, their roles).
+Private Function ProbeSelection() As String
+    Dim sel As Object, i As Long, shp As Object, out As String
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    out = "type=" & sel.Type & " child=" & sel.HasChildShapeRange
+    If sel.HasChildShapeRange Then
+        out = out & " n=" & sel.ChildShapeRange.Count
+        For i = 1 To sel.ChildShapeRange.Count
+            Set shp = sel.ChildShapeRange(i)
+            out = out & " [" & shp.Name & "|" & TagValue(shp, "OC_ROLE") & "]"
+        Next i
+    ElseIf sel.Type = 2 Then
+        out = out & " shapes=" & sel.ShapeRange.Count & " [" & sel.ShapeRange(1).Name & "]"
+    End If
+    ProbeSelection = out & " roles=" & SelectedRoles(FindSelectedChart())
+End Function
 
 ' Test only: resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.
 Public Sub OCPREFIX_ResizeChart(ByVal n As String, ByVal factor As String)

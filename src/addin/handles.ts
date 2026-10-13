@@ -286,7 +286,11 @@ export function handlesController(deps: HandlesDeps) {
     if (m.event === 'handlesState') { stateWaiter?.(m); return; }
     if (m.event === 'remeasure') {
       if (!deps.measure || drag || committing) return;
-      void deps.measure().then((text) => (text ? select(parseRequest(text.replace(/^seq=.*\n/m, ''))) : hide()));
+      const measure = deps.measure;
+      // Only while PowerPoint shows a window (the helper lists them; no Apple event): a window that
+      // closed as PowerPoint quits also asks to re-measure, and a macro sent then starts it again.
+      void helper.info().then((info) => (info?.windows.length ? measure() : undefined))
+        .then((text) => (text ? select(parseRequest(text.replace(/^seq=.*\n/m, ''))) : hide()));
       return;
     }
     if (m.event !== 'handle') return;

@@ -35,7 +35,7 @@ export async function run(ctx: Ctx) {
     if (!c?.spec || !c.frame) return { scenes: [] };
     const { style: overrides, ...chart } = JSON.parse(c.spec);
     const scene = layoutChart(chart, c.frame, createMeasurer(), { ...style, ...overrides, themeFonts, theme: { ...overrides?.theme, ...deckTheme } });
-    return { scenes: [chartContent(chart, scene, style.font, overrides)] };
+    return { scenes: [chartContent(chart, scene, overrides?.font ?? style.font, overrides)] }; // the chart's own font, as the deck builder
   });
   const compareDeck = join(PPAM_DIR, 'live-compare.pptx'); // a folder PowerPoint's sandbox may read
   const cliPng = join(ctx.out, 'cli-png');
