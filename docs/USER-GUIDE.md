@@ -87,7 +87,14 @@ The datasheet is the same in the add-in's **Edit data** window and in the standa
   cell they concern.
 - **+ Series / + Category** add a row or column; **− Series / − Category** delete the one of the
   selected cell. Right-click a cell for insert left/right/above/below, delete, copy and clear.
-- **Transpose** swaps rows and columns; **Reverse series** flips the row order.
+- **Hide a row** (optional rows): click the eye left of a series name, or right-click a cell and
+  pick *Hide series*. The row turns grey and striped, and the chart is drawn as if it were not
+  there — totals, shares, the axis and the legend only count visible rows — but its numbers stay in
+  the sheet and in the saved chart. Click the eye again to bring it back. The other rows keep their
+  colours. At least one row stays visible, and rows a chart reads by position (a Gantt chart's Start
+  and End, a Mekko XY chart's widths) always show. Pie and doughnut charts draw the first visible row.
+- **Transpose** swaps rows and columns (rows it creates start visible); **Reverse series** flips the
+  row order.
 - **Undo / redo** work for everything: typing, pasting, options, type changes.
 - **Chart type** is a gallery at the top of the options panel. Switching type keeps your data where
   the shapes match (numbers stay numbers). Switching between numbers, points (scatter/bubble) and

@@ -382,6 +382,46 @@ test('reverse series flips the stack order', async ({ page }) => {
   expect(await bottomLabel()).not.toContain('42m');
 });
 
+test('optional rows: the eye hides a series from the chart, keeps its data and the other colours', async ({ page }) => {
+  const MID = '3E6A9E', SMB = '7FA3CC';
+  const eye = (i: number) => page.locator(`#sheet .eye[data-i="${i}"]`);
+  expect(await rects(page, MID)).toBeGreaterThanOrEqual(5);
+  await expect(eye(1)).toHaveAttribute('aria-pressed', 'false');
+  await edit(page, () => eye(1).click());
+  const c = (await deck(page)).slides[0].chart;
+  expect(c.series[1]).toMatchObject({ name: 'Mid-market', hidden: true, values: [31, 36, 44, 51, 60] });
+  // Gone from the chart (bars and its name), still in the sheet, greyed.
+  expect(await rects(page, MID)).toBe(0);
+  expect(await texts(page)).not.toContain('Mid-market');
+  expect(await rects(page, NAVY)).toBeGreaterThanOrEqual(5);
+  expect(await rects(page, SMB)).toBeGreaterThanOrEqual(5); // SMB keeps its own colour
+  await expect(cell(page, 1, 0)).toHaveValue('31');
+  await expect(page.locator('#sheet tr.series-hidden')).toHaveCount(1);
+  await expect(eye(1)).toHaveAttribute('aria-pressed', 'true');
+  await expect(eye(1)).toBeFocused();
+  // Totals only add the visible rows: 2021 is 42 + 18 + 6.
+  expect(await texts(page)).toContain('66m');
+  // Context menu shows it again; undo / redo step through the toggle.
+  await cell(page, 1, 2).click({ button: 'right' });
+  await edit(page, () => page.locator('#ctxMenu').getByRole('menuitem', { name: 'Show series “Mid-market” in the chart' }).click());
+  expect((await deck(page)).slides[0].chart.series[1].hidden).toBeUndefined();
+  expect(await rects(page, MID)).toBeGreaterThanOrEqual(5);
+  await edit(page, () => page.click('#undoBtn'));
+  expect(await rects(page, MID)).toBe(0);
+  await edit(page, () => page.click('#redoBtn'));
+  expect(await rects(page, MID)).toBeGreaterThanOrEqual(5);
+  // The last visible row cannot be hidden.
+  for (const i of [0, 1, 2]) await edit(page, () => eye(i).click());
+  await expect(eye(3)).toHaveAttribute('aria-disabled', 'true');
+  await eye(3).click({ force: true });
+  expect((await deck(page)).slides[0].chart.series[3].hidden).toBeUndefined();
+  expect(await texts(page)).toContain('Services');
+  // Gantt: Start and End rows always show.
+  await edit(page, () => setType(page, 'gantt'));
+  await expect(eye(0)).toHaveAttribute('aria-disabled', 'true');
+  await expect(eye(1)).toHaveAttribute('aria-disabled', 'true');
+});
+
 test('datasheet keyboard navigation: arrows, Enter, Shift+Enter', async ({ page }) => {
   await cell(page, 0, 0).click();
   await cell(page, 0, 0).selectText();
