@@ -259,6 +259,15 @@ test('add-in: majorfont= / minorfont= carry the deck\'s theme fonts; a missing f
   assert.doesNotMatch(await handleRequest(parseRequest(missing.replace('update', 'relayout')), m, undefined, notify), /^M\t/m, 'not on the automatic re-layout');
 }));
 
+test('add-in: a new chart takes the deck\'s body font (+mn-lt), Arial when the deck sends none', async () => withFixtures(async () => {
+  const m = createMeasurer();
+  const withTheme = await handleRequest(parseRequest('insert\nstacked\n48,96,864,408\n\nmajorfont=Fixture Cloud\nminorfont=Fixture Sans\n'), m);
+  assert.match(withTheme, /\t\+mn-lt\t/, 'labels drawn in the deck body font');
+  assert.match(withTheme, /"font":"\+mn-lt"/, 'stored with the chart, so it follows theme changes');
+  const plain = await handleRequest(parseRequest('insert\nstacked\n48,96,864,408\n\n'), m);
+  assert.doesNotMatch(plain, /\+mn-lt/);
+}));
+
 test('add-in: the VBA sends the theme fonts with every theme line', () => {
   const vba = readFileSync('addin/vba/OpenCharts.bas', 'utf8');
   assert.match(vba, /ThemeLine = ThemeColorsLine\(sld\) & ThemeFontsLine\(sld\)/);

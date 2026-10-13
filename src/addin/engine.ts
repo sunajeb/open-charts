@@ -201,7 +201,10 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
       case 'insert': {
         const sample = sampleFor(req.arg);
         if ('error' in sample) return error(sample.error);
-        return respond(sample.spec, undefined, req.frame ?? DEFAULT_FRAME, m, env);
+        // A new chart takes the deck's body font (as PowerPoint text does): stored as the theme token,
+        // so it follows the deck if its theme fonts change later. Without theme fonts: the default style.
+        const style = req.themeFonts?.minor ? { font: '+mn-lt' } : undefined;
+        return respond(sample.spec, style, req.frame ?? DEFAULT_FRAME, m, env);
       }
       case 'update':
       case 'relayout': {
