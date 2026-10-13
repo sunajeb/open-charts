@@ -509,6 +509,8 @@ Private Sub Dispatch(ByVal id As String)
         SameScale False
     ElseIf id = "btnWelcome" Then
         ShowWelcome
+    ElseIf id = "btnUpdates" Then
+        CheckUpdates
     ElseIf id = "btnReport" Then
         ReportProblem
     Else
@@ -1050,6 +1052,13 @@ Private Sub ShowWelcome()
     text = AnswerText(Engine("welcome"))
     If text = "" Or gSilent Then Exit Sub
     If MsgBox(text, vbYesNo + vbInformation, TITLE) = vbYes Then text = AnswerText(Engine("sample"))
+End Sub
+
+' Help > Check for updates: whether a newer open-charts is available and where to download it.
+Private Sub CheckUpdates()
+    Dim text As String
+    text = AnswerText(Engine("updates"))
+    If text <> "" Then Tell text
 End Sub
 
 ' Zips the add-in log, settings and versions for support and shows the zip in Finder / Explorer. The

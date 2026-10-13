@@ -946,6 +946,10 @@ In the **Edit data** window from PowerPoint:
 
 ## Troubleshooting
 
+**Check for updates.** Click **Help › Check for updates**. It asks GitHub for the latest release
+(only when you click) and says whether a newer open-charts is available and where to download it.
+On a computer managed by IT, updates come from your IT department instead.
+
 **Report a problem.** Click **Help › Report a problem** on the open-charts tab. It saves a zip with
 the add-in's log, its settings and the version numbers (open-charts, PowerPoint, your system) and
 shows it in Finder or Explorer. If a chart is selected, it asks whether to add that chart's data;

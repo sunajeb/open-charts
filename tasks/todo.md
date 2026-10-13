@@ -42,7 +42,8 @@ Rules for this plan
       a real host and admin-center upload need the owner's domain/tenant)
 - [ ] C5 Updates: version check + update download (signed packages only)
       (done: client check behind `addin update on`; `addin update install` downloads, verifies SHA-256 +
-      signature, opens; IT policy.json forces it off. todo: ribbon button; signing identity needs C3)
+      signature, opens; IT policy.json forces it off; Help › Check for updates in the add-in (live PASS).
+      Left: in-app install once the signing identity exists (C3))
 - [x] C6 IT deployment guide: Intune / Jamf / M365 admin center, coexistence with think-cell, macro trust settings
       (docs/IT-DEPLOYMENT.md; Office policy names and Intune/Jamf details to confirm in the owner's pilot)
 

@@ -173,6 +173,7 @@ ${buttons}
 /** Help (src/addin/support.ts): [id, label, imageMso, tip]. */
 export const HELP_BUTTONS: [string, string, string, string][] = [
   ['btnWelcome', 'Welcome', 'Help', 'What open-charts is, where to start, the user guide, and a sample deck with one chart of each type.'],
+  ['btnUpdates', 'Check for updates', 'Refresh', 'See whether a newer open-charts is available and where to download it. Asks the internet only when you click.'],
   ['btnReport', 'Report a problem', 'FileSendAsAttachment', 'Save a zip with the add-in\'s log, settings and version numbers for a problem report, and show it. The selected chart\'s data goes in only if you agree; nothing else from your slides does.'],
 ];
 

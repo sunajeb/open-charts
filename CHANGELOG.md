@@ -4,6 +4,7 @@
 
 ### Updates and fixes
 
+- **Help › Check for updates**: says whether a newer open-charts is available and where to get it.
 - `open-charts addin update install`: downloads this platform's installer, checks its SHA-256 and the
   publisher's signature, and only then opens it; refused until open-charts' signing identity exists.
   An IT policy file (`policy.json`, machine-wide) turns the update check off.

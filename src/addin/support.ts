@@ -7,6 +7,8 @@
 //   report   arg "spec" with the selected chart's OC_SPEC after the params (only when the user agreed),
 //            app=<PowerPoint version and OS>: writes the support zip into <home>/reports and shows it
 //            in Finder / Explorer
+//   updates  asks for the latest release now (the user clicked Check for updates): what is new and
+//            where to download it; nothing when IT turned updates off (policy.json)
 // The zip holds the add-in log, settings, addin.json and versions. Never the token or slide content.
 import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -17,7 +19,7 @@ import { zip, type ZipInput } from '../render/zip.ts';
 import { buildDeck } from '../deck.ts';
 import type { Measurer } from '../core/index.ts';
 import { ENGINE_VERSION } from '../version.ts';
-import { writeSettings } from '../update.ts';
+import { checkForUpdate, policyUpdateOff, writeSettings, type UpdateInfo } from '../update.ts';
 import { FORMAT_VERSION, record } from './format.ts';
 import { addinHome } from './launcher.ts';
 import { flatLabel, galleryItems, sampleFor } from './registry.ts';
@@ -50,7 +52,7 @@ export function fileCommand(path: string, reveal: boolean, platform = process.pl
 const run = ([cmd, args]: [string, string[]]) => spawn(cmd, args, { stdio: 'ignore', detached: true, windowsHide: true, windowsVerbatimArguments: true }).unref();
 export const systemShell: Shell = { open: (p) => run(fileCommand(p, false)), reveal: (p) => run(fileCommand(p, true)) };
 
-const answer = (...messages: string[]) => [record('OC', FORMAT_VERSION), ...messages.map((m) => record('M', m))].join('\n') + '\n';
+export const answer = (...messages: string[]) => [record('OC', FORMAT_VERSION), ...messages.map((m) => record('M', m))].join('\n') + '\n';
 
 /** The welcome text, now remembered as shown. */
 export function welcome(home = addinHome()): string {
@@ -137,5 +139,21 @@ export function handleSupport(op: string, arg: string, params: { app?: string; s
       shell.reveal(path);
       return answer(reportMessage(path, !!spec));
     }
+  }
+}
+
+export const RELEASES_PAGE = 'https://github.com/sunajeb/open-charts/releases';
+
+/** Help › Check for updates: one check now, answered in plain words (never throws). */
+export async function updatesAnswer(check: () => Promise<UpdateInfo> = () => checkForUpdate(), policyOff = policyUpdateOff): Promise<string> {
+  if (policyOff()) return answer('Updates for open-charts are managed by your IT department.');
+  try {
+    const u = await check();
+    return answer(u.available
+      ? `open-charts ${u.latest} is available (you have ${u.current}).\n\nDownload it from ${u.url}${u.asset ? ` (${u.asset})` : ''}, open the installer, then restart PowerPoint.`
+      : `You have the latest open-charts (${u.current}).`);
+  } catch (err) {
+    if (/no published release/.test((err as Error).message)) return answer(`You have open-charts ${ENGINE_VERSION}. No newer release is published yet (${RELEASES_PAGE}).`);
+    return answer(`open-charts could not check for updates. Check your internet connection and try again, or see ${RELEASES_PAGE}.`);
   }
 }

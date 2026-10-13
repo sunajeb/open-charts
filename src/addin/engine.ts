@@ -4,7 +4,7 @@
 //
 // Request, one field per line:
 //   1  op       insert | update | relayout | edit | detach | direction | command | types | agenda (src/addin/agenda.ts)
-//               | welcome | sample | report (src/addin/support.ts)
+//               | welcome | sample | report | updates (src/addin/support.ts)
 //   2  arg      gallery item (insert; "<item>@<direction>" inserts in that direction), edit-session id
 //               (update, optional), element role (detach), the direction (direction: up | down | left
 //               | right) or chart command (command: core/commands.ts CHART_COMMANDS)
@@ -51,7 +51,7 @@ import { FORMAT_VERSION, num, record, shapeBounds, shapeRecord } from './format.
 import { galleryItems, sampleFor, typeLabel } from './registry.ts';
 import { reinstallCommand } from './launcher.ts';
 import { handleAgenda } from './agenda.ts';
-import { handleSupport } from './support.ts';
+import { handleSupport, updatesAnswer } from './support.ts';
 import { parseWhere, type ChartWhere } from './popup.ts';
 
 export interface AddinRequest {
@@ -291,6 +291,8 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
       case 'sample':
       case 'report':
         return handleSupport(req.op, req.arg, { app: req.app, spec: req.spec }, m);
+      case 'updates':
+        return updatesAnswer();
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
       default:

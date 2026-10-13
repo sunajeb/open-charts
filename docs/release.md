@@ -244,5 +244,6 @@ write: `/Library/Application Support/open-charts/policy.json` on a Mac,
 `%ProgramData%\open-charts\policy.json` on Windows, containing `{"updateCheck": false}`. The
 policy wins over the user's setting: no check, no download (see docs/IT-DEPLOYMENT.md).
 
-**Still to do.** Show "Update available" in the add-in (a ribbon button that runs the install
-above), once the signing identity is known.
+**In the add-in.** **Help › Check for updates** asks once, when clicked, and says what is new and
+where to download it (or that IT manages updates). Once the signing identity is known, it can offer
+the verified install above as well.

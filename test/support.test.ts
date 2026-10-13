@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createMeasurer } from '../src/fonts.ts';
 import { handleRequest, parseRequest } from '../src/addin/engine.ts';
-import { fileCommand, handleSupport, LOG_TAIL, WELCOME, writeSampleDeck, type Shell } from '../src/addin/support.ts';
+import { fileCommand, handleSupport, LOG_TAIL, updatesAnswer, WELCOME, writeSampleDeck, type Shell } from '../src/addin/support.ts';
 import { buildAddin, HELP_BUTTONS } from '../src/addin/package.ts';
 import { insertableItems } from '../src/addin/registry.ts';
 import { unzip } from '../src/ooxml/unzip.ts';
@@ -123,6 +123,8 @@ test('ribbon, VBA and bridge: Help group, first-run welcome once, report asks be
   const body = (name: string) => { const a = src.search(new RegExp(`(Sub|Function) ${name}\\(`)); return src.slice(a, src.slice(a).search(/End (Sub|Function)/) + a); };
   assert.match(body('Dispatch'), /id = "btnWelcome" Then\s+ShowWelcome/);
   assert.match(body('Dispatch'), /id = "btnReport" Then\s+ReportProblem/);
+  assert.match(body('Dispatch'), /id = "btnUpdates" Then\s+CheckUpdates/);
+  assert.match(body('CheckUpdates'), /AnswerText\(Engine\("updates"\)\)/);
   assert.match(body('ShowWelcome'), /Engine\("welcome"\)/);
   assert.match(body('ShowWelcome'), /MsgBox\(text, vbYesNo[^)]*\) = vbYes Then text = AnswerText\(Engine\("sample"\)\)/);
   // The chart's data only after a Yes; the request carries PowerPoint's version.
@@ -151,4 +153,16 @@ test('the bridge answers "OK welcome" until the welcome was shown', { skip: proc
     writeFileSync(join(dir, 'settings.json'), '{\n  "verbose": true,\n  "welcomed": true\n}\n');
     assert.equal(start(), 'OK verbose');
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('Check for updates: what is new and where to get it; plain words offline; nothing under an IT policy', async () => {
+  const info = { current: '0.2.0', latest: '0.3.0', available: true, url: 'https://github.com/sunajeb/open-charts/releases/tag/v0.3.0', asset: 'open-charts-0.3.0.pkg', checkedAt: '' };
+  const text = (out: string) => out.split('\n').filter((l) => l.startsWith('M\t')).map((l) => l.slice(2)).join(' ');
+  assert.match(text(await updatesAnswer(async () => info, () => false)), /open-charts 0\.3\.0 is available \(you have 0\.2\.0\)\.\\n\\nDownload it from https:\/\/github\.com\/sunajeb\/open-charts\/releases\/tag\/v0\.3\.0 \(open-charts-0\.3\.0\.pkg\)/);
+  assert.match(text(await updatesAnswer(async () => ({ ...info, available: false, latest: '0.2.0' }), () => false)), /You have the latest open-charts \(0\.2\.0\)\./);
+  assert.match(text(await updatesAnswer(async () => { throw new Error('offline'); }, () => false)), /could not check for updates\. Check your internet connection/);
+  assert.match(text(await updatesAnswer(async () => { throw new Error('release check: no published release'); }, () => false)), /No newer release is published yet/);
+  let asked = false;
+  assert.match(text(await updatesAnswer(async () => { asked = true; return info; }, () => true)), /managed by your IT department/);
+  assert.equal(asked, false, 'no request under the policy');
 });
