@@ -1106,7 +1106,11 @@ Private Function SelectedChart() As Object
     Set SelectedChart = FindSelectedChart()
     If Not SelectedChart Is Nothing Then Exit Function
     If UngroupedSelected() Then
+#If Mac Then
         Tell "This chart was ungrouped, so it can't be edited as a chart. Undo (" & ChrW(&H2318) & "Z) the ungroup or insert it again."
+#Else
+        Tell "This chart was ungrouped, so it can't be edited as a chart. Undo (Ctrl+Z) the ungroup or insert it again."
+#End If
     Else
         Tell "Select an open-charts chart first (click it once), then choose Edit data or Update chart."
     End If
