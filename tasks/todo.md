@@ -59,6 +59,9 @@ Rules for this plan
       a re-measure as it quit, AppleScriptTask returning "" now and then, updates needing a restart
 - [ ] D3 Windows live run on the owner's think-cell laptop (script → zip) and fixes
 - [ ] D4 Office.js live self-test (Mac) + Windows + PowerPoint on the web
+      (DEFERRED by the owner 2026-10-13: the beta ships the .pkg/.msi add-in; Office.js is not part of it.
+      When resumed: copy dist/officejs/manifest.xml into PowerPoint's wef folder with Finder, then
+      `npm run officejs:live -- --no-sideload`)
 - [ ] D5 Test matrix: older PowerPoint 16.x, Intel Mac, non-English Office, two monitors / scaling,
       a 100-slide deck with 50 charts
       (done: big deck offline perf + live `big-deck` PASS 2026-10-13: opens clean, Update 0.3-0.5 s,
