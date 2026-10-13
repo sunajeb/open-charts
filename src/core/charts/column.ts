@@ -11,7 +11,7 @@ import {
   axisDistance, breakSymbol, brokenTicks, categoryBreakSymbol, diffLabel, drawIndicator, drawLevelArrow, drawValueLine,
   indicatorSize, resolveBreak, slotLayout, slotUnits, spacedTicks, valueLineLabelW, valueLineText, type Break,
 } from '../decorations.ts';
-import { arrowBubble as bubbleSize } from '../common.ts';
+import { arrowBubble as bubbleSize, labelSpec } from '../common.ts';
 
 /** Numbers shared by both orientations: stacks, shares, rounded labels and the value domain. */
 function model(ctx: Ctx) {
@@ -283,9 +283,10 @@ function layoutVertical(ctx: Ctx, md: Model): 'labels-too-wide' | void {
       }
       const room = ly2 - ly1;
       const label = segLabel(s, c);
-      const tw = m.width(label, fs);
-      if (tw + 2 <= colW && lh * 0.9 <= room) {
-        text(ctx, `label:value:s${s}:c${c}`, { x: x + colW / 2 - tw / 2 - 1, y: ly1 + room / 2 - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
+      // Measured as drawn: an override may change its text, size or direction.
+      const L = labelSpec(ctx, `label:value:s${s}:c${c}`, label);
+      if (L.w + 2 <= colW && L.h * 0.9 <= room) {
+        text(ctx, `label:value:s${s}:c${c}`, { x: x + colW / 2 - L.w / 2 - 1, y: ly1 + room / 2 - L.h / 2, w: L.w + 2, h: L.h, text: label, color: textOn(fill), role: 'value' });
       } else {
         // Beside the column (never into the series names right of the last one), or above / below the stack.
         const sides: Side[] = c === nCat - 1 && o.seriesLabels === 'right' ? ['left'] : ['right', 'left'];
@@ -475,9 +476,9 @@ function layoutBars(ctx: Ctx, md: Model) {
       }
       const room = lx2 - lx1;
       const label = segLabel(s, c);
-      const tw = m.width(label, fs);
-      if (tw + 2 <= room && lh * 0.9 <= barT) {
-        text(ctx, `label:value:s${s}:c${c}`, { x: lx1 + room / 2 - tw / 2 - 1, y: cy(c) - lh / 2, w: tw + 2, h: lh, text: label, color: textOn(fill), role: 'value' });
+      const L = labelSpec(ctx, `label:value:s${s}:c${c}`, label);
+      if (L.w + 2 <= room && L.h * 0.9 <= barT) {
+        text(ctx, `label:value:s${s}:c${c}`, { x: lx1 + room / 2 - L.w / 2 - 1, y: cy(c) - L.h / 2, w: L.w + 2, h: L.h, text: label, color: textOn(fill), role: 'value' });
       } else {
         // In the gap above or below the bar, or beyond its end.
         pending.push({ s, c, text: label, seg, sides: ['above', 'below', v > 0 ? 'right' : 'left'], boxCover: colBars, reason: `${spec.series[s].name} / ${spec.categories[c]}: segment too small` });

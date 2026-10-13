@@ -5,7 +5,7 @@
 // tests as the quality gate (src/core/quality.ts) with the same tolerance, so a resolved scene passes it.
 import type { Frame, LineShape, Shape, TextShape } from './types.ts';
 import type { Measurer } from './text.ts';
-import { bounds, coversMark, ownedBy, roleOwner, shrink } from './quality.ts';
+import { bounds, coversMark, ownedBy, roleOwner, shrink, textNeed } from './quality.ts';
 import { overlaps, segmentHitsBox } from './place.ts';
 
 const TOL = 1;
@@ -77,9 +77,8 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
         return !ownedBy(roles[i], roles[k]) && segmentHitsBox(l.x1, l.y1, l.x2, l.y2, inner);
       });
       if (ln != null) return `crosses ${roles[ln]}`;
-      const lines = s.text.split('\n');
-      const w = Math.max(...lines.map((l) => m.width(l, s.size, s.bold)));
-      if (w > s.w + TOL || lines.length * (s.lineHeight ?? m.lineHeight(s.size)) > s.h + TOL) return 'does not fit its box';
+      const need = textNeed(s, m);
+      if (need.w > s.w + TOL || need.h > s.h + TOL) return 'does not fit its box';
     }
     return null;
   };
