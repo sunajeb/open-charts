@@ -2,7 +2,7 @@
 // (office-mock.js): the browser engine's parity with Node, and the task pane's contract with
 // PowerPoint — insert (Path B), select → edit → Apply in place (position, size, z-order), Revert,
 // the resize banner, Path A fallbacks. Live PowerPoint is covered by tools/officejs-live.ts.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, webkit, type Page } from '@playwright/test';
 import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { extname, join } from 'node:path';
@@ -64,7 +64,8 @@ function chartGroup(spec: ChartSpec, frame = CHART_FRAME, id = '7') {
 
 test.afterEach(() => { expect(errors, 'page errors').toEqual([]); });
 
-test('the browser bundle lays out every sample byte-identically to Node (same Liberation Sans)', async ({ page }) => {
+/** Every sample laid out and written in the page by dist/officejs/engine.js, compared with Node. */
+async function parity(page: Page) {
   await serve(page);
   await page.goto(`${ORIGIN}/parity.html`);
   const browser = await page.evaluate(async ({ frame }) => {
@@ -84,6 +85,25 @@ test('the browser bundle lays out every sample byte-identically to Node (same Li
     const b = buildChart(spec, CHART_FRAME, m);
     expect(browser[type].scene, `${type} scene`).toBe(JSON.stringify(b.scene));
     expect(browser[type].pptx, `${type} .pptx`).toBe(toBase64(chartDeck(b, spec)));
+  }
+}
+
+test('the browser bundle lays out every sample byte-identically to Node (Chromium, same Liberation Sans)', async ({ page }) => parity(page));
+
+// PowerPoint for Mac runs add-ins in WKWebView: the same checks in WebKit, when Playwright's WebKit is installed.
+const hasWebKit = (() => { try { return existsSync(webkit.executablePath()); } catch { return false; } })();
+test('WebKit: byte-identical layout, and the task pane inserts a chart', async () => {
+  test.skip(!hasWebKit, 'WebKit not installed (npx playwright install webkit)');
+  const browser = await webkit.launch();
+  try {
+    await parity(await browser.newPage());
+    const page = await browser.newPage();
+    await openPane(page);
+    await page.click('#applyBtn');
+    await waitLog(page, 'insert ');
+    expect((await log(page)).find((l) => l.startsWith('insert '))).toContain('"path":"B"');
+  } finally {
+    await browser.close();
   }
 });
 
