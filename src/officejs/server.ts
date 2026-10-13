@@ -62,6 +62,14 @@ export function serveOfficeJs(opts: OfficeServerOptions) {
       }
       return;
     }
+    if (url.pathname === '/fonts/metrics') {
+      // Exact metrics of an installed font for the pane's measurer (src/officejs/measure.ts).
+      const family = url.searchParams.get('family') ?? '';
+      const found = family && family.length <= 64 ? (await import('../fonts.ts')).familyMetrics(family) : null;
+      // null = not installed here (the pane then measures it itself); a 404 would mean "no service".
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(found));
+      return;
+    }
     const rel = normalize(decodeURIComponent(url.pathname === '/' ? '/taskpane.html' : url.pathname)).replace(/^([/\\])+/, '');
     const root = resolve(opts.root), file = join(root, rel);
     if (rel.startsWith('..') || !file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) { res.writeHead(404).end('Not found'); return; }
