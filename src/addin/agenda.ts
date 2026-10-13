@@ -233,7 +233,7 @@ export function handleAgenda(req: AgendaRequest, m: Measurer, makeId = newId): s
     case 'removeHidden':
       break;
     default:
-      return message(out, `This add-in and its engine do not match (agenda "${req.command}").`);
+      return message(out, `Parts of open-charts do not match (agenda "${req.command}"). Install open-charts again, then restart PowerPoint.`);
   }
 
   let deletes: number[] = [];

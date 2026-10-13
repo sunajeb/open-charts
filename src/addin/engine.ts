@@ -252,9 +252,9 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const { chart, style } = readSpec(req.spec);
         const frame = resolveFrame(chart, style, req.frame, req.bounds, m, env);
         const before = layout(chart, style, frame, m, env);
-        if (!before.roles?.includes(role)) return error('This label is not drawn any more; update the chart and try again.');
+        if (!before.roles?.includes(role)) return error('This label is no longer on the chart. Click Update chart, then try again.');
         const spec = detachElement(chart, before, role);
-        if (!spec) return error('This label is not drawn any more; update the chart and try again.');
+        if (!spec) return error('This label is no longer on the chart. Click Update chart, then try again.');
         return respond(spec, style, frame, m, env);
       }
       case 'command': {
@@ -281,7 +281,7 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const dir = req.arg as Direction;
         const ok = directionsOf(chart.type);
         if (!ok.includes(dir)) {
-          return error(ok.length > 1 ? `${typeLabel(chart.type)} charts can grow ${ok.join(', ')}, not ${dir}.` : `${typeLabel(chart.type)} charts have no direction to change.`);
+          return error(ok.length > 1 ? `${typeLabel(chart.type)} charts can grow ${ok.join(', ')}, not ${dir}.` : `${typeLabel(chart.type)} charts can't change direction.`);
         }
         const frame = resolveFrame(chart, style, req.frame, req.bounds, m, env);
         const { direction: _, ...rest } = chart.options ?? {};
@@ -294,11 +294,11 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
       default:
-        return error(`This add-in and its engine do not match ("${req.op}"). In Terminal, run: ${reinstallCommand()}`);
+        return error(`Parts of open-charts do not match ("${req.op}"). To fix it, install open-charts again and restart PowerPoint. In Terminal, run: ${reinstallCommand()}`);
     }
   } catch (err) {
     // A chart whose stored data was edited into something the engine cannot lay out: say where.
-    if (err instanceof InvalidSpecError) return error(`This chart's data (OC_SPEC tag) is not valid, so it cannot be laid out:\n${err.errors.map((x) => `${x.path || '/'}: ${x.message}`).join('\n')}`);
+    if (err instanceof InvalidSpecError) return error(`This chart's data has a problem, so it can't be drawn. Choose Help › Report a problem and include the chart's data. Details:\n${err.errors.map((x) => `${x.path || '/'}: ${x.message}`).join('\n')}`);
     return error((err as Error).message);
   }
 }
@@ -309,7 +309,7 @@ const sameFrame = (a: Frame, b: Frame) =>
 const header = () => record('OC', FORMAT_VERSION);
 const error = (msg: string) => `${header()}\n${record('E', msg)}\n`;
 
-const DAMAGED = 'This chart\'s data (OC_SPEC tag) is damaged and cannot be read.';
+const DAMAGED = 'This chart\'s data is damaged, so open-charts can\'t change it. Insert the chart again, or choose Help › Report a problem.';
 export const NEWER_SPEC = 'This chart was made with a newer version of open-charts. Install the latest open-charts to change it; until then it stays as it is.';
 
 /**

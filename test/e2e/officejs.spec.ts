@@ -223,7 +223,7 @@ test('select a chart → its data loads; Apply replaces it in place (position, s
   await expect(page.locator('#revertBtn')).toBeHidden();
 });
 
-test('a resized chart shows the banner; Re-layout plans it for the new size', async ({ page }) => {
+test('a resized chart shows the banner; Fit to new size lays it out for the new size', async ({ page }) => {
   const chart = chartGroup(samples.waterfall!, { x: 60, y: 100, w: 600, h: 360 });
   await openPane(page, { slides: [{ id: '256#', shapes: [chart] }] });
   // The user drags the group to half its width.

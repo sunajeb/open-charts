@@ -111,9 +111,9 @@ export function httpSessions(base = BASE, open: OpenEditor = (url) => openUrl(ur
       } catch { return undefined; }
     },
     async open(id, chart, title, where) {
-      if (!(await ensureServer(base))) throw new Error('The open-charts editor could not be started.');
+      if (!(await ensureServer(base))) throw new Error('The Edit data window could not open. Quit and reopen PowerPoint, then try again.');
       const r = await fetch(`${base}/api/session/${id}`, { method: 'POST', headers: tokenHeaders(), body: JSON.stringify({ chart, title, state: 'open' }) });
-      if (!r.ok) throw new Error(`The editor refused the chart: ${await r.text()}`);
+      if (!r.ok) throw new Error(`The Edit data window could not open this chart (${await r.text()}). Choose Help › Report a problem.`);
       open(withToken(`${base}/?session=${id}`, readToken()), id, where);
     },
     async settle(id) {
@@ -218,7 +218,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   try { prefix = JSON.parse(readFileSync(join(home, 'addin.json'), 'utf8')).prefix; } catch { /* not installed */ }
   if (!prefix) {
     log(`APPLY ${s.id} skipped: add-in not installed`, home);
-    return fail(`The open-charts add-in is not installed. In Terminal, run: ${reinstallCommand(home)}`);
+    return fail(`open-charts is not fully installed. Install it again and restart PowerPoint. In Terminal, run: ${reinstallCommand(home)}`);
   }
   if (outlived()) {
     log(`APPLY ${s.id} skipped: this server was started by a PowerPoint that has quit`, home);

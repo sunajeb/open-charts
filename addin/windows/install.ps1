@@ -51,7 +51,7 @@ foreach ($f in 'open-charts.exe', 'open-charts.ppam', 'addin.json') {
   if (-not (Test-Path -LiteralPath (Join-Path $Source $f))) { Fail "$f is missing in $Source. Run install.ps1 from the open-charts-win folder (unzip it first)." }
 }
 $prefix = (Get-Content -LiteralPath (Join-Path $Source 'addin.json') -Raw | ConvertFrom-Json).prefix
-if (-not $prefix) { Fail "addin.json in $Source has no callback prefix." }
+if (-not $prefix) { Fail "addin.json in $Source is incomplete. Download open-charts-win again, unzip it and run install.ps1." }
 
 # 1. Stop a running engine: Windows does not let a running exe be overwritten.
 Step 'Stopping a running open-charts engine (if any)'
@@ -145,7 +145,7 @@ if (-not $DryRun -and -not $SkipEngineCheck) {
   } catch {
     Fail "open-charts.exe could not be started ($($_.Exception.Message)). If your PC only allows approved programs (AppLocker, Defender Application Control), ask IT to allow $exe."
   }
-  if ($out -notmatch 'available') { Fail "open-charts.exe did not answer as expected: $out" }
+  if ($out -notmatch 'available') { Fail "open-charts.exe did not answer as expected ($out). Download open-charts-win again, unzip it and run install.ps1." }
 }
 
 Write-Host ''

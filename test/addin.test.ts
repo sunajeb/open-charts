@@ -129,7 +129,7 @@ test('direction request: the chart is laid out again in its place, growing the n
   const line = JSON.stringify({ specVersion: 1, type: 'line', categories: ['a', 'b'], series: [{ name: 's', values: [1, 2] }] });
   assert.match(parseResponse(await handleRequest(req('direction', 'down', '0,0,500,300', '', line), m)).errors[0], /Line charts can grow up, left, right, not down/);
   const pie = JSON.stringify({ specVersion: 1, type: 'pie', categories: ['a', 'b'], series: [{ name: 's', values: [1, 2] }] });
-  assert.match(parseResponse(await handleRequest(req('direction', 'left', '0,0,500,300', '', pie), m)).errors[0], /no direction/);
+  assert.match(parseResponse(await handleRequest(req('direction', 'left', '0,0,500,300', '', pie), m)).errors[0], /can.t change direction/);
   assert.match(parseResponse(await handleRequest(req('direction', 'left'), m)).errors[0], /Select an open-charts chart/);
 });
 
@@ -329,7 +329,7 @@ test('launcher: installed open-charts command runs the CLI; messages name a comm
   assert.ok(mismatch.includes(`In Terminal, run: ${reinstallCommand()}`), mismatch);
   const vba = buildAddin().source;
   assert.ok(vba.includes(`Private Const REINSTALL As String = "${reinstallCommand().replace(/"/g, '""')}"`));
-  assert.match(vba, /"Open Terminal and run:" & vbLf & REINSTALL/);
+  assert.match(vba, /"To fix it, open Terminal, run this, then restart PowerPoint:" & vbLf & REINSTALL/);
   assert.doesNotMatch(vba, /run:\s+open-charts addin/);
 });
 
@@ -343,7 +343,7 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     let s = setSession('ap1', { chart, state: 'applied' });
     await applyInPowerPoint(s, home, async () => assert.fail('must not run'));
     assert.equal(getSession('ap1')!.state, 'error');
-    assert.match(getSession('ap1')!.message!, /not installed.*(addin install|install\.ps1)/);
+    assert.match(getSession('ap1')!.message!, /not fully installed.*(addin install|install\.ps1)/);
 
     writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
     // The macro draws the chart: the engine settles the session ("open"), and once the macro has

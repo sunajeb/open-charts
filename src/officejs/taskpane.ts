@@ -82,7 +82,7 @@ async function refresh(force = false) {
     const json = specJson(sel.chart.tags);
     if (!json) return;
     let spec: StoredSpec;
-    try { spec = JSON.parse(json); } catch { publish('This chart\'s data (OC_SPEC tag) is damaged and cannot be read.'); return; }
+    try { spec = JSON.parse(json); } catch { publish('This chart\'s data is damaged, so open-charts can\'t change it. Insert the chart again.'); return; }
     theme = await slideTheme(caps, sel.chart.slideId);
     const m = await measurerFor(spec);
     const { frame, resized } = resolveFrame(spec, parseFrame(sel.chart.tags.OC_FRAME), sel.chart.bounds, m, theme);
@@ -92,7 +92,7 @@ async function refresh(force = false) {
     if (!same || (force && !rebinding)) editor()?.load(structuredClone(spec), { title: sel.chart.name });
     log('bound', { id: sel.chart.id, type: spec.type, resized, engine: sel.chart.tags.OC_ENGINE });
     const older = sel.chart.tags.OC_ENGINE && sel.chart.tags.OC_ENGINE !== ENGINE_VERSION;
-    publish(older ? `Made with open-charts ${sel.chart.tags.OC_ENGINE}; Apply re-lays it out with ${ENGINE_VERSION} (labels may move).` : undefined);
+    publish(older ? `Made with open-charts ${sel.chart.tags.OC_ENGINE}. Apply redraws it with version ${ENGINE_VERSION}, so labels may move.` : undefined);
   } catch (e) {
     log('selection-error', { message: String((e as Error).message ?? e) });
   }
@@ -123,9 +123,10 @@ async function draw(spec: StoredSpec, frame: Frame, replace?: SelectedChart): Pr
   if (!replace && caps.insertSlides) {
     await insertSlide(toBase64(chartDeck(built, spec, theme)), target);
     log('insert', { path: 'A-newslide', reason: plan.reason, type: spec.type, shapes, ms: Math.round(performance.now() - t0) });
-    return `Inserted on a new slide: ${plan.reason}`;
+    return 'Inserted on a new slide (this version of PowerPoint can\'t add it to the current one)';
   }
-  throw new Error(`This PowerPoint cannot update the chart in place: ${plan.reason}. Update PowerPoint, or insert the chart again.`);
+  log('unsupported', { reason: plan.reason });
+  throw new Error('This version of PowerPoint can\'t update the chart in place. Update PowerPoint, or insert the chart again.');
 }
 
 /** Binds the pane to the chart just drawn (selected by the drawing step). */
@@ -135,7 +136,7 @@ async function rebind() {
 }
 
 async function run<T>(what: string, f: () => Promise<T>): Promise<T> {
-  if (busy) throw new Error('Busy — try again in a moment.');
+  if (busy) throw new Error('open-charts is still updating a chart. Try again in a moment.');
   busy = true;
   try {
     return await f();
@@ -162,7 +163,7 @@ w.OC_HOST = {
     return renderDeck(deck, m);
   },
   async apply(chart: StoredSpec): Promise<{ message: string }> {
-    if (!officeReady) throw new Error('Not running in PowerPoint.');
+    if (!officeReady) throw new Error('Open this pane from PowerPoint to insert charts.');
     const message = await run('apply', async () => {
       if (bound) {
         history.push({ spec: bound.spec, frame: bound.frame });

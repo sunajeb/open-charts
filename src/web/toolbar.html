@@ -95,7 +95,7 @@ window.ocPopupOpen = async ({ id, roles }) => {
     if (sel?.id !== id) return;
     sel.controls = controls; style = now || {};
     render(controls);
-  } catch { $bar.innerHTML = '<span class="empty">The add-in is not answering</span>'; }
+  } catch { $bar.innerHTML = '<span class="empty">open-charts is not answering. Click the chart again.</span>'; }
   post({ type: 'resize', w: Math.ceil($bar.scrollWidth) + 2, h: 44 });
   post({ type: 'ready' });
 };
