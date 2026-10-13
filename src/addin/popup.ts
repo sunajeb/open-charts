@@ -39,7 +39,11 @@ export interface ScreenInfo { frame: Rect; visible: Rect; scale?: number }
  *   screen  the chart's corners through PowerPoint's PointsToScreenPixelsX/Y (left, top, right, bottom)
  *   window  PowerPoint's document window: left, top, width, height (pt) and zoom (%)
  */
-export interface ChartWhere { screen?: [number, number, number, number]; window?: [number, number, number, number, number] }
+export interface ChartWhere {
+  screen?: [number, number, number, number]; window?: [number, number, number, number, number];
+  /** The chart group's corners (line 4 of the request: its bounds) the same way: drag handles (handles.ts). */
+  view?: [number, number, number, number];
+}
 
 /** The default pop-up size (pt): a datasheet of ~6 columns × 6 rows with the compact toolbar. */
 export const POPUP_SIZE = { w: 620, h: 360 };
@@ -52,7 +56,8 @@ export function parseWhere(params: Record<string, string>): ChartWhere | undefin
   };
   const screen = nums(params.screen, 4) as ChartWhere['screen'];
   const window = nums(params.window, 5) as ChartWhere['window'];
-  return screen || window ? { ...(screen ? { screen } : {}), ...(window ? { window } : {}) } : undefined;
+  const view = nums(params.view, 4) as ChartWhere['view'];
+  return screen || window || view ? { ...(screen ? { screen } : {}), ...(window ? { window } : {}), ...(view ? { view } : {}) } : undefined;
 }
 
 const inside = (x: number, y: number, r: Rect) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
@@ -198,6 +203,10 @@ export interface PopupHelper {
   showPanel?(panel: string, url: string, arg: unknown, frame: Rect): void;
   hide(panel?: string): void;
   eval(js: string, panel?: string): Promise<Msg | undefined>;
+  /** Sends one command as is (the drag-handle overlay: src/addin/handles.ts). */
+  send?(m: object): void;
+  /** Every message the helper sends (the overlay's drag events). */
+  onEvent?(listener: (m: Msg) => void): void;
   stop(): void;
   readonly running: boolean;
 }
@@ -214,6 +223,7 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
   let child: ChildProcess | undefined;
   let buffer = '';
   const waiters: Array<{ event: string; resolve: (m: Msg | undefined) => void; timer: NodeJS.Timeout }> = [];
+  const listeners: Array<(m: Msg) => void> = [];
   const send = (m: object) => { try { child?.stdin?.write(`${JSON.stringify(m)}\n`); } catch { /* reported by exit */ } };
   const expect = (event: string, ms: number) => new Promise<Msg | undefined>((resolve) => {
     const w = { event, resolve, timer: setTimeout(() => { waiters.splice(waiters.indexOf(w), 1); resolve(undefined); }, ms) };
@@ -236,6 +246,7 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
         if (m.event === 'error') log(`POPUP helper: ${String(m.message)}`);
         const i = waiters.findIndex((w) => w.event === m.event);
         if (i >= 0) { const [w] = waiters.splice(i, 1); clearTimeout(w.timer); w.resolve(m); }
+        for (const l of listeners) { try { l(m); } catch (err) { log(`POPUP listener: ${(err as Error).message}`); } }
       }
     });
     const gone = () => {
@@ -288,6 +299,8 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
       send({ cmd: 'eval', panel, js });
       return answer;
     },
+    send(m) { if (start()) send(m); },
+    onEvent(listener) { listeners.push(listener); },
     stop() { child?.stdin?.end(); child = undefined; },
   };
   return helper;

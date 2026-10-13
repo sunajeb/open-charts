@@ -249,6 +249,26 @@ revert; quits PowerPoint). Still to confirm live: PowerPoint for Mac's `PointsTo
 answers nothing useful the pop-up goes to the right edge of PowerPoint's window), typing into the
 non-activating panel while PowerPoint stays the active app, and the toolbar's selection events.
 
+## 11. Agenda (P5)
+
+**What:** chapters, subchapters and agenda slides (MASTER-PLAN §4.3 P5 exit criterion 2: insert /
+reorder / nest / split on a large deck, every agenda slide updates, hidden-parent logic per the
+reference). The engine has the model, the 12 style states, which chapters show, hidden parents,
+sections and moves (`src/core/agenda.ts`). The agenda element and its tags are in `src/agenda.ts`.
+Update logic for the add-in is in `src/addin/agenda.ts` (op `agenda`). The ribbon's **Agenda**
+group and VBA are in `addin/vba/OpenCharts.bas` (Agenda section). CLI slides are `chapter` / `toc`
+/ `split` (`examples/agenda.json`).
+
+| Check | How | Result |
+|---|---|---|
+| 12 states exactly as the manual defines them; which subchapters show; level normalisation; numbering | `test/agenda.test.ts` | **Pass** |
+| Hidden parent: hidden when the first subchapter's agenda slide follows directly, shown again with content between; Remove / Insert Hidden Agenda Slides keep the chapter | unit + simulated deck | **Pass** |
+| Sections: a split starts an independent agenda; moving the last main chapter leaves the backup | unit | **Pass** |
+| Update logic on a simulated 40-slide PowerPoint deck that applies the engine's answers as the VBA does: insert, rename on any slide, nest by text level, demote, move (slides move along), split, duplicate / delete in the sorter, restyle a state, table of contents; unchanged slides are not redrawn | `test/agenda.test.ts` | **Pass** |
+| CLI: `examples/agenda.json` (18 slides) writes native agenda slides (text boxes with bullets and text levels, `OC_AGENDA`, `OC_KIND`, `OC_CHAPTER`, `OC_SPLIT`), the hidden parent has `show="0"` | unit; LibreOffice PNGs looked at; goldens `agenda-*.png` | **Pass** |
+| Ribbon: Agenda group in the open-charts tab; every button reaches `AgendaCommand`; selection change runs the automatic update | unit | **Pass** |
+| Live PowerPoint for Mac (`npm run e2e:agenda`): 30 content slides, then the steps above through the add-in's own entry points, PNG export | Mac, live | **Pass**: all 29 checks. The deck ends at 38 slides. Covered: chapters inserted after slides 1, 6, 7, 12, 18 and 25; renamed by typing; Market_size nested (Market's slide hidden); Competition promoted; renamed to Competitors on the Plan slide; Plan moved up with its 10 slides; backup split with its own agenda; duplicate, delete and move in the sorter with automatic update; Remove/Insert Hidden Agenda Slides; table of contents. Read back from the saved .pptx: exactly one hidden slide, no heading clipped (measured text against box width), and every main-section agenda at one place (96, 119 pt). Update agenda with nothing changed takes 0.7 s on 38 slides. PNGs were looked at (`out/e2e-agenda/png`). The first live run found clipped headings (PowerPoint reset the list indents when the bullet was turned on) and a tiny, centred, inconsistently placed list. Both are fixed: indents are now set after the bullet, and the agenda goes in the body area at 24 pt, with one place per section |
+
 ## Bugs
 
 Fixed on this branch:
@@ -370,7 +390,7 @@ Not verified yet, and to look for in the PC run's zip:
 - whether `WindowSelectionChange` fires for selection changes made through COM (the resize check),
 - first start time of the unsigned exe under the PC's antivirus.
 
-## 11. Chart commands, right-click menu and undo
+## 13. Chart commands, right-click menu and undo
 
 The **Chart tools** ribbon group (Totals, CAGR arrow, Difference arrow, Same scale, Remove from same
 scale, Convert to plain text, Reset label position) and the right-click items (the same plus Edit
@@ -419,3 +439,48 @@ the check, so it is not proven that the clicks reached the slide; the result mat
 context menus can be customised only in Office for Windows. The ribbon has every
 command. Windows: not verified live.
 
+
+## 12. Drag handles (Mac)
+
+**What:** a selected chart (or a selected element of it) shows handles in a transparent overlay of the
+pop-up helper (`HandleOverlay` in `addin/popup-mac/main.swift`): column gap, value-axis top
+(`options.axisMax`), level-arrow position, selected labels (`pin`). The overlay ignores the mouse except
+while the pointer is over a handle (global mouse-moved monitor, no permission); a press there belongs to
+the overlay until release, so PowerPoint sees none of the gesture. Each move is laid out by the server
+(`src/addin/handles.ts` → `src/core/handles.ts`, coalesced: newest wins) and drawn as a ghost over the
+chart; the release commits through the Apply flow (one `ApplyEdit`); a double-click resets. Hidden while
+another app is in front, during PowerPoint's own drags, on scroll / pinch zoom and when the window moves;
+re-measured afterwards through the `SelectionInfo` macro. Code: `src/core/handles.ts`,
+`src/addin/handles.ts`, `addin/popup-mac/main.swift`, VBA `SelectionRequest` / `ViewLine` /
+`SelectionInfo` (Mac only).
+
+**Mapping:** slide points → global screen points by one factor and offset from the chart group's corners
+through `PointsToScreenPixelsX/Y` (`view=` on the selection report); pixels on a Retina display are
+recognised (popup.ts `chartRect`) and a mapping that is not one uniform zoom, or falls outside every
+PowerPoint window, is not trusted (no handles rather than misplaced ones).
+
+**Permissions:** none for users (no Accessibility, no Input Monitoring, no event tap). The live check
+posts CGEvents and needs Accessibility for its terminal.
+
+**Tests:** `test/handles.test.ts` — handles per chart/direction, gap/axis/label/level drag maths and
+reset, view from corners (points, Retina pixels, rounding, untrusted), screen handles at two zooms,
+ghost, controller end to end with a stand-in helper (coalesced ghosts, one apply on release, no-op
+click, double-click reset, hide). Live: `tools/e2e-handles-live.ts` (zoom 50/75/120 %, window moved,
+CGEvent gap drag, two-click label select + drag).
+
+**Live result (PowerPoint for Mac, 2026-10-13, `tools/e2e-handles-live.ts`): Pass.**
+
+| Check | Result |
+|---|---|
+| Chart selected → overlay shown, click-through (`ignoresMouse` true) away from handles | Pass |
+| `PointsToScreenPixelsX/Y` mapping at zoom 50 / 75 / 120 % | factor 0.4999 / 0.7498 / 1.1937 (points, not pixels, on this Retina Mac) |
+| Window moved by (40, 30) pt | view offset moved by (40.0, 30.0) |
+| CGEvent drag on the gap handle (12 pt left) | `HANDLES gap -> Gap 110%`; `APPLY … done (463 ms, layout 4 ms, macro 402 ms)`; OC_SPEC read back `options.gap` 1.1 |
+| Two clicks select a value label (its box becomes a handle), drag it | `APPLY … done (687 ms)`; OC_SPEC `overrides["label:value:s0:c0"].pin` {x 0.1436, y 0.7893} |
+
+Conclusion: PowerPoint for Mac's `PointsToScreenPixelsX/Y` is reliable for this (whole-pixel corners,
+one uniform factor), so the window-bounds + zoom fallback was not needed. Layout per drag frame stays
+under 5 ms; the commit costs one ApplyEdit (0.4–0.7 s), during which the ghost stands in for the chart.
+
+**Limits:** keyboard zoom (⌘+/⌘−) is not noticed until the next click; no handles yet for CAGR /
+difference arrows (no position option), legend, rotation or axis minimum; Windows has none.

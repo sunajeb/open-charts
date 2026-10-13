@@ -3,7 +3,7 @@
 // (format.ts) that VBA turns into native shapes.
 //
 // Request, one field per line:
-//   1  op       insert | update | relayout | edit | detach | direction | command | types
+//   1  op       insert | update | relayout | edit | detach | direction | command | types | agenda (src/addin/agenda.ts)
 //   2  arg      gallery item (insert; "<item>@<direction>" inserts in that direction), edit-session id
 //               (update, optional), element role (detach), the direction (direction: up | down | left
 //               | right) or chart command (command: core/commands.ts CHART_COMMANDS)
@@ -47,6 +47,7 @@ import type { Session } from '../server.ts';
 import { FORMAT_VERSION, num, record, shapeBounds, shapeRecord } from './format.ts';
 import { galleryItems, sampleFor, typeLabel } from './registry.ts';
 import { reinstallCommand } from './launcher.ts';
+import { handleAgenda } from './agenda.ts';
 import { parseWhere, type ChartWhere } from './popup.ts';
 
 export interface AddinRequest {
@@ -108,7 +109,7 @@ export function parseRequest(text: string): AddinRequest {
   const scale = Number(params.scale);
   // base= / native= describe the shapes, screen= / window= where the chart is on screen (Edit data
   // pop-up): neither is the layout's context.
-  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|roles|group)=/.test(l)).map((l) => `${l}\n`).join('') : '';
+  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|view|roles|group)=/.test(l)).map((l) => `${l}\n`).join('') : '';
   const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
   const base = json(params.base), native = json(params.native);
   const where = parseWhere(params);
@@ -155,6 +156,20 @@ export async function layoutForApply(s: Session, context: string, m: Measurer): 
   const spec = applyContexts.get(s.id)?.spec || JSON.stringify(s.chart);
   const applied: Sessions = { get: async () => ({ ...s, state: 'applied' }), open: async () => {} };
   return handleRequest({ ...req, spec }, m, applied);
+}
+
+/**
+ * A chart (its OC_SPEC object, style included) laid out for a chart context exactly as `update`
+ * would draw it, and a function that lays a changed spec out the same way (drag handles,
+ * src/addin/handles.ts: < 1 ms a layout once warm).
+ */
+export function sceneFor(chart: object, context: string, m: Measurer): { scene: Scene; frame: Frame; relayout: (spec: ChartSpec) => Scene } {
+  const req = parseRequest(`update\n\n${context}`);
+  const env: Env = { theme: req.theme, hints: req.ptPerUnit ? { ptPerUnit: req.ptPerUnit } : {} };
+  const first = splitSpec(chart as ChartSpec & { style?: Partial<Style> });
+  const frame = resolveFrame(first.chart, first.style, req.frame, req.bounds, m, env);
+  const relayout = (spec: ChartSpec) => { const s = splitSpec(spec as ChartSpec & { style?: Partial<Style> }); return layout(s.chart, s.style, frame, m, env); };
+  return { scene: layout(first.chart, first.style, frame, m, env), frame, relayout };
 }
 
 /** Same frame as a chart on a generated slide: the area below the title. */
@@ -230,6 +245,12 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         // The frame as the chart is now (before the command): a command never moves the chart.
         const frame = resolveFrame(chart, read.style, req.frame, req.bounds, m, env);
         return respond(done.spec, read.style, frame, m, env);
+      }
+      case 'agenda': {
+        // Agenda commands (src/addin/agenda.ts): frame = the slide size, bounds = the agenda
+        // placeholder of the "open-charts agenda" layout, the rest a snapshot of the deck.
+        const size = req.frame ?? { x: 0, y: 0, w: 960, h: 540 };
+        return handleAgenda({ command: req.arg, slide: { w: size.w, h: size.h }, placeholder: req.bounds, theme: req.theme, snapshot: req.spec }, m);
       }
       case 'direction': {
         // The ribbon's direction buttons: the selected chart, laid out again in its place growing `arg`.

@@ -14,6 +14,7 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [A client's look: style files](#a-clients-look-style-files)
 - [Fill a template](#fill-a-template)
 - [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
+- [Agenda](#agenda)
 - [Resizing](#resizing)
 - [Hidden labels and why](#hidden-labels-and-why)
 - [Keyboard shortcuts](#keyboard-shortcuts)
@@ -33,7 +34,8 @@ cleanly it is **hidden and reported**, never drawn on top of something else.
 ## Working in PowerPoint
 
 Install the add-in first (see the [README](../README.md#install)). You then have an **open-charts**
-tab on the ribbon, before Home, with one group, **Charts**:
+tab on the ribbon, before Home, with two groups, **Charts** and **Agenda** (see [Agenda](#agenda)).
+The Charts group:
 
 | Control | What it does |
 |---|---|
@@ -92,6 +94,34 @@ including ones written by the command line or the web editor, and on decks you r
 someone else: the data travels inside the file. Don't ungroup the chart or edit its shapes by hand
 if you want to keep editing its data: the next Update chart or Apply redraws the chart from its data
 and replaces those changes.
+
+### Dragging handles
+
+On the Mac, a selected chart shows small **yellow handles** next to PowerPoint's own selection
+handles. Drag one to change the chart directly; the chart follows the mouse live, and when you let
+go it is laid out once more in place (one update, like Apply). **Double-click a handle** to put it
+back to automatic.
+
+| Handle | Where | What dragging it does |
+|---|---|---|
+| Gap width | right edge of the first column (bottom edge of the first bar on a bar chart) | wider or thinner columns: `gap` |
+| Axis top | top end of the value axis (right end on a bar chart; only while the value axis is shown) | more headroom above the data: `axisMax`. Dragging below the top of the data gives the automatic axis again |
+| Level arrow | right edge of the arrow's bubble | moves the arrow beside the later column or into the gap before it |
+| Label | the label itself, once you have selected it (click the chart, then the label) | puts the label where you drop it; it stays there through data edits until you double-click it |
+
+The handles only take the mouse while the pointer is on one: every other click goes to PowerPoint
+as usual. They hide while you scroll or zoom, while another app is in front and while you drag
+something in PowerPoint, and come back once the chart has been measured again (a moment later).
+Zooming with the keyboard (⌘+ / ⌘−) is not noticed: click the chart again to bring the handles back
+to the right place.
+
+**Permissions:** none. The handles are a transparent window of the open-charts pop-up helper; it
+watches where the mouse is (macOS needs no permission for that) and only catches a press that
+starts on a handle. It never asks for Accessibility or Input Monitoring and never sees your
+keyboard. (The live test, `tools/e2e-handles-live.ts`, moves the mouse itself and needs
+Accessibility for the terminal it runs in; users never do.)
+
+Windows: not yet (the handles are a panel of the Mac helper).
 
 ## Choosing a chart and its direction
 
@@ -687,6 +717,100 @@ yet.
 never even asked the add-in whether to show them (its right-click menu is PowerPoint's own and takes
 no add-in items). On a Mac, use the same commands on the ribbon: **Chart tools** and **Charts**.
 PowerPoint for Windows shows the items on charts and their pieces.
+
+## Agenda
+
+An agenda gives the deck a table of contents, chapters and subchapters. Each chapter starts with an
+**agenda slide** that shows the whole agenda with that chapter highlighted. When you add, remove,
+reorder or rename chapters, every agenda slide follows. The agenda is ordinary PowerPoint text boxes
+(one per chapter heading, with bullets and text levels) in a group, so the deck looks the same without
+open-charts.
+
+The **Agenda** group on the open-charts tab:
+
+| Control | What it does |
+|---|---|
+| **Chapter** | Inserts an agenda slide after the current slide: a new chapter. Its heading reads "Chapter" and is selected, so you can type the name straight away. With a heading selected, the new chapter goes after that chapter (after its slides). The slide is titled "Agenda"; change it if you like. |
+| **Table of Contents** | Inserts a slide listing the top-level chapters without highlighting, before the first chapter slide (after the current slide if there are no chapters yet). It fills in as you add chapters. |
+| **Update agenda** | Brings every agenda slide up to date. Most changes do this by themselves when you click elsewhere (see below). |
+| **Move up** / **Move down** | Moves the selected chapter (a selected heading, else the chapter of the current slide) one place; its slides move along: everything from its agenda slide up to the next agenda slide. |
+| **Demote** / **Promote** | Makes the chapter a subchapter, or one level less deep. |
+| **More › Split Agenda** | The current slide starts a new, independent agenda, e.g. the backup. A grey marker sits just above the slide (never shown in the slide show). |
+| **More › Join Agendas** | Removes the split on the current slide. |
+| **More › Remove Hidden Agenda Slides** | Deletes the agenda slides that are hidden (see below); their chapters stay in the agenda. |
+| **More › Insert Hidden Agenda Slides** | Puts those slides back, before their first subchapter's slide. |
+| **More › Agenda Placeholder** | In Slide Master view: marks where the agenda goes on a layout named `open-charts agenda` (see below). |
+
+**Renaming and nesting.** Click into a heading on *any* agenda slide and type: when you click
+elsewhere, every agenda slide shows the new name. A heading's text level is its chapter level:
+PowerPoint's **Increase/Decrease List Level** buttons (or Shift+Tab / Tab at the start of the heading)
+make it a subchapter or bring it back up, and every agenda slide follows. A new chapter takes the
+level of the chapter before it.
+
+**What updates by itself.** When you click elsewhere, open-charts notices agenda slides added,
+duplicated, moved or deleted (also in the Slide Sorter) and headings you renamed or nested on the
+current slide, and updates every agenda slide. A duplicated agenda slide becomes a new chapter of the
+same name; a deleted one removes its chapter. A changed fill, outline, colour, weight or size of a
+heading is picked up by **Update agenda** (see Styles).
+
+**Which chapters show.** Every agenda slide shows the top-level chapters. Subchapters show on the
+slide of their parent chapter and on the slides of the chapters at their own level (their siblings
+and, deeper down, the path to the current chapter). On a table of contents only top-level chapters
+show.
+
+**Hidden parent slides.** If there are no slides between a chapter and its first subchapter (the
+chapter has no content of its own), the chapter's agenda slide is set to **Hide Slide**, so the slide
+show does not stop on two agenda slides in a row. Add a slide between them and it is shown again.
+Slide numbers in the slide show skip the hidden slide; **Remove Hidden Agenda Slides** deletes such
+slides (the chapter stays in the agenda) and **Insert Hidden Agenda Slides** brings them back.
+
+**Several agendas.** Go to the first slide of the second part (typically a slide titled "Backup") and
+choose **Split Agenda**. Chapters after the split are not on the agenda slides before it and vice
+versa, and moving the last chapter before the split does not take the backup along. Put the split on
+that title slide rather than on the backup's first agenda slide: otherwise it moves and duplicates
+with that chapter.
+
+**Position and size.** The agenda fills the slide's body area below the title (or the layout's
+agenda placeholder, see below), headings at 24 pt, subchapters slightly smaller. With many chapters
+the font gets smaller until the agenda fits. Every agenda slide of a section puts it in the same
+place. Move it on one agenda slide and the others of that section follow on the next update; new
+agenda slides copy the closest agenda slide before them (its layout, master and shapes). A heading
+box is never narrower than its text.
+
+**Styles.** Each heading has one of twelve states, and every heading in the same state looks the
+same:
+
+| State | When |
+|---|---|
+| `current-top` | the current chapter, at top level |
+| `top-contains-current` | a top-level chapter that contains the current chapter |
+| `top` | a top-level chapter that does not contain the current chapter |
+| `current-sub` | the current chapter, not at top level |
+| `child-of-current-top` | an immediate child of the current chapter, which is top-level |
+| `in-subtree` | neither it nor the current chapter is top-level; not on the path to the current chapter, but a sibling of a chapter on that path, or an immediate child of the current chapter |
+| `under-current-top` | below the current top-level chapter, not an immediate child of it |
+| `same-top` | below the same top-level chapter as the current chapter |
+| `other` | any other chapter |
+| `toc-top` | in a table of contents, top level |
+| `toc-sub` | in a table of contents, not top level |
+| `path` | neither it nor the current chapter is top-level, and it is on the path from the top-level chapter to the current chapter |
+
+To restyle a state, format one heading in that state (fill, outline, font colour, bold, size) and
+click **Update agenda**: every heading in the same state, on every agenda slide, takes the new look.
+The defaults are the *flat* preset: grey bars, the current chapter white on accent 1. From the
+command line, `"agenda": {"preset": "plain" | "boxed", "numbering": true, "styles": {...}}` sets the
+preset, numbered headings and per-state styles ([DATA-FORMAT.md › Agenda slides](DATA-FORMAT.md#agenda-slides)).
+
+**Default agenda layout.** To give agenda slides your template's look, add a custom layout in Slide
+Master view, name it exactly `open-charts agenda`, put on it only what every agenda slide should
+show, and click **More › Agenda Placeholder** to mark where the agenda goes (move and size the
+invisible rectangle it adds). **Chapter** then uses that layout and position for the first agenda
+slide; later ones copy the agenda slide before them.
+
+**From the command line.** In a deck JSON, `{"chapter": "Market"}` is an agenda slide (with
+`"level": 2` for a subchapter), `{"toc": true}` a table of contents and `"split": true` starts a new
+agenda. `examples/agenda.json` is a complete example; the .pptx it writes behaves in the add-in like
+one built there.
 
 ## Resizing
 

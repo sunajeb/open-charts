@@ -11,6 +11,7 @@ import { basename, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_DIFF, decodePng, diffImages, encodePng } from './png.ts';
+import { unzip } from '../../src/ooxml/unzip.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const { values: args } = parseArgs({
@@ -47,7 +48,11 @@ const expectedPages = new Map<string, number>();
 for (const { path, name } of decks) {
   execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', path, '-o', join(out, name)], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
   const spec = JSON.parse(readFileSync(join(root, path), 'utf8'));
-  expectedPages.set(name, Array.isArray(spec.slides) ? spec.slides.length : 1);
+  // Slides hidden in the slide show (agenda: a chapter with no content before its first subchapter)
+  // are not in LibreOffice's PDF.
+  const z = unzip(new Uint8Array(readFileSync(join(out, `${name}.pptx`))));
+  const hidden = [...z.keys()].filter((k) => /^ppt\/slides\/slide\d+\.xml$/.test(k) && /<p:sld [^>]*show="0"/.test(z.get(k)!.text())).length;
+  expectedPages.set(name, (Array.isArray(spec.slides) ? spec.slides.length : 1) - hidden);
 }
 // Style files: the style showcase (one chart per type) under each examples/styles/*.json ("style-<name>").
 const showcase = JSON.parse(readFileSync(join(root, 'examples/style-showcase.json'), 'utf8'));

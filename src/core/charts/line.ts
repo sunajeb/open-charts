@@ -88,7 +88,7 @@ export function layoutLine(ctx: Ctx) {
   // Headroom for a label above a point at the top of the scale.
   const py = frame.y + legendH + lh + pad * 0.5 + r;
   const ph = frame.y + frame.h - catH - py - lh * 0.5;
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks, [px, py + ph, px, py]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const xOf = (c: number) => px + slot * (c + 0.5);
@@ -225,7 +225,7 @@ function layoutProfile(ctx: Ctx, md: LineModel) {
   const py = frame.y + legendH + vlH('left');
   const yA = frame.y + frame.h - axisH - vlH('right');
   const ph = yA - py;
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks, [px, yA, px + pw, yA]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   if (pw < lh * 2 || ph < lh * nCat * 0.5) ctx.hidden.push('chart frame too small');
   const xOf = (v: number) => px + ((v - dmin) / (dmax - dmin)) * pw;

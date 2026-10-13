@@ -19,6 +19,10 @@ export interface SceneContent {
 export interface SlideContent {
   title?: string;
   scenes: SceneContent[];
+  /** Slide tags (agenda: OC_KIND, OC_CHAPTER, OC_SPLIT). */
+  tags?: Tags;
+  /** Hidden in the slide show. */
+  hidden?: boolean;
 }
 
 /** Registers a tag part for one shape and returns its slide-relative relationship id. */
@@ -122,8 +126,21 @@ function textXml(t: TextShape, id: number, chartFont: string, name: string, nv =
   const geom = t.rounded ? '<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 50000"/></a:avLst></a:prstGeom>' : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
   const rPr = `<a:rPr lang="en-US" sz="${Math.round(t.size * 100)}"${t.bold ? ' b="1"' : ''} kern="400000" dirty="0">${fill(t.color)}<a:latin typeface="${esc(font)}"/><a:cs typeface="${esc(font)}"/></a:rPr>`;
   const paras = t.text.split('\n').map((line) =>
-    `<a:p><a:pPr algn="${algn}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc></a:pPr><a:r>${rPr}<a:t>${esc(line)}</a:t></a:r></a:p>`).join('');
+    `<a:p><a:pPr${paraAttrs(t)} algn="${algn}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc>${bulletXml(t)}</a:pPr><a:r>${rPr}<a:t>${esc(line)}</a:t></a:r></a:p>`).join('');
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr txBox="1"/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(t.x)}" y="${e(t.y)}"/><a:ext cx="${e(t.w)}" cy="${e(t.h)}"/></a:xfrm>${geom}${fill(t.fill)}${ln(t.stroke, t.strokeWidth)}</p:spPr><p:txBody><a:bodyPr${vert} wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
+}
+
+/** Outline level and hanging indent of a list paragraph (agenda headings). */
+function paraAttrs(t: TextShape): string {
+  const lvl = t.level && t.level > 1 ? ` lvl="${Math.min(8, t.level - 1)}"` : '';
+  return t.bullet ? `${lvl} marL="${e(t.bullet.at + t.bullet.hang)}" indent="${-e(t.bullet.hang)}"` : lvl;
+}
+
+function bulletXml(t: TextShape): string {
+  const b = t.bullet;
+  if (!b) return '';
+  if (b.number !== undefined) return `<a:buFontTx/><a:buAutoNum type="arabicPeriod"${b.number > 1 ? ` startAt="${b.number}"` : ''}/>`;
+  return `<a:buFont typeface="Arial"/><a:buChar char="${esc(b.char ?? '\u2022')}"/>`;
 }
 
 /**
@@ -147,7 +164,8 @@ function slideXml(slide: SlideContent, font: string, addTags: AddTags): string {
     body += textXml({ kind: 'text', x: 36, y: 24, w: SLIDE.w - 72, h: 44, text: slide.title, size: 24, color: '1A1A1A', bold: true, align: 'left', valign: 'top' }, ids.next(), font, TITLE_NAME);
   }
   for (const s of slide.scenes) body += groupXml(s, ids, font, addTags);
-  return `${XML}<p:sld ${NS}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${body}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+  const cust = slide.tags?.length ? `<p:custDataLst><p:tags r:id="${addTags(slide.tags)}"/></p:custDataLst>` : '';
+  return `${XML}<p:sld ${NS}${slide.hidden ? ' show="0"' : ''}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${body}</p:spTree>${cust}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
 }
 
 const rels = (items: [string, string][]) =>

@@ -1,5 +1,6 @@
 // Spec versioning and validation. Pure functions; the JSON Schema in schema/*.schema.json mirrors
 // these rules (a sync test keeps the key lists identical).
+import { AGENDA_OPTION_KEYS, AGENDA_PRESETS, AGENDA_STATES, HEADING_STYLE_KEYS } from './agenda.ts';
 import type { ChartOptions, ChartSpec } from './types.ts';
 import { LOCALES } from './numbers.ts';
 import { COLOR_NAMES, isColor } from './theme.ts';
@@ -90,6 +91,7 @@ export const OPTIONS = {
   sizeLegend: { types: ['bubble'], value: 'boolean or caption' },
   labelContent: { types: ['pie', 'doughnut'], value: '`percent` `value` `both`' },
   scaleGroup: { types: ['stacked', 'clustered', 'waterfall', 'line', 'area', 'combo'], value: 'group name', auto: 'none (own scale)' },
+  axisMax: { types: ['stacked', 'clustered', 'waterfall', 'line', 'area', 'combo'], value: 'number: the value axis reaches at least this high', auto: 'fits the data' },
   shades: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   brackets: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   today: { types: ['gantt'], value: 'date', auto: 'none' },
@@ -140,8 +142,10 @@ export const editorSpec = () => ({
   limits: LIMITS,
   directions: DIRECTIONS,
 });
-export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
-export const SLIDE_KEYS = ['title', 'chart', 'charts'] as const;
+export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'agenda', 'slides'] as const;
+export const SLIDE_KEYS = ['title', 'chart', 'charts', 'chapter', 'level', 'toc', 'split'] as const;
+/** Keys of a deck's `agenda`: the agenda options plus the title of agenda slides. */
+export const DECK_AGENDA_KEYS = [...AGENDA_OPTION_KEYS, 'title'] as const;
 /** Keys of one entry of a slide's `charts` (several charts on one slide). */
 export const SLIDE_CHART_KEYS = ['frame', 'chart'] as const;
 export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers', 'elements'] as const;
@@ -446,6 +450,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   if (o.today !== undefined && !isDate(o.today)) e.add(p('today'), `must be a date like "2026-03-15", got ${describe(o.today)}`);
   validateDecorations(e, o, type, nCat, series, index);
   if (o.sizeLegend !== undefined && typeof o.sizeLegend !== 'boolean' && typeof o.sizeLegend !== 'string') e.add(p('sizeLegend'), `must be true, false or a caption, got ${describe(o.sizeLegend)}`);
+  if (o.axisMax !== undefined && o.axisMax !== null && (typeof o.axisMax !== 'number' || !Number.isFinite(o.axisMax))) e.add(p('axisMax'), `must be a number, got ${describe(o.axisMax)}`);
   if (o.scaleGroup !== undefined && o.scaleGroup !== null && (typeof o.scaleGroup !== 'string' || !o.scaleGroup)) e.add(p('scaleGroup'), `must be a group name, got ${describe(o.scaleGroup)}`);
 }
 
@@ -570,6 +575,7 @@ export function validateDeck(deck: unknown): SpecError[] {
     e.add(['specVersion'], `unsupported specVersion ${describe(deck.specVersion)}; this engine reads version ${SPEC_VERSION}`);
   }
   if (deck.style !== undefined) checkStyle(e, deck.style);
+  if (deck.agenda !== undefined) validateAgenda(e, deck.agenda);
   if (!Array.isArray(deck.slides)) { e.add(['slides'], 'must be an array of slides'); return e.list; }
   const out = e.list;
   deck.slides.forEach((s, i) => {
@@ -577,6 +583,19 @@ export function validateDeck(deck: unknown): SpecError[] {
     const se = new Errors(`/slides/${i}`);
     se.unknown(s, SLIDE_KEYS, []);
     if (s.title !== undefined && typeof s.title !== 'string') se.add(['title'], 'must be a string');
+    if (s.split !== undefined && typeof s.split !== 'boolean') se.add(['split'], 'must be true or false');
+    if (s.chapter !== undefined || s.toc !== undefined || s.level !== undefined) {
+      // An agenda slide: the agenda draws it, so it has no chart.
+      if (s.chapter !== undefined && (typeof s.chapter !== 'string' || !s.chapter.trim())) se.add(['chapter'], 'must be the chapter\'s name');
+      if (s.toc !== undefined && s.toc !== true) se.add(['toc'], 'must be true (a table-of-contents slide)');
+      if (s.chapter !== undefined && s.toc !== undefined) se.add(['toc'], 'a slide is either a chapter or a table of contents, not both');
+      if (s.level !== undefined && (s.chapter === undefined || !Number.isInteger(s.level) || (s.level as number) < 1 || (s.level as number) > 9)) se.add(['level'], 'must be a whole number 1–9 on a chapter slide');
+      if (s.chapter === undefined && s.toc === undefined) se.add([], 'a slide with "level" needs a "chapter"');
+      if (s.chart !== undefined || s.charts !== undefined) se.add([s.chart !== undefined ? 'chart' : 'charts'], 'an agenda slide (chapter or toc) has no chart');
+      out.push(...se.list);
+      return;
+    }
+    if (s.split && s.chart === undefined && s.charts === undefined) { out.push(...se.list); return; }
     if (s.charts === undefined) { out.push(...se.list, ...validateSpec(migrate(s.chart as object), `/slides/${i}/chart`)); return; }
     // Several charts on one slide: `charts` instead of `chart`, each with an optional frame.
     if (s.chart !== undefined) se.add(['chart'], 'a slide has either "chart" or "charts", not both');
@@ -601,6 +620,27 @@ export function validateDeck(deck: unknown): SpecError[] {
     });
   });
   return out;
+}
+
+function validateAgenda(e: Errors, a: unknown) {
+  if (!isObj(a)) { e.add(['agenda'], 'must be an object of agenda options'); return; }
+  e.unknown(a, DECK_AGENDA_KEYS, ['agenda']);
+  if (a.title !== undefined && typeof a.title !== 'string') e.add(['agenda', 'title'], 'must be a string');
+  if (a.preset !== undefined && !(AGENDA_PRESETS as readonly unknown[]).includes(a.preset)) e.add(['agenda', 'preset'], `must be one of ${AGENDA_PRESETS.join(', ')}`);
+  if (a.numbering !== undefined && typeof a.numbering !== 'boolean') e.add(['agenda', 'numbering'], 'must be true or false');
+  if (a.fontSize !== undefined && (typeof a.fontSize !== 'number' || !(a.fontSize >= 6 && a.fontSize <= 72))) e.add(['agenda', 'fontSize'], 'must be a number of points 6–72');
+  if (a.tocLevels !== undefined && (!Number.isInteger(a.tocLevels) || (a.tocLevels as number) < 1 || (a.tocLevels as number) > 9)) e.add(['agenda', 'tocLevels'], 'must be a whole number 1–9');
+  if (a.styles === undefined) return;
+  if (!isObj(a.styles)) { e.add(['agenda', 'styles'], 'must be an object of heading styles by state'); return; }
+  e.unknown(a.styles, AGENDA_STATES, ['agenda', 'styles']);
+  for (const [k, v] of Object.entries(a.styles)) {
+    const p = ['agenda', 'styles', k];
+    if (!isObj(v)) { e.add(p, 'must be an object with fill, line, color, bold and/or size'); continue; }
+    e.unknown(v, HEADING_STYLE_KEYS, p);
+    for (const c of ['fill', 'line', 'color']) if (v[c] !== undefined && v[c] !== '') checkColor(e, v[c], [...p, c]);
+    if (v.bold !== undefined && typeof v.bold !== 'boolean') e.add([...p, 'bold'], 'must be true or false');
+    if (v.size !== undefined && (typeof v.size !== 'number' || !(v.size >= 4 && v.size <= 96))) e.add([...p, 'size'], 'must be a number of points 4–96');
+  }
 }
 
 /** Error thrown by layoutChart for an invalid spec; `errors` holds the path-addressed list. */

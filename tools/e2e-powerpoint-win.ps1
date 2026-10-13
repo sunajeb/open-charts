@@ -22,10 +22,13 @@
 [CmdletBinding()]
 param(
   [string]$Source = $PSScriptRoot,
-  [string]$OutDir = (Join-Path $PSScriptRoot ('open-charts-e2e-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))),
+  [string]$OutDir = '',
   [switch]$SkipInstall
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 can leave $PSScriptRoot empty in a param default (seen with -File).
+if (-not $Source) { $Source = Split-Path -Parent $MyInvocation.MyCommand.Path }
+if (-not $OutDir) { $OutDir = Join-Path $Source ('open-charts-e2e-' + (Get-Date -Format 'yyyyMMdd-HHmmss')) }
 $home_ = Join-Path $env:LOCALAPPDATA 'open-charts'
 $addinLog = Join-Path $home_ 'addin.log'
 $base = 'http://127.0.0.1:4174'

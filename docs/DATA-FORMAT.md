@@ -25,6 +25,7 @@ A deck is what the command line reads: a list of slides, each with an optional t
 |---|---|---|---|
 | `slides` | array | yes | One entry per slide: `{ "title"?: string, "chart": <chart spec> }`, or `{ "title"?: string, "charts": [{ "frame"?: {x, y, w, h}, "chart": <chart spec> }] }`. |
 | `style` | object | no | Fonts and colours for every chart in the deck. See [Style](#style). |
+| `agenda` | object | no | How agenda slides look. See [Agenda slides](#agenda-slides). |
 | `specVersion` | `1` | no | Format version. Leave it out or set it to `1`. |
 | `$schema` | string | no | Ignored; lets editors find the JSON Schema. |
 
@@ -90,6 +91,56 @@ slide has either `chart` or `charts`, never both. Give the charts the same
 ```
 
 `open-charts import` gives such a slide back as `charts`, with each chart's frame.
+
+### Agenda slides
+
+A slide with `chapter` instead of a chart is an **agenda slide**: it starts a chapter, and every
+agenda slide shows the deck's agenda with its own chapter highlighted (see the
+[user guide](USER-GUIDE.md#agenda)). `level` nests it (1 = top level, 2 = subchapter, …). A slide
+with `"toc": true` lists the top-level chapters without highlighting. `"split": true` on any slide
+starts a new, independent agenda there, e.g. for the backup; a slide that only has a title and
+`split` is fine.
+
+| Slide key | Type | Meaning |
+|---|---|---|
+| `chapter` | string | This slide starts a chapter with this name. No `chart` / `charts`. |
+| `level` | 1–9 | Text level of the chapter (default 1). |
+| `toc` | `true` | Table-of-contents slide. |
+| `split` | boolean | A new agenda section starts at this slide. |
+
+| `agenda` key | Type | Meaning |
+|---|---|---|
+| `preset` | `flat` · `plain` · `boxed` | Predefined style (default `flat`: filled boxes, the current chapter in accent 1). |
+| `numbering` | boolean | Number chapters (1., 2., … per level) instead of bullets. |
+| `fontSize` | pt | Top-level heading size (default 24, smaller only when the chapters do not fit the slide); subchapters are 85 % of it. |
+| `tocLevels` | 1–9 | Levels a table of contents shows (default 1). |
+| `styles` | object | Per-state overrides: `{ "<state>": { "fill", "line", "color", "bold", "size" } }`; colours as in [Style](#style), `""` for none. States: `current-top`, `top-contains-current`, `top`, `current-sub`, `child-of-current-top`, `in-subtree`, `under-current-top`, `same-top`, `other`, `toc-top`, `toc-sub`, `path`. |
+| `title` | string | Title of agenda slides (default "Agenda"). A slide's own `title` wins. |
+
+A chapter's agenda slide is hidden in the slide show when its first subchapter's agenda slide
+follows it directly. `examples/agenda.json` is a complete deck.
+
+```json
+{
+  "agenda": { "preset": "flat", "styles": { "current-top": { "fill": "accent2" } } },
+  "slides": [
+    { "toc": true },
+    { "chapter": "Market" },
+    { "chapter": "Market size", "level": 2 },
+    {
+      "title": "The market doubles by 2028",
+      "chart": {
+        "type": "clustered",
+        "categories": ["2024", "2026", "2028"],
+        "series": [{ "name": "Market", "values": [10, 15, 20] }]
+      }
+    },
+    { "chapter": "Plan" },
+    { "title": "Backup", "split": true },
+    { "chapter": "Methodology" }
+  ]
+}
+```
 
 ## Chart
 
@@ -300,6 +351,7 @@ same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optio
 | [`sizeLegend`](#sizelegend) | boolean or caption | bubble | off |
 | [`labelContent`](#labelcontent) | `percent` `value` `both` | pie, doughnut | `percent` |
 | [`scaleGroup`](#scalegroup) | group name | stacked, clustered, waterfall, line, area, combo | none (own scale) |
+| [`axisMax`](#axismax) | number: the value axis reaches at least this high | stacked, clustered, waterfall, line, area, combo | fits the data |
 | [`shades`](#shades) | array of `{from, to, label?}` | gantt | none |
 | [`brackets`](#brackets) | array of `{from, to, label?}` | gantt | none |
 | [`today`](#today) | date | gantt | none |
@@ -429,6 +481,13 @@ data. `true` forces zero in; `false` always fits the data.
 
 Space between columns as a fraction of the column width: `0` makes columns touch, `0.5` (the
 default) leaves half a column between them. From 0 to 10, in the editor too.
+
+#### `axisMax`
+
+The top of the value axis: it reaches at least this value, so the columns or lines leave room
+above them. It only ever adds headroom — a value below the top of the data is ignored, so it never
+cuts a column off. In PowerPoint, drag the handle at the top of the value axis to set it (USER-GUIDE
+"Dragging handles"); `null` or leaving it out fits the axis to the data again.
 
 #### `scaleGroup`
 

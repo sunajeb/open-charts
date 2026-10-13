@@ -32,6 +32,8 @@ param(
   [switch]$SkipEngineCheck
 )
 $ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 can leave $PSScriptRoot empty in a param default (seen with -File).
+if (-not $Source) { $Source = Split-Path -Parent $MyInvocation.MyCommand.Path }
 Set-StrictMode -Version 2
 
 $AddInKey = Join-Path $OfficeKey 'AddIns\open-charts'

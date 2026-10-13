@@ -33,7 +33,7 @@ function decks(dir: string, bench: boolean): Slide[] {
     const style = { ...defaultStyle, ...deck.style };
     const name = basename(f, '.json');
     // A slide with several charts (`charts`) counts each chart (named <slide>.<k>).
-    return deck.slides.flatMap((s, i) => (s.charts?.map((c) => c.chart) ?? [s.chart!]).map((chart, k, all) => ({
+    return deck.slides.flatMap((s, i) => (s.charts?.map((c) => c.chart) ?? (s.chart ? [s.chart] : [])).map((chart, k, all) => ({
       source: `${dir}/${f}#${i + 1}${all.length > 1 ? `.${k + 1}` : ''}`,
       name: `${deck.slides.length > 1 ? `${name}-${i + 1}` : name}${all.length > 1 ? `.${k + 1}` : ''}`,
       spec: migrate(chart), style, bench, allow: bench ? allowedHidden(name) : [],

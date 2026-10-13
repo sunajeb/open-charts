@@ -34,6 +34,7 @@ export const SHAPE_COLUMNS = [
   'kind', 'x', 'y', 'w', 'h', 'fill', 'lineColor', 'lineWidth', 'dash', 'arrowEnd',
   'text', 'font', 'size', 'bold', 'color', 'align', 'valign', 'wrap', 'autosize',
   'role', 'name', 'points', 'textGeom', 'rotate', 'arrowStart', 'pattern',
+  'level', 'bullet', 'bulletAt', 'bulletHang',
 ] as const;
 
 export type ShapeRecord = Record<(typeof SHAPE_COLUMNS)[number], string>;
@@ -106,6 +107,10 @@ export function shapeRecord(s: Shape, font: string, role = '', name = ''): strin
         text: t.text, font: t.font ?? font, size: num(t.size), bold: flag(t.bold), color: hex(t.color),
         align: ALIGN[t.align] ?? 'l', valign: VALIGN[t.valign] ?? 't', textGeom: t.rounded ? 'roundRect' : '',
         rotate: t.rotate ? String(t.rotate) : '',
+        // List paragraph (agenda headings): bullet "u<code point>" or "n<start number>".
+        level: t.level ? String(t.level) : '',
+        bullet: t.bullet ? (t.bullet.number !== undefined ? `n${t.bullet.number}` : `u${(t.bullet.char ?? '\u2022').codePointAt(0)}`) : '',
+        bulletAt: t.bullet ? num(t.bullet.at) : '', bulletHang: t.bullet ? num(t.bullet.hang) : '',
       });
       break;
     }

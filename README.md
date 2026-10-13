@@ -160,6 +160,16 @@ policies, application control and proxies on company laptops are covered in
 The [user guide](docs/USER-GUIDE.md) covers the datasheet, every option, hidden labels and
 troubleshooting.
 
+### Agenda
+
+The **Agenda** group on the same tab builds chapters: **Chapter** inserts an agenda slide (a new
+chapter) after the current slide, **Table of Contents** a contents slide. Rename a chapter by typing
+over its heading on any agenda slide, nest it with PowerPoint's list-level buttons, move it with
+**Move up/down** (its slides move along), and split off a backup with **Split Agenda**: every agenda
+slide follows, and a chapter with no slides of its own before its first subchapter has its agenda
+slide hidden in the slide show. From the command line, `{"chapter": "Market"}` slides do the same
+(`examples/agenda.json`). See the [user guide](docs/USER-GUIDE.md#agenda).
+
 ## Office.js add-in (Windows, web, Mac)
 
 A second, web-based add-in runs wherever PowerPoint runs Office add-ins (Windows, the web, Mac): a
@@ -202,7 +212,7 @@ node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o o
 
 | Command | What it does |
 |---|---|
-| `open-charts <deck.json> [-o out/deck]` | Writes `out/deck.pptx`, one chart per slide. A file holding a single chart works too. |
+| `open-charts <deck.json> [-o out/deck]` | Writes `out/deck.pptx`, one chart per slide, plus agenda slides (`chapter`, `toc`, `split`). A file holding a single chart works too. |
 | `  --svg` | Also writes `out/deck-<n>.svg` previews. |
 | `  --strict` | Exit code 1 if any label had to be hidden (the deck is still written). |
 | `  --report report.json` | Writes the layout issues per slide as JSON. |
@@ -289,6 +299,7 @@ npm test                # unit tests, zero dependencies (includes the docs examp
 npm run e2e             # editor end-to-end in Chromium (npm install; npx playwright install chromium)
 npm run goldens         # examples → .pptx → LibreOffice PDF → PNG, diffed against test/goldens/<platform>/
 npm run e2e:powerpoint  # macOS + PowerPoint: insert/update every chart type through the add-in
+npm run e2e:agenda      # macOS + PowerPoint: chapters, nesting, moves, split, sorter, hidden slides
 npm run build:win       # dist/win: open-charts.exe (no Node needed), the .ppam, install scripts
 npm run bench           # layout and start-up times against the performance budgets
 npm run build:officejs  # Office.js add-in bundle; test/officejs.test.ts and test/e2e/officejs.spec.ts test it

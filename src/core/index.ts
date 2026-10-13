@@ -138,7 +138,12 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
     // "down" and "left" are the native "up" / "right" layouts mirrored (direction.ts).
     const dir = ctx.o.direction;
-    if (dir === 'down' || dir === 'left') mirrorShapes(ctx.shapes, ctx.roles, ctx.frame, dir === 'left' ? 'x' : 'y');
+    if (dir === 'down' || dir === 'left') {
+      mirrorShapes(ctx.shapes, ctx.roles, ctx.frame, dir === 'left' ? 'x' : 'y');
+      // Where the value scale runs (drag handles) mirrors with the shapes.
+      const at = ctx.valueScale?.at, f = ctx.frame;
+      if (at) ctx.valueScale!.at = dir === 'left' ? [2 * f.x + f.w - at[0], at[1], 2 * f.x + f.w - at[2], at[3]] : [at[0], 2 * f.y + f.h - at[1], at[2], 2 * f.y + f.h - at[3]];
+    }
     ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
     restoreRoles(ctx.roles, index);
     const warnings = any(prepared.overrides) ? unmatched(prepared.overrides, seen, prepared) : [];
@@ -187,3 +192,5 @@ export function layoutGroup(items: GroupItem[], m: Measurer, style: Style = defa
 }
 export { parseStyleFile, validateStyleFile, mergeStyles, styleFor, fileStyle, InvalidStyleFileError, STYLE_FILE_KEYS, STYLE_FILE_LIMITS } from './style-file.ts';
 export type { StyleFile } from './style-file.ts';
+export { dragHandles, dragSpec, resetSpec, describeDrag, gapFor, valueAt, niceStep } from './handles.ts';
+export type { DragHandle, HandleKind, Relayout } from './handles.ts';
