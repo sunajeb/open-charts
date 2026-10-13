@@ -107,7 +107,9 @@ final class Host: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWind
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) { loaded = false }
 
     func show(id: Any, url: String, frame: [Double], focus: Bool) {
+        placing = true
         panel.setFrame(cocoa(frame), display: false)
+        placing = false
         open = true
         suspended = false
         pending?.timer?.invalidate()
@@ -156,13 +158,28 @@ final class Host: NSObject, WKScriptMessageHandler, WKNavigationDelegate, NSWind
             // Keep the top-left corner where the server placed it.
             if let w = body["w"] as? Double, let h = body["h"] as? Double, w > 20, h > 20 {
                 let f = panel.frame
+                placing = true
                 panel.setFrame(NSRect(x: f.minX, y: f.maxY - h, width: min(w, 900), height: h), display: true)
+                placing = false
             }
         default: emit(["event": "page", "panel": name, "body": body])
         }
     }
 
     // The close button: Done (keeps what was applied), handled by the page like ⌘↵.
+    // Where the user put the window (dragged or resized it), remembered for every chart and across
+    // restarts: the server places the next pop-up by it (info "saved").
+    var placing = false
+    var savedKey: String { "frame.\(name)" }
+    func remember() {
+        // Only the user moves a window with the mouse button down; anything else (placement, macOS
+        // pulling a window onto a display) is not a choice to remember.
+        guard open, !placing, pending == nil, panel.isVisible, NSEvent.pressedMouseButtons & 1 == 1 else { return }
+        UserDefaults.standard.set(topLeft(panel.frame), forKey: savedKey)
+    }
+    func windowDidMove(_ notification: Notification) { remember() }
+    func windowDidEndLiveResize(_ notification: Notification) { remember() }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         js("window.ocPopupClose ? (ocPopupClose('done'), true) : false") { [weak self] r, _ in
             if (r as? Bool) != true { self?.hide(reason: "closed") }
@@ -235,7 +252,11 @@ final class Helper: NSObject {
                 windows.append([x, y, width, height])
             }
         }
-        return ["event": "info", "screens": screens, "windows": windows]
+        var saved: [String: [Double]] = [:]
+        for name in ["datasheet", "toolbar"] {
+            if let f = UserDefaults.standard.array(forKey: "frame.\(name)") as? [Double], f.count == 4 { saved[name] = f }
+        }
+        return ["event": "info", "screens": screens, "windows": windows, "saved": saved]
     }
 
     func handle(_ line: String) {

@@ -131,6 +131,16 @@ export function placePopup(chart: Rect | undefined, windows: Rect[], screens: Sc
   return fit({ x: box.x + (box.w - size.w) / 2, y: box.y + (box.h - size.h) / 2, ...size });
 }
 
+/**
+ * Once the user has dragged or resized the pop-up, it opens where they left it (as the reference's
+ * datasheet does), moved back onto a display if that one is gone.
+ */
+export function keepSaved(saved: Rect, screens: ScreenInfo[]): Rect {
+  const s = screens.find((x) => saved.x + saved.w / 2 >= x.frame.x && saved.x + saved.w / 2 <= x.frame.x + x.frame.w && saved.y >= x.frame.y && saved.y <= x.frame.y + x.frame.h) ?? screens[0];
+  const w = Math.max(360, saved.w), h = Math.max(220, saved.h);
+  return s ? clampInto({ ...saved, w, h }, s.visible) : { ...saved, w, h };
+}
+
 /** The pop-up page for an edit session. */
 export const popupUrl = (base: string, id: string) => `${base}/?session=${encodeURIComponent(id)}&popup=1`;
 /** The page the Mac helper preloads (no session yet: it waits for ocPopupOpen). */
@@ -182,7 +192,7 @@ export interface PopupHelper {
   warm(): boolean;
   /** Shows session `id` next to the chart; resolves with the helper's "shown" answer, or undefined. */
   show(base: string, id: string, where?: ChartWhere, opts?: { focus?: boolean; size?: { w: number; h: number } }): Promise<Msg | undefined>;
-  info(): Promise<{ windows: Rect[]; screens: ScreenInfo[] } | undefined>;
+  info(): Promise<{ windows: Rect[]; screens: ScreenInfo[]; saved?: Rect } | undefined>;
   /** Shows another panel (the element toolbar): ocPopupOpen(arg) in its preloaded page, at `frame`, without taking the keyboard. */
   showPanel?(panel: string, url: string, arg: unknown, frame: Rect): void;
   hide(panel?: string): void;
@@ -255,13 +265,14 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
       const screens = ((m.screens as Array<{ frame: unknown; visible: unknown; scale?: number }>) ?? [])
         .map((s) => ({ frame: toRect(s.frame)!, visible: toRect(s.visible)!, scale: s.scale }))
         .filter((s) => s.frame && s.visible);
-      return { windows, screens };
+      const saved = toRect((m.saved as Record<string, unknown> | undefined)?.datasheet);
+      return { windows, screens, ...(saved ? { saved } : {}) };
     },
     async show(base2, id, where, opts = {}) {
       if (!start()) return undefined;
       const info = await helper.info();
       if (!info) return undefined;
-      const frame = placePopup(chartRect(where, info.windows, info.screens), info.windows, info.screens, opts.size);
+      const frame = info.saved ? keepSaved(info.saved, info.screens) : placePopup(chartRect(where, info.windows, info.screens), info.windows, info.screens, opts.size);
       const answer = expect('shown', 3000);
       send({ cmd: 'show', panel: 'datasheet', id, url: popupUrl(base2, id), frame: [frame.x, frame.y, frame.w, frame.h], focus: opts.focus !== false });
       return answer;

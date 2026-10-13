@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { chartRect, clampInto, edgeArgs, openPopup, parseWhere, placePopup, popupHelper, POPUP_SIZE, popupUrl, type PopupHelper, type Rect, type ScreenInfo } from '../src/addin/popup.ts';
+import { chartRect, clampInto, keepSaved, edgeArgs, openPopup, parseWhere, placePopup, popupHelper, POPUP_SIZE, popupUrl, type PopupHelper, type Rect, type ScreenInfo } from '../src/addin/popup.ts';
 import { parseRequest } from '../src/addin/engine.ts';
 
 // A 1512×982 pt MacBook display (menu bar 38 pt) and a second display to its right.
@@ -146,4 +146,11 @@ rl.on('close', () => process.exit(0));
   h.stop();
   await new Promise((r) => setTimeout(r, 100));
   assert.equal(h.running, false);
+});
+
+test('a pop-up the user moved or resized opens there next time, kept on a display', () => {
+  assert.deepEqual(keepSaved({ x: 900, y: 100, w: 700, h: 400 }, [main]), { x: 812, y: 100, w: 700, h: 400 });
+  assert.deepEqual(keepSaved({ x: 2000, y: 300, w: 500, h: 300 }, [main, right]), { x: 2000, y: 300, w: 500, h: 300 });
+  // Its display is gone: back on the main one; never shrunk below a usable size.
+  assert.deepEqual(keepSaved({ x: 4000, y: 300, w: 100, h: 50 }, [main]), { x: 1512 - 360, y: 300, w: 360, h: 220 });
 });
