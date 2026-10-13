@@ -2,7 +2,7 @@
 // the rule id(s) it covers; the spec lists every rule with its implementation, source and tests.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import type { ChartSpec, Frame, LineShape, PathShape, RectShape, Scene, Shape, TextShape } from '../src/core/index.ts';
 import { defaultStyle, layoutChart, minimumSize } from '../src/core/index.ts';
 import { formatValue, localeOf, niceTicks } from '../src/core/numbers.ts';
@@ -28,7 +28,7 @@ const M = '−';
 
 // ---- Numbers ------------------------------------------------------------------------------------
 
-test('NUM-2: empty axis range costs more than an extra tick (620 → 0–700, not 0–800); 3–9 ticks', () => {
+test('AX-2/3: empty axis range costs more than an extra tick (620 → 0–700, not 0–800); 3–9 ticks', () => {
   assert.deepEqual(niceTicks(0, 620, 5), [0, 100, 200, 300, 400, 500, 600, 700]);
   for (const [a, b, n] of [[0, 1, 3], [0, 999, 5], [-37, 12, 4], [3, 3, 5]] as const) {
     const t = niceTicks(a, b, n);
@@ -37,13 +37,13 @@ test('NUM-2: empty axis range costs more than an extra tick (620 → 0–700, no
   }
 });
 
-test('NUM-5: an unknown locale falls back to en-US; a language-only id to its country', () => {
+test('NUM-4: an unknown locale falls back to en-US; a language-only id to its country', () => {
   assert.equal(localeOf('xx-YY'), localeOf('en-US'));
   assert.equal(localeOf('fr'), localeOf('fr-FR'));
   assert.equal(formatValue(1234.5, { decimals: 1, locale: 'pt-BR' }), '1,234.5');
 });
 
-test('NUM-7: no sign on a value that rounds to zero; "+" only on signed positives', () => {
+test('NUM-5: no sign on a value that rounds to zero; "+" only on signed positives', () => {
   assert.equal(formatValue(-0.004, { decimals: 1 }), '0.0');
   assert.equal(formatValue(0.004, { decimals: 1, signed: true }), '0.0');
   assert.equal(formatValue(-2, { decimals: 0, signed: true }), `${M}2`);
@@ -99,14 +99,14 @@ test('COL-5: a 100% chart ignores negative values and says so', () => {
   assert.deepEqual(textsOf(s, /^label:value:s0:c0$/), ['100%']);
 });
 
-test('COL-7: totals wider than their slots are all left out, not every other one', () => {
+test('TOT-2: totals wider than their slots are all left out, not every other one', () => {
   const cats = Array.from({ length: 24 }, (_, i) => `${i + 1}`);
   const s = lay({ type: 'stacked', categories: cats, series: [{ name: 'A', values: cats.map(() => 123456) }], options: { seriesLabels: 'none' } }, { x: 0, y: 0, w: 380, h: 300 });
   assert.equal(textsOf(s, /^label:total:/).length, 0);
   assert.ok(s.hidden.includes('column totals wider than their slots: hidden'));
 });
 
-test('COL-9: column width is slot / (1 + gap)', () => {
+test('COL-7: column width is slot / (1 + gap)', () => {
   const spec: ChartSpec = { type: 'clustered', categories: ['A', 'B', 'C'], series: [{ name: 'S', values: [3, 4, 5] }], options: { valueAxis: true, seriesLabels: 'none' } };
   const w = (gap: number) => rectsOf(lay({ ...spec, options: { ...spec.options, gap } }), /^bar:/)[0].w;
   assert.ok(Math.abs(w(0) / w(1) - 2) < 1e-6);
@@ -421,7 +421,7 @@ test('LEG-2: legend swatches follow the mark: boxes for columns and areas, short
   assert.deepEqual(kinds(lay(two)), ['ellipse']);
 });
 
-test('MIN-1: minimum sizes per type grow with the categories', () => {
+test('MIN-2: minimum sizes per type grow with the categories', () => {
   const spec = (type: ChartSpec['type'], n: number, options?: ChartSpec['options']) => ({ type, categories: Array.from({ length: n }, (_, i) => `${i}`), series: [{ name: 's', values: [] }], options }) as unknown as ChartSpec;
   assert.deepEqual(minimumSize(spec('stacked', 20)), { w: 320, h: 120 });
   assert.deepEqual(minimumSize(spec('stacked', 20, { orientation: 'horizontal' })), { w: 200, h: 270 });
@@ -450,5 +450,29 @@ test('RES-4: at the default frame the last-resort pass hides nothing in any samp
   for (const [type, spec] of Object.entries(samples)) {
     const s = lay(spec!);
     assert.deepEqual(s.hidden.filter((h) => /\) hidden: /.test(h)), [], type);
+  }
+});
+
+// ---- The spec itself ----------------------------------------------------------------------------
+
+test('docs/behaviour-spec.md: unique rule ids, the count is right, and every test it names exists', () => {
+  const doc = readFileSync(new URL('../docs/behaviour-spec.md', import.meta.url), 'utf8');
+  const ids = [...doc.matchAll(/^\| ([A-Z]+-\d+) \|/gm)].map((x) => x[1]);
+  assert.equal(new Set(ids).size, ids.length, 'unique ids');
+  assert.match(doc, new RegExp(`\\*\\*Count: ${ids.length} rules\\*\\*`));
+  const dir = new URL('./', import.meta.url);
+  const src: Record<string, string> = Object.fromEntries(readdirSync(dir).filter((f) => f.endsWith('.test.ts'))
+    .map((f) => [f.replace('.test.ts', ''), readFileSync(new URL(f, dir), 'utf8')]));
+  src.e2e = readFileSync(new URL('e2e/editor.spec.ts', dir), 'utf8');
+  for (const [, file, title] of doc.matchAll(/([a-z0-9-]+) › "([^"]+)"/g)) {
+    if (title === 'matrix') continue;
+    const prefix = title.split('…')[0].trim();
+    const body = src[file];
+    assert.ok(body && (body.includes(prefix) || body.includes(prefix.replace(/'/g, "\\'"))), `${file} › "${title}"`);
+  }
+  // Every focused test in this file is listed under its rule.
+  for (const [, id] of src.behaviour.matchAll(/^test\('([^:]+):/gm)) {
+    if (id.startsWith('docs/')) continue;
+    assert.ok(doc.includes(`behaviour › "${id}"`), id);
   }
 });

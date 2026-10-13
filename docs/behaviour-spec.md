@@ -9,12 +9,12 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 (often a bug id `Bn` from [plan/02](plan/02-engine-and-quality.md) §1). Paths are relative to
 `src/core/`; tests to `test/`.
 
-**Count: 186 rules** in 22 areas. Change a rule → change its row and its test in the same commit.
+**Count: 205 rules** in 26 areas. Change a rule → change its row and its test in the same commit.
 
 - [1 Spec and validation](#1-spec-and-validation) · [2 Hidden rows](#2-hidden-rows)
 - [3 Numbers and locales](#3-numbers-and-locales) · [4 Rounding](#4-rounding) · [5 Dates and 30/360](#5-dates-and-30360)
 - [6 Value axes](#6-value-axes) · [7 Category labels](#7-category-labels) · [8 Series labels and legends](#8-series-labels-and-legends)
-- [9 Label placement and the placer](#9-label-placement-and-the-placer) · [10 Totals, CAGR and difference arrows](#10-totals-cagr-and-difference-arrows)
+- [9 Label placement and the placer](#9-label-placement-and-the-placer) · [10 Totals, CAGR and difference arrows](#10-totals-cagr-and-difference-arrows) · [10b Decorations](#10b-decorations)
 - [11 Stacked, clustered and 100% columns and bars](#11-stacked-clustered-and-100-columns-and-bars) · [12 Waterfall](#12-waterfall)
 - [13 Mekko](#13-mekko) · [14 Mekko XY](#14-mekko-xy) · [15 Line](#15-line) · [16 Area](#16-area) · [17 Combination](#17-combination)
 - [18 Pie and doughnut](#18-pie-and-doughnut) · [19 Scatter and bubble](#19-scatter-and-bubble) · [20 Harvey balls](#20-harvey-balls)
@@ -49,6 +49,7 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | HID-5 | At least one series stays visible; Gantt Start/End and the Mekko XY width row cannot hide; Mekko XY keeps one visible height row | `spec.ts: checkTypeSeries`; editor `cannotHide` | House rule (rows read by position) | hidden › "validated…"; e2e › "optional rows…" |
 | HID-6 | Waterfall categories marked `"e"` only in a hidden row stay totals | `visible.ts: visibleSeries` | Manual en-waterfall § Create waterfall charts (e = computed total) | hidden › "waterfall categories marked "e"…" |
 | HID-7 | Pie and doughnut draw the first visible series | `visible.ts`; `charts/pie.ts: layoutPie` | Manual en-pie § Introduction (one series) | hidden › "pie and doughnut show the first visible series" |
+| HID-8 | Options that name series by index (`secondaryAxis`, level-arrow ends) follow the visible rows; a level arrow at a hidden row is left out and reported | `visible.ts: visibleSeries`; `index.ts: layoutChart` | House rule | hidden › "level arrows and the secondary axis follow the visible rows" |
 
 ## 3 Numbers and locales
 
@@ -57,8 +58,8 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | NUM-1 | Decimals are inferred: the fewest (0–2) that show every value exactly, else two significant digits of the smallest non-zero value (max 3) | `numbers.ts: inferDecimals` | House rule (B14); manual en-textlabels § Number format | numbers › "B14: inferDecimals keeps two significant digits…"; core › "number formatting" |
 | NUM-2 | Explicit `decimals` win; `format` overrides `decimals` | `common.ts: makeCtx (fmt)`; `numbers.ts: formatValue` | Manual en-textlabels § Number format | engine › "B14: locale, unit prefix, magnitude and format reach the labels and the axis" |
 | NUM-3 | Locales en-US, en-GB, en-IN (3-then-2 grouping), de-DE, fr-FR (narrow no-break space grouping): decimal mark, grouping, true minus U+2212, percent spacing (NBSP in de, NNBSP in fr) | `numbers.ts: LOCALES, groupDigits, digits` | Convention: Unicode CLDR number symbols | numbers › "B14: locales" |
-| NUM-4 | Locale lookup: exact id, then language ("de" → de-DE), then en-US | `numbers.ts: localeOf` | House rule | numbers › "B14: locales"; behaviour › "NUM-5" |
-| NUM-5 | No sign on a value that rounds to zero (no "−0"); "+" only for signed positives (growth, deltas) | `numbers.ts: formatValue, applyFormat` | Convention (Excel shows 0.0, not −0.0) | numbers › "B14: Excel format strings"; behaviour › "NUM-7" |
+| NUM-4 | Locale lookup: exact id, then language ("de" → de-DE), then en-US | `numbers.ts: localeOf` | House rule | numbers › "B14: locales"; behaviour › "NUM-4" |
+| NUM-5 | No sign on a value that rounds to zero (no "−0"); "+" only for signed positives (growth, deltas) | `numbers.ts: formatValue, applyFormat` | Convention (Excel shows 0.0, not −0.0) | numbers › "B14: Excel format strings"; behaviour › "NUM-5" |
 | NUM-6 | Units: suffix (default) or prefix, optional NBSP; `%` takes the locale's spacing; sign goes before a prefix unit (−$42) | `numbers.ts: formatValue, normalizeUnit` | Manual en-textlabels § Number format | numbers › "B14: units as prefix or suffix…" |
 | NUM-7 | Magnitude is one per chart: `auto` picks bn/m/k from the largest absolute value; suffix sits right after the number, before the unit | `numbers.ts: pickScale, formatValue`; `common.ts: makeCtx` | Manual en-textlabels § Magnitude | numbers › "B14: magnitude scaling is shared per chart" |
 | NUM-8 | Excel format codes: ≤ 3 sections (pos;neg;zero), `0 # ?`, grouping comma, trailing comma ÷ 1000, `%` ×100, quoted text, `\x`, `_x`; `[colour]` and `*` ignored; a missing negative section adds the minus | `numbers.ts: applyFormat, splitSections` | Convention: Microsoft Excel number format codes | numbers › "B14: Excel format strings" |
@@ -86,8 +87,8 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | ID | Rule | Where | Source | Tests |
 |---|---|---|---|---|
 | AX-1 | A value axis asks for 3–5 ticks by its length (fewer on a chart resized small) | `common.ts: valueTicks` | House rule (tick labels never crowd) | behaviour › "AX-1" |
-| AX-2 | Nice ticks: steps 1, 2, 2.5, 5 × 10ⁿ, 3–9 ticks covering the data, scored by wasted range, distance from the asked count and a 2.5 penalty | `numbers.ts: niceTicks` | Convention: Talbot, Lin & Hanrahan 2010 (extended Wilkinson), simplified | core › "nice ticks use 1/2/5 steps…"; behaviour › "NUM-2" |
-| AX-3 | Empty axis range costs more than an extra tick (620 → 0–700, not 0–800) | `numbers.ts: niceTicks (score)` | House rule | behaviour › "NUM-2" |
+| AX-2 | Nice ticks: steps 1, 2, 2.5, 5 × 10ⁿ, 3–9 ticks covering the data, scored by wasted range, distance from the asked count and a 2.5 penalty | `numbers.ts: niceTicks` | Convention: Talbot, Lin & Hanrahan 2010 (extended Wilkinson), simplified | core › "nice ticks use 1/2/5 steps…"; behaviour › "AX-2/3" |
+| AX-3 | Empty axis range costs more than an extra tick (620 → 0–700, not 0–800) | `numbers.ts: niceTicks (score)` | House rule | behaviour › "AX-2/3" |
 | AX-4 | The axis always includes the data; with a value axis the plot spans the outer ticks | every chart type (`ticks → dmin/dmax`) | Manual en-axes § Adjust the scale ("must always include the range…") | charts-b › "100% chart with a value axis…"; core › "nice ticks…" |
 | AX-5 | Value axis off by default except for line charts: values are labelled on the chart | `spec.ts: optionDefaults` | Manual en-axes § Value axes | engine › "options: optionDefaults()…" |
 | AX-6 | Left axis: line, 3 pt ticks, right-aligned muted labels; horizontal bars put it along the bottom | `common.ts: valueAxis`; `charts/column.ts: layoutBars` | Convention | engine › "horizontal stacked bars…"; charts-b › "100% chart with a value axis…" |
@@ -129,18 +130,39 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | LBL-9 | A boxed label never covers a neighbouring segment whose own label points at it from outside | `labels.ts: placePending (anchors)` | House rule | behaviour › "LBL-9" |
 | LBL-10 | A label with no valid position is hidden and reported, never overlapped | `labels.ts: placePending` | House rule (B13) | labels › "stacked: labels too thin for any spot are hidden and reported…" |
 | LBL-11 | Segment labels of the last column never go right when the series names are there | `charts/column.ts: layoutVertical (sides)` | House rule | behaviour › "LBL-11" |
+| PLC-1 | Labels along one axis are spread apart keeping order: pushed down from the top, then up from the bottom, each as close to its centre as possible | `place.ts: spread` | House rule (two-pass 1-D packing) | core › "spread keeps order and removes overlaps" |
+| PLC-2 | Two boxes collide when they overlap by more than a tolerance (0.5 pt by default, 1 pt in the gate) | `place.ts: overlaps` | House rule | engine › "B12: gate v2 catches…" |
+| PLC-3 | A segment crosses a box when any part lies inside it (Liang–Barsky clipping); leaders and arrows are tested this way | `place.ts: segmentHitsBox` | Convention: Liang–Barsky line clipping | behaviour › "PLC-3" |
 
 ## 10 Totals, CAGR and difference arrows
 
 | ID | Rule | Where | Source | Tests |
 |---|---|---|---|---|
 | TOT-1 | Totals: bold, above each column (stacked default on; 100% shows the absolute total; Mekko and Mekko XY on top; area above the top band; doughnut in the hole) | `charts/column.ts`, `mekko.ts`, `mekkoxy.ts`, `area.ts`, `pie.ts`, `combo.ts` | Manual en-textlabels § Label types (total labels) | core › "stacked column chart: totals…"; behaviour › "AR-4/5"; pie › "doughnut: … total in the middle" |
-| TOT-2 | Totals wider than their slots are all left out (not every other one) and reported | `charts/column.ts: layoutVertical (totalsFit)` | House rule (gaps read as missing data) | behaviour › "COL-7" |
+| TOT-2 | Totals wider than their slots are all left out (not every other one) and reported | `charts/column.ts: layoutVertical (totalsFit)` | House rule (gaps read as missing data) | behaviour › "TOT-2" |
 | ARR-1 | CAGR and difference arrows use the column totals (100% charts: the absolute totals) | `charts/column.ts: arrowLabel, model.totalsFor` | Manual en-chartdecorations § Series CAGR labels ("always calculated based on the column totals") | behaviour › "ARR-1"; quality › "CAGR label is recomputed from the shown totals" |
 | ARR-2 | CAGR = (b/a)^(1/n) − 1, one decimal, signed, in % | `common.ts: cagrLabel` | Manual en-chartdecorations § CAGR arrows | engine › "B3: quarterly CAGR uses dates…"; quality › "CAGR label…" |
-| ARR-3 | Difference arrow = signed absolute difference of the totals in the chart's number format (no sign when zero) | `charts/column.ts: arrowLabel` | Manual en-chartdecorations § Arrow modes (absolute difference) | behaviour › "ARR-3" |
+| ARR-3 | Total difference arrow, three modes: `absolute` (default, ↔, signed b − a in the chart's format, no sign when zero), `relative` (→, change from a to b in %), `reverse` (←, change from b to a in %); heads follow the mode; a relative label needs a positive base | `charts/column.ts: arrowLabel, headsOf`; `decorations.ts: diffLabel` | Manual en-chartdecorations § Arrow modes | decorations › "total difference arrow: three modes…"; behaviour › "ARR-3" |
 | ARR-5 | Arrows are brackets from both columns up to a shared line with a rounded, bold label bubble; one row per arrow above the totals; horizontal bars put them in columns to the right | `common.ts: bracketArrow, bracketArrowH, arrowRowHeight`; `charts/column.ts` | Manual en-chartdecorations § Difference arrows, CAGR arrows | e2e › "CAGR and difference arrows"; engine › "horizontal stacked bars…" |
 | ARR-6 | Arrows are decorations: the collision pass drops them before any label | `resolve.ts: priority` | House rule | behaviour › "RES-1/2/3" |
+
+## 10b Decorations
+
+| ID | Rule | Where | Source | Tests |
+|---|---|---|---|---|
+| DEC-1 | Level difference arrows between two levels — a column total, a segment's level (`series`) or a value line — relative by default, in any of the three modes | `charts/column.ts: levelArrows`; `charts/line.ts`; `decorations.ts: diffLabel, drawLevelArrow` | Manual en-chartdecorations § Level difference arrows, § Arrow modes | decorations › "level arrows: between totals (relative by default)…" |
+| DEC-2 | A level arrow's shaft stands beside the later column (below the later bar), or with `position: "between"` in the gap before it; dotted guides run from the other level; line charts connect points of two series | `decorations.ts: drawLevelArrow`; `charts/column.ts`, `charts/line.ts` | Manual en-chartdecorations § Level difference arrows | decorations › "level arrows: "between" sits in the gap…" |
+| DEC-3 | The bubble sits on the shaft (centred, else slid along it), else beside it when the arrow is too short; the shaft crosses no label; with no room the arrow is left out and reported | `decorations.ts: drawLevelArrow` | Manual en-chartdecorations § Level difference arrows ("the bubble is automatically placed next to the arrow") | decorations › "level arrows…", "decorations degrade at small sizes…" |
+| DEC-4 | Level arrows on clustered and line charts must name a series; both ends must differ; a value-line end must exist | `spec.ts: validateDecorations` | House rule | decorations › "level arrows: validation needs a series…" |
+| DEC-5 | Value lines: dashed, parallel to the category axis; `mean` = arithmetic mean of the column totals (clustered: of the bars), labelled "Ø value"; a fixed value widens the axis; `{value}` in a custom label is filled in; label left or right of the chart with a small triangle | `charts/column.ts`; `decorations.ts: valueLineText, drawValueLine` | Manual en-chartdecorations § Value lines | decorations › "value lines: mean of the column totals with "Ø"…" |
+| DEC-6 | Decoration lines step around every label they would cross (1.5 pt clear) | `decorations.ts: lineAround` | House rule | decorations › "value lines step around labels they would cross" |
+| DEC-7 | 100% indicator on 100% charts: an arrow at the 100% level with "100%", right by default, left when series names take the right, none when a value axis already reads 100% on that side; `none` removes it | `charts/column.ts: indicatorSide`; `decorations.ts: drawIndicator, indicatorSize` | Manual en-chartdecorations § 100% indicators | decorations › "100% indicator: on by default for 100% charts…" |
+| DEC-8 | `percentBase` (the datasheet's 100%= row): shares are of the base, not the column sum; with a base, percentage data show absolute totals | `charts/column.ts: model (base)` | Manual en-mekko § percent axis (100%= row); en-waterfall § Difference arrow label: Percent of datasheet 100%= | decorations › "100%= row: shares of the base…" |
+| DEC-9 | A category gap is one more slot (a column plus a gap) after the category; the chart keeps its size, so columns get narrower; a gap after the last category is an error | `decorations.ts: slotLayout, slotUnits`; `spec.ts` | Manual en-axes § Category gaps ("as wide as one column width plus one gap width") | decorations › "category gaps widen the space after a category…" |
+| DEC-10 | A category axis break draws a break symbol on the baseline after the category | `decorations.ts: categoryBreakSymbol` | Manual en-axes § Category axis breaks | decorations › "category gaps… category breaks draw a symbol on the baseline" |
+| DEC-11 | Value axis break: the range from–to is compressed to a short gap; it must lie inside the data and no segment may end inside it (else ignored and reported); straight or wiggle symbols cut every bar that spans it and the axis; ticks are nice below and above, spaced clear of each other | `decorations.ts: resolveBreak, axisDistance, brokenTicks, spacedTicks, breakSymbol` | Manual en-axes § Value axis breaks | decorations › "value axis break: compressed range…" |
+| DEC-12 | Combo `secondaryAxis`: listed line series are read against their own nice-tick axis on the right, without the primary unit; columns cannot use it | `charts/combo.ts`; `spec.ts` | Manual en-column-line-area-charts § Secondary axes | decorations › "combo secondary axis…" |
+| DEC-13 | Every decoration is drawn after the labels it must not touch; what finds no room is left out and reported, never colliding, at every size | `decorations.ts` (all) | House rule | decorations › "decorations degrade at small sizes…"; resize › matrix |
 
 ## 11 Stacked, clustered and 100% columns and bars
 
@@ -152,7 +174,7 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | COL-4 | Clustered labels too wide even at the minimum: a value axis carries the values instead of a partial row | `charts/column.ts: layoutColumns` | House rule | bench-fixes › "clustered: labels too wide… give way to a value axis…" |
 | COL-5 | 100%: each column scaled to 100%; negative values ignored and reported | `charts/column.ts: model` | Manual en-column-line-area-charts § 100% stacked | core › "100% chart labels always sum to 100"; behaviour › "COL-5" |
 | COL-6 | `percentData`: values are shares already; a column keeps its own total on the % axis | `charts/column.ts: model (pdata)` | Manual en-mekko § Mekko charts with a percent axis (values entered as percentages) | charts-b › "percentData: values are shares already…" |
-| COL-7 | Column width = slot / (1 + gap); default gap 0.5 | `charts/column.ts: layoutVertical`; `spec.ts: optionDefaults` | Manual en-column-line-area-charts (gap width) | behaviour › "COL-9"; e2e › "column gap changes bar width" |
+| COL-7 | Column width = slot / (1 + gap); default gap 0.5 | `charts/column.ts: layoutVertical`; `spec.ts: optionDefaults` | Manual en-column-line-area-charts (gap width) | behaviour › "COL-7"; e2e › "column gap changes bar width" |
 | COL-8 | Horizontal orientation: bars from the left, values axis at the bottom, totals and arrows beyond the bar ends, series in a legend | `charts/column.ts: layoutBars` | Manual en-column-line-area-charts § Column and bar charts | engine › "horizontal stacked bars…", "horizontal clustered and percent bars pass the strict gate" |
 
 ## 12 Waterfall
@@ -311,7 +333,7 @@ standard. *House rule* = an open-charts decision where the manual is silent; the
 | TXT-5 | Without a bold font, bold is measured 6% wider | `text.ts: build` | House rule (synthetic bold) | behaviour › "TXT-5" |
 | CON-1 | Text on a fill is black (222222) or white, whichever has the higher WCAG contrast | `numbers.ts: textOn` | Convention: WCAG 2.x relative luminance and contrast ratio | core › "number formatting" (textOn) |
 | MIN-1 | Theme minimum font: labels never shrink below min(theme size, 8 pt) | `common.ts: makeCtx (minFs)` | House rule (legibility) | resize › "every text keeps the theme minimum size…"; quality › "typography flags text below 8 pt…" |
-| MIN-2 | Minimum frame per type (category charts grow by 14 pt per category, horizontal bars 12 pt per row, Mekko 24 pt, Harvey 24 pt per column and 16 per row, Gantt 14 pt per row) | `minsize.ts: minimumSize` | House rule (documented in the function) | behaviour › "MIN-1"; resize › matrix |
+| MIN-2 | Minimum frame per type (category charts grow by 14 pt per category, horizontal bars 12 pt per row, Mekko 24 pt, Harvey 24 pt per column and 16 per row, Gantt 14 pt per row) | `minsize.ts: minimumSize` | House rule (documented in the function) | behaviour › "MIN-2"; resize › matrix |
 | MIN-3 | Below the minimum, or when content cannot fit (TooSmall), the scene is a placeholder: frame outline and the largest readable message saying how large to make it | `minsize.ts: placeholder`; `index.ts: layoutChart` | House rule | resize › "below the minimum the chart is an outlined placeholder…" |
 
 ## 24 Resizing and collision resolution
