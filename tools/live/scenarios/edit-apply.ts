@@ -22,7 +22,10 @@ export async function run(ctx: Ctx) {
   const edit = pp.run('btnEditData');
   ctx.time('edit data', edit.ms);
   const id = specKey(JSON.stringify(wf.spec));
-  ctx.check(!!(await pp.session(id)), `Edit data opened session ${id} on the add-in server (${edit.result})`);
+  // The session is posted to the server as Edit data returns: allow it a moment to land.
+  let opened = await pp.session(id);
+  for (let i = 0; !opened && i < 30; i++) { await new Promise((r) => setTimeout(r, 100)); opened = await pp.session(id); }
+  ctx.check(!!opened, `Edit data opened session ${id} on the add-in server (${edit.result})`);
   const edited = structuredClone(wf.spec);
   edited.categories.splice(5, 0, 'One-offs');
   edited.series[0].values.splice(5, 0, 6);
