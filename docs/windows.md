@@ -15,6 +15,8 @@ Install steps are in the [README](../README.md#install-on-windows). Troubleshoot
 | VBA → engine | `AppleScriptTask` → bridge script → `curl` to the local server (or a one-off `node`) | `MSXML2.ServerXMLHTTP` POST to `http://127.0.0.1:4174/api/addin/run`, set to bypass any proxy |
 | Starting the engine | the bridge runs `node … addin serve` in the background | VBA runs `open-charts.exe addin serve` with `Shell …, vbHide` (no console window), then waits up to 20 s for it to answer |
 | Apply from the editor | the server runs `ApplyEdit` through one long-lived `osascript` (JavaScript for Automation) | the server runs `ApplyEdit` through one long-lived Windows PowerShell process that calls `Application.Run` over COM (`GetActiveObject`: it never starts PowerPoint) |
+| Edit data window | the resident pop-up helper (`OpenChartsPopup.app`), next to the chart | Microsoft Edge in app mode (a window without tabs or address bar) next to the chart; the default browser if Edge is missing |
+| Element mini toolbar | a panel of the pop-up helper | not yet: on Windows, selecting a chart element makes no call, so it never slows PowerPoint down |
 | Add-in log | `~/Library/Application Support/open-charts/addin.log` | `%LOCALAPPDATA%\open-charts\addin.log` |
 | Install | `open-charts addin install` | `install.ps1` (per user, no admin rights) |
 
@@ -121,7 +123,7 @@ request, the editor page and quit.
    powershell -ExecutionPolicy Bypass -File .\e2e-powerpoint-win.ps1
    ```
 
-4. Don't use the PC for a few minutes. PowerPoint opens, charts are inserted, and a browser tab with
+4. Don't use the PC for a few minutes. PowerPoint opens, charts are inserted, and an Edge window with
    the datasheet opens. Leave it all running.
 5. Send back `open-charts-e2e-<time>.zip`, which is written next to the script. It contains the log,
    `addin.log`, the exported deck and one PNG per slide.
