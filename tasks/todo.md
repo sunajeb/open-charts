@@ -85,5 +85,6 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [x] Theme: theme slots + schemeClr (charts follow the deck's theme in PowerPoint), style.theme/numbers, scaleGroup, several charts per slide
 - [x] Behaviour spec: 214 rules → code → source → test (docs/behaviour-spec.md, self-checking test)
 - [x] Optional rows (Series.hidden, eye toggle)
-- [ ] Apply hangs ≥ 20 s in a restarted PowerPoint session (investigating)
+- [x] Apply hang in a restarted PowerPoint session: stale warm server carried the old PowerPoint's identity → TCC wait; server now retires when PowerPoint restarts (live E2E twice + final run)
+- [ ] Apply end-to-end is now ~3.3 s (VBA ~1.7 s) vs ~1.9 s before the theme/same-scale work — profile and trim
 - Not in P1 scope here: Windows PowerPoint golden runner (needs Windows), blind consultant panel, 1.0 spec freeze (owner decision)
