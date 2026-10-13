@@ -7,7 +7,7 @@ import { checkScene, defaultStyle, layoutChart, minimumSize, type Scene, type Te
 import { samples } from '../src/core/samples.ts';
 import { createMeasurer } from '../src/fonts.ts';
 import { buildReport } from '../src/report.ts';
-import { allCases, allFrames, isPlaceholder, MIN_TEXT, resizeProblems } from './resize-matrix.ts';
+import { allCases, allFrames, chartMeasurer, isPlaceholder, MIN_TEXT, resizeProblems } from './resize-matrix.ts';
 
 const m = createMeasurer();
 const DEFAULT = { x: 48, y: 96, w: 864, h: 408 };
@@ -31,7 +31,7 @@ for (const c of allCases()) {
         failures.push(`${at}: threw ${(e as Error).message}`);
         continue;
       }
-      for (const p of resizeProblems(scene, m, reference)) failures.push(`${at}: ${p}`);
+      for (const p of resizeProblems(scene, chartMeasurer(c.spec, m), reference)) failures.push(`${at}: ${p}`);
       const small = f.w < min.w || f.h < min.h;
       if (small && !isPlaceholder(scene)) failures.push(`${at}: below the minimum ${min.w}×${min.h} but no placeholder`);
       if (isPlaceholder(scene)) {
@@ -96,7 +96,7 @@ test('resize: every text keeps the theme minimum size, also for a large theme fo
     for (const f of [frames[10], frames[25], frames[45]]) {
       const scene = layoutChart(c.spec, f, m, { ...defaultStyle, ...style });
       for (const s of scene.shapes) if (s.kind === 'text') assert.ok(s.size >= MIN_TEXT, `${c.name} ${f.w}×${f.h}: "${s.text}" at ${s.size}`);
-      assert.deepEqual(checkScene(scene, { measurer: m }), [], `${c.name} ${f.w}×${f.h}`);
+      assert.deepEqual(checkScene(scene, { measurer: chartMeasurer(c.spec, m) }), [], `${c.name} ${f.w}×${f.h}`);
     }
   }
 });

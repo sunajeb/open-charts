@@ -2,7 +2,7 @@
 // example chart, laid out at a grid of frames, checked against the invariants a resized chart must keep.
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { checkScene, type ChartSpec, type Frame, type Scene, type Shape } from '../src/core/index.ts';
+import { checkScene, measurerFor, resolveFont, type ChartSpec, type Frame, type Scene, type Shape } from '../src/core/index.ts';
 import { samples } from '../src/core/samples.ts';
 import { directionsOf } from '../src/core/spec.ts';
 import type { Measurer } from '../src/core/text.ts';
@@ -55,6 +55,9 @@ const textRoles = (s: Scene) => new Set(s.shapes.flatMap((sh, i) => (sh.kind ===
  * Problems of one resized scene. `reference` is the same chart at the default frame: a text role it
  * has that the resized scene lacks must be accounted for in `scene.hidden` (hidden AND reported).
  */
+/** The measurer of the chart's own font (an example chart may set `style.font`). */
+export const chartMeasurer = (spec: ChartSpec, m: Measurer): Measurer => measurerFor(m, resolveFont(spec.style?.font, spec.style));
+
 export function resizeProblems(scene: Scene, m: Measurer, reference?: Scene): string[] {
   const out: string[] = [];
   scene.shapes.forEach((s, i) => {

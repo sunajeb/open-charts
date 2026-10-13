@@ -7,11 +7,12 @@
 //   npm run goldens -- --allow-missing  render and pass when this platform has no baselines yet (CI bootstrap)
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, delimiter, join } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_DIFF, decodePng, diffImages, encodePng } from './png.ts';
 import { unzip } from '../../src/ooxml/unzip.ts';
+import { fontDirs } from '../../src/fonts.ts';
 
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const { values: args } = parseArgs({
@@ -44,9 +45,13 @@ const decks = [
   ...readdirSync(join(root, 'examples')).filter((f) => f.endsWith('.json')).sort().map((f) => ({ path: `examples/${f}`, name: basename(f, '.json') })),
   ...readdirSync(join(root, 'test/bench')).filter((f) => /^\d+-.*\.json$/.test(f)).sort().map((f) => ({ path: `test/bench/${f}`, name: `bench-${basename(f, '.json')}` })),
 ];
+// Text is measured in the fonts LibreOffice draws with: its own (Carlito, Caladea, Liberation, …) are
+// searched after the computer's, so the goldens do not depend on Microsoft Office's fonts being installed.
+const loFonts = ['/Applications/LibreOffice.app/Contents/Resources/fonts/truetype', '/usr/lib/libreoffice/share/fonts/truetype', '/opt/libreoffice/share/fonts/truetype'].filter(existsSync);
+const env = { ...process.env, OPEN_CHARTS_FONT_DIRS: [...fontDirs(), ...loFonts].join(delimiter) };
 const expectedPages = new Map<string, number>();
 for (const { path, name } of decks) {
-  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', path, '-o', join(out, name)], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', path, '-o', join(out, name)], { cwd: root, env, stdio: ['ignore', 'ignore', 'inherit'] });
   const spec = JSON.parse(readFileSync(join(root, path), 'utf8'));
   // Slides hidden in the slide show (agenda: a chapter with no content before its first subchapter)
   // are not in LibreOffice's PDF.
@@ -58,11 +63,11 @@ for (const { path, name } of decks) {
 const showcase = JSON.parse(readFileSync(join(root, 'examples/style-showcase.json'), 'utf8'));
 for (const f of readdirSync(join(root, 'examples/styles')).filter((x) => x.endsWith('.json')).sort()) {
   const name = `style-${basename(f, '.json')}`;
-  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'examples/style-showcase.json', '--style', `examples/styles/${f}`, '-o', join(out, name)], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'examples/style-showcase.json', '--style', `examples/styles/${f}`, '-o', join(out, name)], { cwd: root, env, stdio: ['ignore', 'ignore', 'inherit'] });
   expectedPages.set(name, showcase.slides.length);
 }
 // Template fill: the example template filled with the example data ("fill-template", 10 slides).
-execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'fill', 'examples/template/template.pptx', 'examples/template/data.json', '-o', join(out, 'fill-template.pptx')], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'fill', 'examples/template/template.pptx', 'examples/template/data.json', '-o', join(out, 'fill-template.pptx')], { cwd: root, env, stdio: ['ignore', 'ignore', 'inherit'] });
 expectedPages.set('fill-template', 10);
 
 // 2. One LibreOffice run converts every deck (a private profile avoids clashing with a running instance).
