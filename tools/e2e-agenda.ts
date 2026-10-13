@@ -15,6 +15,7 @@ import { addinMain } from '../src/addin/cli.ts';
 import { addinHome } from '../src/addin/server.ts';
 import { buildAddin } from '../src/addin/package.ts';
 import { unzip } from '../src/ooxml/unzip.ts';
+import { createMeasurer } from '../src/fonts.ts';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const OUT = join(ROOT, 'out', 'e2e-agenda');
@@ -79,7 +80,7 @@ const check = (ok: boolean, what: string) => { console.log(`${ok ? 'ok  ' : 'FAI
 
 interface Row { n: number; kind: string; hidden: boolean; split: boolean; headings: string; current: string }
 function dump(): Row[] {
-  const out = macro('AgendaDump');
+  const out = macro('AgendaDump', '0');
   const line = out.split('\n').reverse().find((l) => l.includes('DUMP '))!;
   return line.slice(line.indexOf('DUMP ') + 5).split(' ;; ').filter((s) => s.startsWith('SLIDE')).map((s) => {
     const [head, headings = ''] = s.split(':');
@@ -219,6 +220,26 @@ else {
   check(hiddenParts.length === 1, `the saved deck has exactly one hidden slide (Market's): ${hiddenParts.join(', ')}`);
   const tags = [...z.keys()].filter((k) => k.startsWith('ppt/tags/')).map((k) => z.get(k)!.text()).join('');
   check((tags.match(/name="OC_KIND" val="chapter"/g) ?? []).length === 7 && /OC_SPLIT/.test(tags), 'chapter, toc and split tags saved');
+  // As PowerPoint saved them: every heading box holds its text (indent + bold text width), and the
+  // agenda elements of the main section all sit at the same place.
+  const m = createMeasurer();
+  const EMU = 12700;
+  const clipped: string[] = [];
+  const origins = new Set<string>();
+  for (const k of [...z.keys()].filter((k) => /^ppt\/slides\/slide\d+\.xml$/.test(k))) {
+    const xml = z.get(k)!.text();
+    if (!/name="Agenda"/.test(xml)) continue;
+    const grp = xml.match(/<p:grpSp><p:nvGrpSpPr><p:cNvPr id="\d+" name="Agenda"[\s\S]*?<a:off x="(\d+)" y="(\d+)"/);
+    if (grp && !/Backup_data/.test(xml)) origins.add(`${Math.round(+grp[1] / EMU)},${Math.round(+grp[2] / EMU)}`);
+    for (const sp of xml.match(/<p:sp>[\s\S]*?<\/p:sp>/g) ?? []) {
+      const marL = sp.match(/marL="(\d+)"/), cx = sp.match(/<a:ext cx="(\d+)"/), sz = sp.match(/sz="(\d+)"/), t = sp.match(/<a:t>([^<]*)<\/a:t>/);
+      if (!marL || !cx || !sz || !t) continue;
+      const need = +marL[1] / EMU + m.width(t[1], +sz[1] / 100, true);
+      if (need > +cx[1] / EMU + 0.5) clipped.push(`${k}: "${t[1]}" needs ${need.toFixed(1)} pt, box ${(+cx[1] / EMU).toFixed(1)} pt`);
+    }
+  }
+  check(!clipped.length, `no heading is clipped${clipped.length ? `:\n  ${clipped.join('\n  ')}` : ''}`);
+  check(origins.size === 1, `the main section's agendas all sit at one place: ${[...origins].join(' ')}`);
 }
 console.log(`\nTimings:\n  ${timings.join('\n  ')}\nPNGs: ${PNG_DIR}`);
 if (failures.length) { console.error(`\n${failures.length} failure(s):\n  ${failures.join('\n  ')}`); process.exit(1); }

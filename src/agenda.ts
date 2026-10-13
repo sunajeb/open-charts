@@ -26,11 +26,13 @@ export interface AgendaDraw {
   /** Every chapter of the deck (stored on each agenda element). */
   all: StoredAgenda['chapters'];
   options?: AgendaOptions;
+  /** The options laid out with (`options` plus the fitted font size); default `options`. */
+  drawOptions?: AgendaOptions;
   rev: number;
 }
 
 export function agendaContent(d: AgendaDraw, m: Measurer, style?: Partial<Style>): SceneContent & { hash: string } {
-  const scene = layoutAgenda(d.section, d.current, d.frame, m, d.options, style);
+  const scene = layoutAgenda(d.section, d.current, d.frame, m, d.drawOptions ?? d.options, style);
   const stored: StoredAgenda = {
     v: 1, rev: d.rev, chapters: d.all, ...(d.options && Object.keys(d.options).length ? { options: d.options } : {}),
     shown: scene.headings.map((h) => ({

@@ -1617,7 +1617,7 @@ End Function
 
 Private Function AgendaSnapshot() As String
     Dim pres As Object, sld As Object, grp As Object, i As Long, cur As Long, parts() As String
-    Dim bounds As String, json As String, hash As String
+    Dim bounds As String, json As String, hash As String, drawnAt As String
     Set pres = ActivePresentation
     cur = CurrentSlideIndex()
     ReDim parts(0 To pres.Slides.Count)
@@ -1625,14 +1625,14 @@ Private Function AgendaSnapshot() As String
     For i = 1 To pres.Slides.Count
         Set sld = pres.Slides(i)
         Set grp = AgendaGroup(sld)
-        bounds = "": json = "": hash = ""
+        bounds = "": json = "": hash = "": drawnAt = ""
         If Not grp Is Nothing Then
             bounds = Fmt(grp.Left) & "," & Fmt(grp.Top) & "," & Fmt(grp.Width) & "," & Fmt(grp.Height)
-            json = TagValue(grp, "OC_AGENDA"): hash = TagValue(grp, "OC_HASH")
+            json = TagValue(grp, "OC_AGENDA"): hash = TagValue(grp, "OC_HASH"): drawnAt = TagValue(grp, "OC_FRAME")
         End If
         parts(i) = "L" & vbTab & i & vbTab & Esc(TagValue(sld, "OC_KIND")) & vbTab & Esc(TagValue(sld, "OC_CHAPTER")) & vbTab & _
             IIf(TagValue(sld, "OC_SPLIT") = "1", "1", "0") & vbTab & IIf(sld.SlideShowTransition.Hidden, "1", "0") & vbTab & _
-            bounds & vbTab & Esc(json) & vbTab & Esc(hash)
+            bounds & vbTab & Esc(json) & vbTab & Esc(hash) & vbTab & drawnAt
         If Not grp Is Nothing Then parts(i) = parts(i) & HeadingLines(grp, i, i = cur)
     Next i
     AgendaSnapshot = Join(parts, vbLf)

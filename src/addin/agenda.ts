@@ -9,7 +9,7 @@
 // bounds = the agenda placeholder of the "open-charts agenda" layout ("" if none), theme=…, then:
 //   D <tab> currentSlide <tab> targetChapter         slide numbers are 1-based; target: the chapter
 //                                                    of the selected heading, else ""
-//   L <tab> n <tab> kind <tab> chapter <tab> split <tab> hidden <tab> bounds <tab> OC_AGENDA <tab> OC_HASH
+//   L <tab> n <tab> kind <tab> chapter <tab> split <tab> hidden <tab> bounds <tab> OC_AGENDA <tab> OC_HASH <tab> OC_FRAME
 //                                                    one per slide; kind "chapter" | "toc" | ""
 //   H <tab> n <tab> chapter <tab> text <tab> level [<tab> fill <tab> line <tab> color <tab> bold <tab> size]
 //                                                    the headings of agenda slide n as they are now;
@@ -28,7 +28,7 @@
 //   M <tab> message
 import { randomBytes } from 'node:crypto';
 import type { Frame, Measurer, ThemeColors } from '../core/index.ts';
-import { agendaMetrics, defaultAgendaFrame, planDeck, planMove, chapterRange, normalizeLevels,
+import { fitAgenda, planDeck, planMove, chapterRange, normalizeLevels,
   type AgendaOptions, type AgendaSlide, type AgendaState, type Chapter, type HeadingStyle, type StoredAgenda } from '../core/agenda.ts';
 import { agendaContent } from '../agenda.ts';
 import { shapeName } from '../render/pptx.ts';
@@ -39,6 +39,8 @@ export interface SnapshotHeading { id: string; text: string; level: number; styl
 export interface SnapshotSlide {
   kind: '' | 'chapter' | 'toc'; chapter: string; split: boolean; hidden: boolean;
   bounds?: Frame; stored?: StoredAgenda; hash: string; headings: SnapshotHeading[];
+  /** The element's OC_FRAME: where it was drawn (bounds elsewhere = the user moved it). */
+  frame?: Frame;
 }
 export interface Snapshot { current: number; target: string; slides: SnapshotSlide[] }
 
@@ -58,6 +60,7 @@ export function parseSnapshot(text: string): Snapshot {
       snap.slides[i] = {
         kind: f[2] === 'chapter' || f[2] === 'toc' ? f[2] : '', chapter: f[3] ?? '', split: f[4] === '1', hidden: f[5] === '1',
         bounds: parseFrame(f[6]), stored: stored?.v === 1 && Array.isArray(stored.chapters) ? stored : undefined, hash: f[8] ?? '', headings: [],
+        frame: parseFrame(f[9]),
       };
     } else if (f[0] === 'H') {
       const s = snap.slides[Number(f[1]) - 1];
@@ -246,21 +249,33 @@ export function handleAgenda(req: AgendaRequest, m: Measurer, makeId = newId): s
   const keptSlides = kept.filter((s): s is AgendaSlide => !!s);
   const keptIndex = kept.map((s, i) => (s ? i : -1)).filter((i) => i >= 0);
   const plan = planDeck(keptSlides, model.chapters);
-  const metrics = plan.sections.map((cs, k) => agendaMetrics(cs, model.options, m, plan.slides.some((p) => p.section === k && p.current === 'toc')));
+  const tocIn = (k: number) => plan.slides.some((p) => p.section === k && p.current === 'toc');
   const font = 'Arial';
   const style = req.theme ? { theme: req.theme } : undefined;
-  let lastFrame: Frame | undefined;
+  // Where the user put an agenda element by hand (it is no longer where it was drawn) it stays; every
+  // other agenda slide of a section goes where its first moved one is, else to the layout's agenda
+  // placeholder, else the body area, so a section's agendas line up.
+  const moved = (s: SnapshotSlide) => !!(s.bounds && s.frame && (Math.abs(s.bounds.x - s.frame.x) > 1 || Math.abs(s.bounds.y - s.frame.y) > 1));
+  const anchor = new Map<number, Frame>();
+  plan.slides.forEach((p, j) => {
+    const s = snap.slides[keptIndex[j]];
+    if (p.current !== undefined && moved(s) && !anchor.has(p.section)) anchor.set(p.section, { ...s.bounds!, w: s.frame!.w, h: s.frame!.h });
+  });
+  const fits = new Map<string, ReturnType<typeof fitAgenda>>();
+  const fitFor = (k: number, at?: Frame) => {
+    const key = `${k}:${at ? [at.x, at.y, at.w].join(',') : ''}`;
+    if (!fits.has(key)) fits.set(key, fitAgenda(plan.sections[k], model.options, m, req.slide, tocIn(k), at));
+    return fits.get(key)!;
+  };
   plan.slides.forEach((p, j) => {
     const i = keptIndex[j];
     const s = snap.slides[i];
     const a = keptSlides[j];
     if (p.current === undefined) return;
-    const met = metrics[p.section];
-    const at = s.bounds ?? lastFrame ?? req.placeholder;
-    const def = defaultAgendaFrame(met, req.slide);
-    const frame: Frame = at ? { x: at.x, y: at.y, w: def.w, h: def.h } : def;
-    lastFrame = frame;
-    const content = agendaContent({ section: plan.sections[p.section], current: p.current, frame, all: model.chapters, options: model.options, rev: model.rev }, m, style);
+    const own = moved(s) ? { ...s.bounds!, w: s.frame!.w, h: s.frame!.h } : undefined;
+    const fit = fitFor(p.section, own ?? anchor.get(p.section) ?? req.placeholder);
+    const frame = fit.frame;
+    const content = agendaContent({ section: plan.sections[p.section], current: p.current, frame, all: model.chapters, options: model.options, drawOptions: fit.options, rev: model.rev }, m, style);
     const redraw = !s.bounds || content.hash !== s.hash;
     out.push(record('P', String(i + 1), a.chapter ?? '', p.hidden ? '1' : '0', redraw ? '1' : '0', a.kind ?? ''));
     if (redraw) {

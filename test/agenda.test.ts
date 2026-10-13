@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { createMeasurer } from '../src/fonts.ts';
 import {
-  AGENDA_STATES, agendaMetrics, applyMove, defaultAgendaFrame, headingStyle, layoutAgenda, normalizeLevels, numbersOf,
+  AGENDA_STATES, applyMove, fitAgenda, headingStyle, layoutAgenda, normalizeLevels, numbersOf,
   parentsOf, planDeck, planMove, stateOf, visibleChapters, type AgendaSlide, type Chapter, type StoredAgenda,
 } from '../src/core/agenda.ts';
 import { validateDeck } from '../src/core/index.ts';
@@ -116,9 +116,15 @@ test('moving a chapter moves its slides along, never across a splitter', () => {
 // ---- Layout ------------------------------------------------------------------------------------
 
 test('layout: one native text box per shown chapter, bullets and text levels, same width on every slide', () => {
-  const met = agendaMetrics(TREE, {}, m);
-  const frame = defaultAgendaFrame(met, { w: 960, h: 540 });
-  assert.ok(Math.abs(frame.x + frame.w / 2 - 480) < 1 && Math.abs(frame.y + frame.h / 2 - 270) < 1, 'centred on the slide');
+  const { frame, options } = fitAgenda(TREE, {}, m, { w: 960, h: 540 });
+  assert.deepEqual([frame.x, frame.y, frame.w], [96, 118.8, 768], 'the body area below the title');
+  assert.equal(options.fontSize, undefined, 'nine chapters fit at the default size');
+  const many = Array.from({ length: 14 }, (_, i) => ({ id: `m${i}`, title: `Chapter ${i}`, level: 1 }));
+  const small = fitAgenda(many, {}, m, { w: 960, h: 540 });
+  assert.ok(small.options.fontSize! < 24 && small.frame.y + small.frame.h <= 118.8 + 378 + 0.5, 'many chapters: smaller font, still in the body area');
+  const wide = layoutAgenda(ch('A_very_long_chapter_name_that_does_not_fit_a_narrow_frame'), 0, { x: 10, y: 10, w: 50, h: 40 }, m);
+  const t = wide.shapes[0] as import('../src/core/types.ts').TextShape;
+  assert.ok(t.w >= m.width(t.text, t.size, true) + t.bullet!.at + t.bullet!.hang, 'a box is never narrower than its text');
   const a = layoutAgenda(TREE, idx('A1'), frame, m);
   assert.deepEqual(a.roles, ['A', 'A1', 'A1a', 'A1b', 'A2', 'B', 'C'].map((t) => `chapter:c${idx(t) + 1}`));
   const sh = a.shapes as import('../src/core/types.ts').TextShape[];
@@ -187,7 +193,7 @@ class FakeDeck {
     const lines = [['D', String(this.current + 1), target].map(escapeField).join('\t')];
     this.slides.forEach((s, i) => {
       const g = s.group;
-      lines.push(['L', String(i + 1), s.kind, s.chapter, s.split ? '1' : '0', s.hidden ? '1' : '0', g?.frame ?? '', g?.tags.OC_AGENDA ?? '', g?.tags.OC_HASH ?? ''].map(escapeField).join('\t'));
+      lines.push(['L', String(i + 1), s.kind, s.chapter, s.split ? '1' : '0', s.hidden ? '1' : '0', g?.frame ?? '', g?.tags.OC_AGENDA ?? '', g?.tags.OC_HASH ?? '', g?.tags.OC_FRAME ?? ''].map(escapeField).join('\t'));
       for (const h of g?.headings ?? []) {
         const style = i === this.current ? [h.fill, h.line, h.color, h.bold ? '1' : '0', String(h.size)] : [];
         lines.push(['H', String(i + 1), h.id, h.text, String(h.level), ...style].map(escapeField).join('\t'));

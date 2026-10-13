@@ -46,7 +46,7 @@ export interface AgendaOptions {
   preset?: AgendaPreset;
   /** Number chapters (1., 2., … per level) instead of bullets. */
   numbering?: boolean;
-  /** Font size of top-level headings in pt (default 20); subchapters are 85 % of it. */
+  /** Font size of top-level headings in pt (default 24, smaller when the chapters do not fit); subchapters are 85 % of it. */
   fontSize?: number;
   /** Levels shown on a table-of-contents slide (default 1: top-level chapters only). */
   tocLevels?: number;
@@ -58,6 +58,8 @@ export const AGENDA_OPTION_KEYS = ['preset', 'numbering', 'fontSize', 'tocLevels
 export const HEADING_STYLE_KEYS = ['fill', 'line', 'color', 'bold', 'size'] as const;
 
 const SUB = 0.85;
+/** Top-level heading size when the deck sets none (pt); subchapters are SUB of it. */
+export const DEFAULT_FONT_SIZE = 24;
 const NONE = '';
 const MUTED = '7F7F7F';
 
@@ -112,7 +114,7 @@ const TOP_STATES = new Set<AgendaState>(['current-top', 'top-contains-current', 
 export function headingStyle(state: AgendaState, opts: AgendaOptions = {}): Required<HeadingStyle> {
   const base = PRESETS[opts.preset ?? 'flat'][state];
   const o = opts.styles?.[state] ?? {};
-  const size = (opts.fontSize ?? 20) * (TOP_STATES.has(state) ? 1 : SUB);
+  const size = (opts.fontSize ?? DEFAULT_FONT_SIZE) * (TOP_STATES.has(state) ? 1 : SUB);
   return { fill: NONE, line: NONE, color: 'tx1', bold: false, size: +size.toFixed(1), ...base, ...stripUndefined(o) };
 }
 
@@ -254,17 +256,15 @@ function rowHeight(size: number, m: Measurer) { return m.lineHeight(size) + 2 * 
 
 function bulletText(opts: AgendaOptions, n: number) { return opts.numbering ? `${n}.` : '•'; }
 
-/** Width and the tallest height of a section's agenda element over all its agenda slides. */
+/** Width of the widest heading and the tallest agenda element of a section over all its agenda slides. */
 export function agendaMetrics(chapters: Chapter[], opts: AgendaOptions, m: Measurer, tocToo = false): AgendaMetrics {
   const parent = parentsOf(chapters);
   const nums = numbersOf(chapters, parent);
-  const base = opts.fontSize ?? 20;
+  const base = opts.fontSize ?? DEFAULT_FONT_SIZE;
   let w = 0;
   chapters.forEach((c, i) => {
     const d = depthOf(parent, i);
-    const size = d === 1 ? base : base * SUB;
-    const hang = m.width(bulletText(opts, nums[i]), size, true) + size * 0.5;
-    w = Math.max(w, (d - 1) * INDENT * base + 2 * PAD_X * size + hang + m.width(c.title, size, true));
+    w = Math.max(w, (d - 1) * INDENT * base + headingWidth(c.title, d === 1 ? base : base * SUB, opts, nums[i], m));
   });
   const height = (cur: number | 'toc') => visibleChapters(chapters, cur, opts, parent)
     .reduce((h, i) => h + rowHeight(depthOf(parent, i) === 1 ? base : base * SUB, m) + GAP, -GAP);
@@ -274,11 +274,37 @@ export function agendaMetrics(chapters: Chapter[], opts: AgendaOptions, m: Measu
   return { w: Math.ceil(Math.max(w, base * 4)), h: Math.max(0, Math.ceil(h)) };
 }
 
-/** Default frame: centred on the slide. */
-export function defaultAgendaFrame(metrics: AgendaMetrics, slide: { w: number; h: number }): Frame {
-  const w = Math.min(metrics.w, slide.w - 48);
-  const h = Math.max(metrics.h, 20);
-  return { x: +((slide.w - w) / 2).toFixed(2), y: +((slide.h - h) / 2).toFixed(2), w, h };
+/** Width a heading needs: padding, bullet, the text (measured bold, the widest it is drawn), padding. */
+function headingWidth(title: string, size: number, opts: AgendaOptions, n: number, m: Measurer): number {
+  const hang = m.width(bulletText(opts, n), size, true) + size * 0.5;
+  return 2 * PAD_X * size + hang + m.width(title, size, true);
+}
+
+/** The slide's body area below the title, where an agenda goes by default. */
+export function bodyArea(slide: { w: number; h: number }): Frame {
+  return { x: r2(slide.w * 0.1), y: r2(slide.h * 0.22), w: r2(slide.w * 0.8), h: r2(slide.h * 0.7) };
+}
+
+/**
+ * Where a section's agenda element goes and at what size: the body area (or `at`: a placeholder,
+ * or where the agenda sits on the closest agenda slide), its top-left; as wide as the area, wider
+ * only if a heading needs it; the default font size, smaller (down to 10 pt) until the tallest
+ * agenda of the section fits the area's height. A font size the deck sets is kept.
+ */
+export function fitAgenda(chapters: Chapter[], opts: AgendaOptions, m: Measurer, slide: { w: number; h: number }, tocToo = false, at?: Frame): { frame: Frame; options: AgendaOptions } {
+  const body = bodyArea(slide);
+  const area = at ? { x: at.x, y: at.y, w: at.w, h: Math.max(at.h, slide.h * 0.94 - at.y) } : body;
+  let options = opts;
+  let met = agendaMetrics(chapters, options, m, tocToo);
+  if (opts.fontSize === undefined) {
+    for (let k = 0; k < 4 && met.h > area.h; k++) {
+      const size = Math.max(10, Math.floor((options.fontSize ?? DEFAULT_FONT_SIZE) * area.h / met.h));
+      if (size === (options.fontSize ?? DEFAULT_FONT_SIZE)) break;
+      options = { ...opts, fontSize: size };
+      met = agendaMetrics(chapters, options, m, tocToo);
+    }
+  }
+  return { frame: { x: r2(area.x), y: r2(area.y), w: r2(Math.max(area.w, met.w)), h: Math.max(met.h, 20) }, options };
 }
 
 export interface AgendaHeading { id: string; title: string; level: number; state: AgendaState; style: Required<HeadingStyle> }
@@ -292,7 +318,7 @@ export function layoutAgenda(chapters: Chapter[], current: number | 'toc', frame
   const nums = numbersOf(chapters, parent);
   const theme = themeOf(style);
   const col = (c: string) => (c ? resolveColor(c, theme) : undefined);
-  const base = opts.fontSize ?? 20;
+  const base = opts.fontSize ?? DEFAULT_FONT_SIZE;
   const shapes: TextShape[] = [];
   const roles: string[] = [];
   const headings: AgendaHeading[] = [];
@@ -303,13 +329,14 @@ export function layoutAgenda(chapters: Chapter[], current: number | 'toc', frame
     const state = stateOf(chapters, i, current, parent);
     const hs = headingStyle(state, opts);
     const size = hs.size;
-    const h = rowHeight(d === 1 ? base : base * SUB, m);
+    const h = Math.max(rowHeight(d === 1 ? base : base * SUB, m), rowHeight(size, m));
     const x = frame.x + (d - 1) * INDENT * base;
     const at = PAD_X * size;
     const btext = bulletText(opts, nums[i]);
     const hang = m.width(btext, size, true) + size * 0.5;
     shapes.push({
-      kind: 'text', x: r2(x), y: r2(y), w: r2(Math.max(size, frame.x + frame.w - x)), h: r2(h), text: c.title, size,
+      // As wide as the frame, never narrower than the heading needs: text is never clipped.
+      kind: 'text', x: r2(x), y: r2(y), w: r2(Math.max(frame.x + frame.w - x, headingWidth(c.title, size, opts, nums[i], m))), h: r2(h), text: c.title, size,
       color: col(hs.color) ?? resolveColor('tx1', theme), bold: hs.bold || undefined, align: 'left', valign: 'middle',
       fill: col(hs.fill), stroke: col(hs.line), level: d,
       bullet: opts.numbering ? { number: nums[i], at: r2(at), hang: r2(hang) } : { char: btext, at: r2(at), hang: r2(hang) },

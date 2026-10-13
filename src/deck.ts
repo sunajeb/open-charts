@@ -5,7 +5,7 @@ import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
 import { chartTags, chunkedTags } from './render/tags.ts';
 import { baseOf } from './core/overrides.ts';
 import { sceneToSvg } from './render/svg.ts';
-import { agendaMetrics, defaultAgendaFrame, planDeck, type AgendaOptions, type AgendaSlide, type Chapter } from './core/agenda.ts';
+import { fitAgenda, planDeck, type AgendaOptions, type AgendaSlide, type Chapter } from './core/agenda.ts';
 import { agendaContent } from './agenda.ts';
 import type { Tags } from './render/tags.ts';
 
@@ -183,8 +183,7 @@ function agendaSlides(deck: DeckSpec, m: Measurer): AgendaSlideOut[] {
   const { title: _title, ...options } = deck.agenda ?? {};
   const { slides, chapters } = deckAgenda(deck);
   const plan = planDeck(slides, chapters);
-  const frames = plan.sections.map((cs, k) =>
-    defaultAgendaFrame(agendaMetrics(cs, options, m, plan.slides.some((p) => p.section === k && p.current === 'toc')), SLIDE));
+  const fits = plan.sections.map((cs, k) => fitAgenda(cs, options, m, SLIDE, plan.slides.some((p) => p.section === k && p.current === 'toc')));
   return slides.map((a, i): AgendaSlideOut => {
     const tags: Tags = [];
     if (a.kind) tags.push(['OC_KIND', a.kind]);
@@ -192,7 +191,8 @@ function agendaSlides(deck: DeckSpec, m: Measurer): AgendaSlideOut[] {
     if (a.split) tags.push(['OC_SPLIT', '1']);
     const p = plan.slides[i];
     if (p.current === undefined) return { tags: tags.length ? tags : undefined };
-    const content = agendaContent({ section: plan.sections[p.section], current: p.current, frame: frames[p.section], all: chapters, options, rev: 1 }, m, deck.style);
+    const fit = fits[p.section];
+    const content = agendaContent({ section: plan.sections[p.section], current: p.current, frame: fit.frame, all: chapters, options, drawOptions: fit.options, rev: 1 }, m, deck.style);
     return { content, tags, hidden: p.hidden };
   });
 }
