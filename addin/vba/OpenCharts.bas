@@ -218,13 +218,34 @@ Private Function JsonString(ByVal json As String, ByVal key As String) As String
     If q > at Then JsonString = Mid$(json, at, q - at)
 End Function
 
-' The element mini toolbar (src/addin/toolbar.ts): tells the add-in server which elements of an
-' open-charts chart are selected (their OC_ROLE tags) and where, or that none are any more. Only
-' when that changes, and never for other selections: one AppleScriptTask that starts a background
-' curl and returns at once. Silent: an older bridge script without the handler is ignored.
+' The element mini toolbar (src/addin/toolbar.ts) and the drag handles (src/addin/handles.ts): tells
+' the add-in server which elements of an open-charts chart are selected (their OC_ROLE tags) and
+' where, that the whole chart is selected (no roles), or that nothing is any more. Only when that
+' changes, and never for other selections: one AppleScriptTask that starts a background curl and
+' returns at once. Silent: an older bridge script without the handler is ignored.
 Private Sub NotifySelection()
+    Dim request As String, sig As String
+    On Error Resume Next
+#If Mac Then
+    request = SelectionRequest(sig)
+#End If
+    If sig = gSelSig Then Exit Sub
+    gSelSig = sig
+#If Mac Then
+    request = "seq=" & Fmt3(Timer) & vbLf & request
+    AppleScriptTask SCRIPT_FILE, "elementSelection", request
+#End If
+    ' Windows: no element toolbar or drag handles yet (they are panels of the Mac pop-up helper), so
+    ' no call at all: a selection change never waits on the engine.
+End Sub
+
+' The selection report (src/addin/toolbar.ts): "select", the selected roles (tab-separated; empty
+' for the whole chart or nothing), then for a chart its context, screen= of the selection, view= of
+' the chart group (its corners on screen, for the drag handles) and its OC_SPEC. `sig` identifies
+' what is reported ("" = nothing selected).
+Private Function SelectionRequest(ByRef sig As String) As String
     Dim sel As Object, chart As Object, shp As Object, roles As String, r As String, i As Long
-    Dim x0 As Double, y0 As Double, x1 As Double, y1 As Double, sig As String, request As String
+    Dim x0 As Double, y0 As Double, x1 As Double, y1 As Double
     On Error Resume Next
     Set sel = ActiveWindow.Selection
     If sel.HasChildShapeRange Then
@@ -232,9 +253,19 @@ Private Sub NotifySelection()
         If Not chart Is Nothing Then
             If Not IsChart(chart) Then Set chart = Nothing
         End If
+    ElseIf sel.Type = 2 Then ' ppSelectionShapes: the whole chart (one group)
+        If sel.ShapeRange.Count = 1 Then
+            Set chart = sel.ShapeRange(1)
+            If Not IsChart(chart) Then Set chart = Nothing
+        End If
     End If
-    If Not chart Is Nothing Then
-        x0 = 1E+30: y0 = 1E+30: x1 = -1E+30: y1 = -1E+30
+    sig = ""
+    If chart Is Nothing Then
+        SelectionRequest = "select" & vbLf & "" & vbLf
+        Exit Function
+    End If
+    x0 = 1E+30: y0 = 1E+30: x1 = -1E+30: y1 = -1E+30
+    If sel.HasChildShapeRange Then
         For i = 1 To sel.ChildShapeRange.Count
             Set shp = sel.ChildShapeRange(i)
             r = TagValue(shp, "OC_ROLE")
@@ -247,23 +278,32 @@ Private Sub NotifySelection()
             End If
         Next i
     End If
-    If roles = "" Then
-        If gSelSig = "" Then Exit Sub
-        gSelSig = ""
-        request = "select" & vbLf & "" & vbLf
-    Else
-        sig = chart.Id & "|" & roles & "|" & Fmt(x0) & "," & Fmt(y0) & "," & Fmt(x1) & "," & Fmt(y1)
-        If sig = gSelSig Then Exit Sub
-        gSelSig = sig
-        request = "select" & vbLf & roles & vbLf & ChartContext(chart) & ScreenLinesFor(x0, y0, x1 - x0, y1 - y0) & SpecOf(chart)
-    End If
-    request = "seq=" & Fmt3(Timer) & vbLf & request
-#If Mac Then
-    AppleScriptTask SCRIPT_FILE, "elementSelection", request
-#End If
-    ' Windows: no element toolbar yet (it is a panel of the Mac pop-up helper), so no call at all:
-    ' a selection change never waits on the engine.
-End Sub
+    If roles = "" Then x0 = chart.Left: y0 = chart.Top: x1 = chart.Left + chart.Width: y1 = chart.Top + chart.Height
+    sig = chart.Id & "|" & IIf(roles = "", "*", roles) & "|" & Fmt(x0) & "," & Fmt(y0) & "," & Fmt(x1) & "," & Fmt(y1)
+    SelectionRequest = "select" & vbLf & roles & vbLf & ChartContext(chart) & ScreenLinesFor(x0, y0, x1 - x0, y1 - y0) & ViewLine(chart) & SpecOf(chart)
+End Function
+
+' "view=left,top,right,bottom": the chart group's corners through PointsToScreenPixelsX/Y (the drag
+' handles map the slide to the screen with it), or nothing when PowerPoint cannot tell.
+Private Function ViewLine(ByVal chart As Object) As String
+    Dim w As Object, s As String
+    On Error Resume Next
+    Set w = ActiveWindow
+    If w Is Nothing Then Exit Function
+    Err.Clear
+    s = Fmt(w.PointsToScreenPixelsX(chart.Left)) & "," & Fmt(w.PointsToScreenPixelsY(chart.Top)) & "," & _
+        Fmt(w.PointsToScreenPixelsX(chart.Left + chart.Width)) & "," & Fmt(w.PointsToScreenPixelsY(chart.Top + chart.Height))
+    If Err.Number = 0 Then ViewLine = "view=" & s & vbLf
+    Err.Clear
+End Function
+
+' The selection report now (the add-in server re-measures the chart on screen after a scroll, zoom
+' or window move: the drag handles hid themselves until then). Never shows a message.
+Public Function OCPREFIX_SelectionInfo() As String
+    Dim sig As String
+    On Error Resume Next
+    OCPREFIX_SelectionInfo = SelectionRequest(sig)
+End Function
 
 ' ---- Automation entry points (AppleScript "run VB macro", the add-in server, tests) ---------
 

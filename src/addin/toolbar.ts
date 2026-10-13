@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { getSession, setSession, type Session } from '../server.ts';
-import { parseRequest, rememberContext, specKey } from './engine.ts';
+import { parseRequest, rememberContext, specKey, type AddinRequest } from './engine.ts';
 import { chartRect, clampInto, screenOf, type PopupHelper, type Rect, type ScreenInfo } from './popup.ts';
 
 export interface ToolbarProperty { prop: string; group: string; value: string }
@@ -103,6 +103,8 @@ export interface ToolbarDeps {
   /** Runs an applied session in PowerPoint (the server's onSession for "applied"). */
   apply: (s: Session) => void;
   log?: (line: string) => void;
+  /** Every selection report, in order (the drag handles, src/addin/handles.ts). */
+  onSelect?: (req: AddinRequest) => void;
 }
 
 const TOOLBAR_HTML = new URL('../web/toolbar.html', import.meta.url);
@@ -133,6 +135,7 @@ export function toolbarRoutes(deps: ToolbarDeps) {
       // Background posts can overtake each other: drop an older one (VBA Timer restarts at midnight).
       if (Number.isFinite(seq)) { if (seq < lastSeq && lastSeq - seq < 3600) return true; lastSeq = seq; }
       const req2 = parseRequest(text.replace(/^seq=.*\n/m, ''));
+      deps.onSelect?.(req2);
       const roles = req2.arg.split('\t').filter(Boolean);
       if (!roles.length || !req2.spec) { current = undefined; deps.helper.hide('toolbar'); return true; }
       let chart: object;

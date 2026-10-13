@@ -370,3 +370,48 @@ Not verified yet, and to look for in the PC run's zip:
 - whether `WindowSelectionChange` fires for selection changes made through COM (the resize check),
 - first start time of the unsigned exe under the PC's antivirus.
 
+
+## 12. Drag handles (Mac)
+
+**What:** a selected chart (or a selected element of it) shows handles in a transparent overlay of the
+pop-up helper (`HandleOverlay` in `addin/popup-mac/main.swift`): column gap, value-axis top
+(`options.axisMax`), level-arrow position, selected labels (`pin`). The overlay ignores the mouse except
+while the pointer is over a handle (global mouse-moved monitor, no permission); a press there belongs to
+the overlay until release, so PowerPoint sees none of the gesture. Each move is laid out by the server
+(`src/addin/handles.ts` → `src/core/handles.ts`, coalesced: newest wins) and drawn as a ghost over the
+chart; the release commits through the Apply flow (one `ApplyEdit`); a double-click resets. Hidden while
+another app is in front, during PowerPoint's own drags, on scroll / pinch zoom and when the window moves;
+re-measured afterwards through the `SelectionInfo` macro. Code: `src/core/handles.ts`,
+`src/addin/handles.ts`, `addin/popup-mac/main.swift`, VBA `SelectionRequest` / `ViewLine` /
+`SelectionInfo` (Mac only).
+
+**Mapping:** slide points → global screen points by one factor and offset from the chart group's corners
+through `PointsToScreenPixelsX/Y` (`view=` on the selection report); pixels on a Retina display are
+recognised (popup.ts `chartRect`) and a mapping that is not one uniform zoom, or falls outside every
+PowerPoint window, is not trusted (no handles rather than misplaced ones).
+
+**Permissions:** none for users (no Accessibility, no Input Monitoring, no event tap). The live check
+posts CGEvents and needs Accessibility for its terminal.
+
+**Tests:** `test/handles.test.ts` — handles per chart/direction, gap/axis/label/level drag maths and
+reset, view from corners (points, Retina pixels, rounding, untrusted), screen handles at two zooms,
+ghost, controller end to end with a stand-in helper (coalesced ghosts, one apply on release, no-op
+click, double-click reset, hide). Live: `tools/e2e-handles-live.ts` (zoom 50/75/120 %, window moved,
+CGEvent gap drag, two-click label select + drag).
+
+**Live result (PowerPoint for Mac, 2026-10-13, `tools/e2e-handles-live.ts`): Pass.**
+
+| Check | Result |
+|---|---|
+| Chart selected → overlay shown, click-through (`ignoresMouse` true) away from handles | Pass |
+| `PointsToScreenPixelsX/Y` mapping at zoom 50 / 75 / 120 % | factor 0.4999 / 0.7498 / 1.1937 (points, not pixels, on this Retina Mac) |
+| Window moved by (40, 30) pt | view offset moved by (40.0, 30.0) |
+| CGEvent drag on the gap handle (12 pt left) | `HANDLES gap -> Gap 110%`; `APPLY … done (463 ms, layout 4 ms, macro 402 ms)`; OC_SPEC read back `options.gap` 1.1 |
+| Two clicks select a value label (its box becomes a handle), drag it | `APPLY … done (687 ms)`; OC_SPEC `overrides["label:value:s0:c0"].pin` {x 0.1436, y 0.7893} |
+
+Conclusion: PowerPoint for Mac's `PointsToScreenPixelsX/Y` is reliable for this (whole-pixel corners,
+one uniform factor), so the window-bounds + zoom fallback was not needed. Layout per drag frame stays
+under 5 ms; the commit costs one ApplyEdit (0.4–0.7 s), during which the ghost stands in for the chart.
+
+**Limits:** keyboard zoom (⌘+/⌘−) is not noticed until the next click; no handles yet for CAGR /
+difference arrows (no position option), legend, rotation or axis minimum; Windows has none.

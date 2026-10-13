@@ -99,7 +99,7 @@ export function parseRequest(text: string): AddinRequest {
   const scale = Number(params.scale);
   // base= / native= describe the shapes, screen= / window= where the chart is on screen (Edit data
   // pop-up): neither is the layout's context.
-  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window)=/.test(l)).map((l) => `${l}\n`).join('') : '';
+  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|view)=/.test(l)).map((l) => `${l}\n`).join('') : '';
   const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
   const base = json(params.base), native = json(params.native);
   const where = parseWhere(params);
@@ -144,6 +144,20 @@ export async function layoutForApply(s: Session, context: string, m: Measurer): 
   const spec = applyContexts.get(s.id)?.spec || JSON.stringify(s.chart);
   const applied: Sessions = { get: async () => ({ ...s, state: 'applied' }), open: async () => {} };
   return handleRequest({ ...req, spec }, m, applied);
+}
+
+/**
+ * A chart (its OC_SPEC object, style included) laid out for a chart context exactly as `update`
+ * would draw it, and a function that lays a changed spec out the same way (drag handles,
+ * src/addin/handles.ts: < 1 ms a layout once warm).
+ */
+export function sceneFor(chart: object, context: string, m: Measurer): { scene: Scene; frame: Frame; relayout: (spec: ChartSpec) => Scene } {
+  const req = parseRequest(`update\n\n${context}`);
+  const env: Env = { theme: req.theme, hints: req.ptPerUnit ? { ptPerUnit: req.ptPerUnit } : {} };
+  const first = splitSpec(chart as ChartSpec & { style?: Partial<Style> });
+  const frame = resolveFrame(first.chart, first.style, req.frame, req.bounds, m, env);
+  const relayout = (spec: ChartSpec) => { const s = splitSpec(spec as ChartSpec & { style?: Partial<Style> }); return layout(s.chart, s.style, frame, m, env); };
+  return { scene: layout(first.chart, first.style, frame, m, env), frame, relayout };
 }
 
 /** Same frame as a chart on a generated slide: the area below the title. */
