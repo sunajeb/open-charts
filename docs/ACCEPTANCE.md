@@ -22,6 +22,7 @@ exported decks and PNGs). The images below are copied into `docs/acceptance/`.
 | 6 | Interop: CLI decks open in PowerPoint; add-in deck imports | **Pass** |
 | 7 | Timings vs targets | Insert **pass** (cold 1.8 s → 1.3 s after O5); update **pass** in VBA, about 1 s by wall clock including AppleScript |
 | 8 | Every ribbon control incl. nothing selected | **Pass** |
+| 9 | Office.js add-in (P3): bundle parity, task pane contract, manifest | **Pass** in Chromium + WebKit against a recording mock of PowerPoint JS; **not yet run in live PowerPoint** (owner steps below) |
 
 Bugs fixed on this branch: 3 (see [Bugs](#bugs)). Open items: see [Open](#open-items).
 
@@ -171,6 +172,39 @@ Wall clock includes AppleScript `run VB macro` (about 0.3–0.4 s that a real ri
   - Insert with no slide → "Click a slide (Normal view) first, then insert the chart."
 - Unsupported-type path: every gallery type is available in 0.2.0, so the e2e "not available" branch
   had nothing to test.
+
+## 9. Office.js add-in (P3)
+
+Branch `worktree-agent-a72d07aadad836e60`. What was checked, and how:
+
+| Check | How | Result |
+|---|---|---|
+| Engine + writer bundle for the browser, no Node built-ins | `npm run build:officejs` (esbuild, platform browser; `test/officejs.test.ts`) | Pass — `taskpane.js` 341 KB, `engine.js` 339 KB minified |
+| Scenes byte-identical to Node for every sample (17 types), and the one-slide .pptx too | Playwright: the bundle in **Chromium and WebKit** (WKWebView's engine) with the bundled Liberation Sans vs Node `measurerFromFonts` on the same files | Pass, byte-identical in both |
+| Path B planner: rect / line / text / arrowheads / wedges / rings / triangles → PowerPoint JS presets; fallbacks by API version | `test/officejs.test.ts` (14 tests) | Pass; only `area`/`area100` need Path A on 1.10 |
+| Insert → one tagged group (frame rect first, `OC_ROLE` per child, `OC_V/ENGINE/SPEC/FRAME/FONT`), pane re-binds to it | `test/e2e/officejs.spec.ts` with `office-mock.js` | Pass |
+| Select chart → datasheet loads its `OC_SPEC`; Apply replaces in place (same frame, name, z-order between two other shapes); Revert restores | same | Pass |
+| Resize → banner → Re-layout lays out at the new size (`OC_FRAME` updated) | same | Pass |
+| Path A in place (1.8+): export slide → splice group at the old z-order → insert after → delete original; result read back with the inspect reader | same + `patchSlide` unit tests on real writer output | Pass |
+| Path A new slide before 1.8 | same | Pass |
+| Slide theme colours (1.10) used for layout; PowerPointApi matrix logged (OJ-S1 data) | same | Pass (mock) |
+| Manifest: TaskPaneApp, Presentation, PowerPointApi 1.4 floor, one ribbon button *open-charts* (ShowTaskpane), https URLs, schema element order | `test/officejs.test.ts` | Pass (not run through `office-addin-manifest validate`: no network tooling) |
+| Dev server over https with the generated certificate; `/api/log`; no path traversal | curl against `npm run officejs:serve` | Pass |
+| Live PowerPoint for Mac 16.105 | `npm run officejs:live` (pane self-test: insert, Apply, Revert, Path A, slide export read back) | **Not run**: the certificate is not trusted and the add-in folder is not writable from the agent (macOS "data of other apps"); both are owner steps |
+
+Owner steps before the live check (once):
+
+1. `npm run officejs:cert`, then trust it:
+   `security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db "$HOME/Library/Application Support/open-charts/officejs-cert/localhost.crt"`
+2. `npm run build:officejs && npm run officejs:sideload` from Terminal (allow access to data from
+   other apps if asked), or copy `dist/officejs/manifest.xml` into
+   `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/`.
+3. `npm run officejs:live`, and click **Home › open-charts** when it says so; the pane runs the rest.
+
+Not verified anywhere yet (needs real PowerPoint): adjustment units for Pie/BlockArc/Donut/RoundRectangle
+(the planner uses the VBA convention: degrees, fractions), multi-line text boxes from `\n`, undo
+granularity (OJ-S3), tag size limits (OJ-S2), `insertSlidesFromBase64` layout mapping (OJ-S9),
+Windows and web.
 
 ## Bugs
 

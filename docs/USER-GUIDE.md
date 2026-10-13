@@ -68,6 +68,108 @@ someone else: the data travels inside the file. Don't ungroup the chart or edit 
 if you want to keep editing its data: the next Update chart or Apply redraws the chart from its data
 and replaces those changes.
 
+## Office.js add-in (Windows, web, Mac)
+
+The Office.js add-in is a second way to use open-charts in PowerPoint: a task pane instead of a
+ribbon tab and browser window, with the chart engine running inside the pane. It needs no Node, no
+macros and no AppleScript permission at run time, and works on PowerPoint for Windows, PowerPoint on
+the web and PowerPoint for Mac. Both add-ins read and write the same data inside the chart (tag
+contract v1), so a chart inserted by one can be edited by the other, and by the command line.
+
+### Set it up
+
+From the repository folder (Node 22.6+):
+
+```sh
+npm install
+npm run build:officejs      # builds dist/officejs/ (task pane, manifest.xml, fonts, icons)
+npm run officejs:cert       # makes a certificate for https://localhost:4175
+npm run officejs:serve      # serves the add-in; keep it running while you use PowerPoint
+```
+
+**Trust the certificate once.** Office only loads add-ins over trusted https. `officejs:cert` prints
+the command; on a Mac it is
+
+```sh
+security add-trusted-cert -r trustRoot -k ~/Library/Keychains/login.keychain-db \
+  "$HOME/Library/Application Support/open-charts/officejs-cert/localhost.crt"
+```
+
+(macOS asks for your password; or double-click the file and set it to *Always Trust* in Keychain
+Access). On Windows: `certutil -user -addstore Root localhost.crt`.
+
+**Sideload the manifest** (`dist/officejs/manifest.xml`):
+
+| Where | How |
+|---|---|
+| PowerPoint for Mac | `npm run officejs:sideload` copies it to `~/Library/Containers/com.microsoft.Powerpoint/Data/Documents/wef/`. If macOS asks whether Terminal may access data from other apps, click **Allow** (or copy the file there in Finder). Restart PowerPoint. |
+| PowerPoint for Windows | Put the manifest in a shared folder, add the folder's `\\machine\share` path under *File › Options › Trust Center › Trust Center Settings › Trusted Add-in Catalogs* (tick *Show in Menu*), restart PowerPoint, then *Insert › My Add-ins › Shared Folder*. |
+| PowerPoint on the web | *Insert › Add-ins › My Add-ins › Upload My Add-in*, pick the manifest. The browser must trust the certificate. |
+| A whole organisation | Microsoft 365 admin centre › *Integrated apps* › upload the manifest, after `npm run build:officejs -- --base https://your-host/path` and hosting `dist/officejs/` there (any static https host). |
+
+Then **Home › open-charts** opens the pane.
+
+### Insert, edit, apply, revert
+
+- **Insert.** With no chart selected the pane shows a sample chart and **Insert on slide**. Pick the
+  type in the gallery, type or paste your data, and click **Insert on slide** (⌘↵): the chart is
+  drawn on the current slide, in the standard chart area.
+- **Edit.** Click any open-charts chart: the pane loads its data (the title reads *Editing …*).
+  Change it and click **Apply to slide**: the chart is replaced in place — same position, size,
+  name and stacking order — and stays selected.
+- **Revert** appears after an Apply and puts back the chart as it was before it, one step per click,
+  as long as the same chart stays selected. PowerPoint's own Undo also works, but may need several
+  presses for one Apply.
+- **Resize.** After you resize a chart, selecting it shows *This chart was resized* with
+  **Re-layout to new size**, which lays it out again for the new size with its stored data (text
+  keeps its size, labels are re-placed). Moving a chart needs nothing.
+
+The preview, the issue list and every datasheet feature are the ones described below
+([The datasheet](#the-datasheet)); in the pane they stack vertically.
+
+### How the chart is drawn, by PowerPoint version
+
+PowerPoint's add-in API grows with each version (`PowerPointApi` 1.4 … 1.10). The pane checks what
+your PowerPoint offers and picks the best way to draw:
+
+| Your PowerPoint offers | Columns, bars, waterfall, Mekko, scatter, table, Gantt | Lines, arrows, pie, doughnut, Harvey balls | Area charts |
+|---|---|---|---|
+| 1.10 (current Microsoft 365) | Shapes on the slide | Shapes on the slide (rotated lines and arrowheads, pie and arc presets) | Slide re-inserted with the chart |
+| 1.8 – 1.9 | Shapes on the slide | Slide re-inserted with the chart | Slide re-inserted with the chart |
+| 1.4 – 1.7 | New slide with the chart | New slide with the chart | New slide with the chart |
+
+- **Shapes on the slide** (Path B): the chart is a group of native shapes, exactly as the `.ppam`
+  add-in draws it.
+- **Slide re-inserted** (Path A): area bands and other free-form shapes cannot be drawn through the
+  add-in API, so the pane exports the slide, adds the chart to it with the same writer as the command
+  line, inserts it after the original and removes the original. Everything on the slide is kept, but
+  it becomes a new slide: links from other slides to it need re-pointing.
+- **New slide** (Path A on older PowerPoints): Insert puts the chart on a new slide after the current
+  one; Apply cannot replace a chart in place and says so.
+
+The pane's first line in its log (`ready`) lists the API versions your PowerPoint has.
+
+**Colours.** With 1.10 the chart is laid out in the slide's own theme colours; drawn as shapes they
+are fixed colours, so after changing the deck's theme select the chart and Apply again. Charts drawn
+through a re-inserted or new slide keep real theme colours.
+
+**Fonts.** Text is measured with the bundled Liberation Sans, which has Arial's widths, so Arial
+charts fit exactly. Charts in another font are measured as if they were Arial; labels may be a little
+tighter or looser than planned.
+
+### Troubleshooting the pane
+
+**The pane is blank or says it cannot be reached.** Is `npm run officejs:serve` running? Is the
+certificate trusted (open `https://localhost:4175/taskpane.html` in Safari: no warning should
+appear)?
+
+**The pane says "Open this pane from PowerPoint".** The page was opened in a browser, not through
+Home › open-charts; it previews but cannot insert.
+
+**Debugging on a Mac.** `defaults write com.microsoft.Powerpoint OfficeWebAddinDeveloperExtras -bool true`,
+restart PowerPoint, right-click the pane › *Inspect Element*. The dev server also keeps the pane's log
+at `https://localhost:4175/api/log` and in `~/Library/Application Support/open-charts/officejs.log`.
+
 ## The datasheet
 
 The datasheet is the same in the add-in's **Edit data** window and in the standalone web editor.
