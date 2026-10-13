@@ -28,7 +28,7 @@ const TYPE_NAMES: Record<ChartSpec['type'], string> = {
 };
 
 export function altText(chart: ChartSpec): string {
-  return `${TYPE_NAMES[chart.type]} of ${chart.series.map((s) => s.name).join(', ')} across ${chart.categories.join(', ')}`;
+  return `${TYPE_NAMES[chart.type]} of ${chart.series.filter((s) => !s.hidden).map((s) => s.name).join(', ')} across ${chart.categories.join(', ')}`;
 }
 
 export function buildDeck(deck: DeckSpec, m: Measurer): { pptx: Uint8Array; slides: BuiltSlide[] } {

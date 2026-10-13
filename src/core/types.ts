@@ -20,6 +20,11 @@ export interface Series {
   color?: string;
   /** Combination chart: draw this series as a line over the columns (same value axis). */
   as?: 'column' | 'line';
+  /**
+   * Leave this row out of the chart; its data stays in the spec (the datasheet's eye toggle). Hidden
+   * series keep their index in roles and their palette colour, so showing one again changes nothing else.
+   */
+  hidden?: boolean;
 }
 
 /**

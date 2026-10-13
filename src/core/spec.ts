@@ -18,7 +18,7 @@ export const CHART_TYPES = [
   'combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt',
 ] as const;
 export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options'] as const;
-export const SERIES_KEYS = ['name', 'values', 'color', 'as'] as const;
+export const SERIES_KEYS = ['name', 'values', 'color', 'as', 'hidden'] as const;
 export type ChartTypeName = typeof CHART_TYPES[number];
 const except = (...types: ChartTypeName[]) => CHART_TYPES.filter((t) => !types.includes(t));
 
@@ -205,6 +205,7 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
         e.add(['series', i, 'values'], `has ${s.values.length} values but there are ${nCat} categories`);
       }
       if (s.as !== undefined && s.as !== 'column' && s.as !== 'line') e.add(['series', i, 'as'], `must be "column" or "line", got ${describe(s.as)}`);
+      if (s.hidden !== undefined && typeof s.hidden !== 'boolean') e.add(['series', i, 'hidden'], `must be true or false, got ${describe(s.hidden)}`);
       s.values.forEach((v, j) => {
         const at = ['series', i, 'values', j];
         if (v === null) return;
@@ -333,6 +334,12 @@ function checkPoint(e: Errors, v: unknown, at: (string | number)[], n: number) {
 
 /** Rules on the series as a whole that depend on the chart type. */
 function checkTypeSeries(e: Errors, type: string, series: unknown[]) {
+  // Hidden rows: something must stay visible, and rows a chart type reads by position cannot hide.
+  const hidden = (s: unknown) => isObj(s) && s.hidden === true;
+  if (series.length && series.every(hidden)) e.add(['series'], 'every series is hidden; show at least one');
+  const fixed = type === 'gantt' ? ['Start', 'End'] : type === 'mekkoxy' ? ['width'] : [];
+  fixed.forEach((what, i) => { if (hidden(series[i])) e.add(['series', i, 'hidden'], `the ${what} series of a ${type === 'gantt' ? 'Gantt' : 'Mekko XY'} chart cannot be hidden`); });
+  if (type === 'mekkoxy' && series.length >= 2 && !hidden(series[0]) && series.slice(1).every(hidden)) e.add(['series'], 'Mekko XY needs at least one visible height series');
   if (type === 'mekkoxy' && series.length < 2) e.add(['series'], 'Mekko XY needs a width series (the first) and at least one height series');
   if (type === 'gantt') {
     if (series.length < 2) { e.add(['series'], 'Gantt needs a Start series (the first) and an End series (the second); further series are milestones'); return; }

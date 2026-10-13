@@ -10,7 +10,7 @@ valid specs. Machine-readable schemas: `schema/chart.schema.json` and `schema/de
 
 - [Deck](#deck)
 - [Chart](#chart)
-- [Series and cells](#series-and-cells)
+- [Series and cells](#series-and-cells) — [hidden rows](#hidden-rows)
 - [Options](#options) — [numbers](#numbers) · [layout](#layout-and-axes) · [labels](#labels-and-legend) · [decorations](#decorations) · [type-specific](#type-specific-options)
 - [Style](#style)
 - [Validation and errors](#validation-and-errors)
@@ -93,6 +93,7 @@ than silently ignored.
 | `values` | array | yes | One cell per category, so `values` has exactly as many entries as `categories`. |
 | `color` | string | no | Hex colour, `"1F3A5F"` or `"#1F3A5F"`. Otherwise the palette colour for the row. |
 | `as` | `"column"` or `"line"` | no | Combination chart only: `"line"` draws this series as a line with markers over the columns. |
+| `hidden` | boolean | no | `true` leaves the row out of the chart while its data stays in the spec (the datasheet's eye toggle). See [Hidden rows](#hidden-rows). |
 
 A cell is one of:
 
@@ -103,6 +104,31 @@ A cell is one of:
 - **any text** in a table, shown as typed.
 
 Numbers must be finite. Mekko XY widths (its first series) must not be negative.
+
+### Hidden rows
+
+A series with `"hidden": true` is skipped when the chart is laid out, as if the row were not there —
+totals, shares, the value range, decimals and the legend only see the visible rows — but it is still
+validated and saved, so showing it again restores the chart exactly. The other rows keep their colour
+(each row takes the palette colour of its position in the datasheet, hidden rows included) and their
+index in shape roles (`bar:s2:c0` stays `bar:s2:c0` when series 1 is hidden).
+
+- At least one series must stay visible.
+- Rows a chart type reads by position cannot be hidden: a Gantt chart's Start and End rows, a Mekko
+  XY chart's width row (and a Mekko XY chart keeps at least one visible height row).
+- Pie and doughnut charts show the first visible series.
+- Waterfall categories marked `"e"` in a hidden row stay totals.
+
+```json
+{
+  "type": "clustered",
+  "categories": ["North", "South", "West"],
+  "series": [
+    { "name": "Prior year", "values": [40, 52, 61], "hidden": true },
+    { "name": "This year", "values": [46, 50, 70] }
+  ]
+}
+```
 
 ### Waterfall
 

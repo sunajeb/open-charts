@@ -54,7 +54,8 @@
           }
         },
         "color": { "$ref": "#/$defs/hexColor" },
-        "as": { "enum": ["column", "line"], "description": "Combination chart: draw this series as a line over the columns." }
+        "as": { "enum": ["column", "line"], "description": "Combination chart: draw this series as a line over the columns." },
+        "hidden": { "type": "boolean", "description": "Leave this row out of the chart; its data stays in the spec. Not on the Start/End rows of a Gantt chart or the width row of a Mekko XY chart; at least one series stays visible." }
       }
     },
     "unit": {
