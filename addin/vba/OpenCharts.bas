@@ -47,6 +47,10 @@ Private gEngineStarted As Boolean
 Private gEventsOk As Boolean
 ' Re-entrancy guard: drawing changes the selection, which raises the event again.
 Private gBusy As Boolean
+' True while gBusy is held by the automatic selection-change work (not a user action); a click that
+' arrives then is queued in gPending and run as soon as that work finishes, never refused.
+Private gAutoBusy As Boolean
+Private gPending As String
 ' Set by the automation entry points: messages are logged instead of shown in a dialog.
 Private gSilent As Boolean
 Private gLastMessage As String
@@ -181,6 +185,7 @@ Public Sub OnSelectionChange()
     gEventsOk = True
     If gBusy Then Exit Sub
     gBusy = True
+    gAutoBusy = True
     On Error Resume Next
     CheckResized
     AgendaAutoCheck
@@ -193,7 +198,14 @@ Public Sub OnSelectionChange()
         Next c
     End If
     InvalidateDirections
+    gAutoBusy = False
     gBusy = False
+    If gPending <> "" Then
+        Dim pending As String
+        pending = gPending
+        gPending = ""
+        Dispatch pending
+    End If
 End Sub
 
 ' Reads the selected chart's type and direction (from its OC_SPEC) for the direction buttons.
@@ -577,7 +589,11 @@ End Sub
 Private Sub Dispatch(ByVal id As String)
     ' PowerPoint can deliver a click (or an AppleScript call) while an earlier chart is still being
     ' laid out: the bridge is busy then, so say so instead of failing.
-    If gBusy Then Tell "open-charts is still updating a chart. Try again in a moment.": Exit Sub
+    If gBusy Then
+        ' Background selection work: run this click right after it. A user action in progress: say so.
+        If gAutoBusy Then gPending = id: Exit Sub
+        Tell "open-charts is still updating a chart. Try again in a moment.": Exit Sub
+    End If
     On Error GoTo Failed
     gBusy = True
     id = CommandId(id)

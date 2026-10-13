@@ -276,7 +276,10 @@ console.log(`Deck theme: accent1 ${deckTheme.accent1}, dk1 ${deckTheme.dk1}`);
 const style = defaultStyle;
 const cliSlides = slides.map((sl) => {
   const c = sl.charts[0];
-  const { style: overrides, ...chart } = JSON.parse(c.spec!);
+  // A slide whose insert failed has no chart: keep an empty slide so slide numbers still line up
+  // (the failed insert is already reported from its RESULT line).
+  if (!c?.spec || !c.frame) return { scenes: [] };
+  const { style: overrides, ...chart } = JSON.parse(c.spec);
   const scene = layoutChart(chart, c.frame!, createMeasurer(), { ...style, ...overrides, theme: { ...overrides?.theme, ...deckTheme } });
   return { scenes: [chartContent(chart, scene, style.font, overrides)] };
 });
