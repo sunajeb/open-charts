@@ -323,8 +323,10 @@ Private Sub CheckResized()
                 Set sel = FindSelectedChart()
                 If Not sel Is Nothing Then selectedId = sel.Id
                 wasSelected = (selectedId = shp.Id)
-                If TagValue(shp, "OC_SGROUP") <> "" Then groups.Add TagValue(shp, "OC_SGROUP")
                 Set result = Relayout(shp, False, "")
+                If Not result Is Nothing Then
+                    If TagValue(result, "OC_SGROUP") <> "" Then groups.Add TagValue(result, "OC_SGROUP") & vbTab & result.Id
+                End If
                 If wasSelected And Not result Is Nothing Then result.Select
                 Report "RELAYOUT " & IIf(result Is Nothing, "failed: " & gLastMessage, "OK") & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
             ElseIf Abs(shp.Left - Val(f(0))) > 0.5 Or Abs(shp.Top - Val(f(1))) > 0.5 Then
@@ -335,7 +337,7 @@ Private Sub CheckResized()
     ' A resized chart changes its own scale: its same-scale partners follow (after the loop, which
     ' still holds the shapes the re-layout replaces).
     For Each g In groups
-        SyncGroup sld, CStr(g), 0
+        SyncGroup sld, Split(g, vbTab)(0), CLng(Split(g, vbTab)(1))
     Next g
 End Sub
 

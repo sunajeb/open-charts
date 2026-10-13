@@ -10,15 +10,16 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addinMain, PPAM_DIR } from '../src/addin/cli.ts';
 import { createMeasurer } from '../src/fonts.ts';
-import { defaultStyle, layoutChart } from '../src/core/index.ts';
-import { chartContent } from '../src/deck.ts';
+import { DEFAULT_THEME, defaultStyle, layoutChart } from '../src/core/index.ts';
+import { buildDeck, chartContent, type DeckSpec } from '../src/deck.ts';
 import { writePptx } from '../src/render/pptx.ts';
 import { decodePng, diffImages, encodePng, type Image } from '../test/goldens/png.ts';
 import { addinHome } from '../src/addin/server.ts';
 import { specKey } from '../src/addin/engine.ts';
 import { buildAddin } from '../src/addin/package.ts';
 import { galleryItems, insertableItems, sampleFor } from '../src/addin/registry.ts';
-import { readCharts } from '../src/ooxml/pptx-read.ts';
+import { readCharts, readThemeColors } from '../src/ooxml/pptx-read.ts';
+import { unzip } from '../src/ooxml/unzip.ts';
 import { formatInspect } from '../src/inspect.ts';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -258,15 +259,19 @@ const st = slides.find((x) => x.index === slideOf.stacked)?.charts[0];
 if (st?.bounds && (Math.abs(st.bounds.x - 300) > 40 || st.bounds.w > 420)) failures.push(`stacked: not re-laid out in the moved frame (bounds ${JSON.stringify(st.bounds)})`);
 // 9. Same charts written by the CLI's own .pptx writer (same spec, same frame), rendered by the
 // same PowerPoint: the add-in's native shapes must look the same.
+// Charts use theme colours, which PowerPoint draws in the deck's theme (here the new presentation's
+// Office theme): the CLI copy is laid out with, and written in, that same theme.
+const deckTheme = { ...DEFAULT_THEME, ...readThemeColors(new Uint8Array(readFileSync(DECK))) };
+console.log(`Deck theme: accent1 ${deckTheme.accent1}, dk1 ${deckTheme.dk1}`);
 const style = defaultStyle;
 const cliSlides = slides.map((sl) => {
   const c = sl.charts[0];
   const { style: overrides, ...chart } = JSON.parse(c.spec!);
-  const scene = layoutChart(chart, c.frame!, createMeasurer(), { ...style, ...overrides });
+  const scene = layoutChart(chart, c.frame!, createMeasurer(), { ...style, ...overrides, theme: { ...overrides?.theme, ...deckTheme } });
   return { scenes: [chartContent(chart, scene, style.font, overrides)] };
 });
 const compareDeck = join(PPAM_DIR, 'compare.pptx'); // a folder PowerPoint's sandbox may read
-writeFileSync(compareDeck, writePptx(cliSlides, style.font));
+writeFileSync(compareDeck, writePptx(cliSlides, style.font, deckTheme));
 ppt(`activate\nopen POSIX file ${q(compareDeck)}`);
 ready = false; // PowerPoint restarted: the add-in compiles again
 macro('ExportCopy', CLI_PNG_DIR, 'png');
@@ -289,6 +294,56 @@ if ('spec' in wf) {
   if (s?.state !== 'error' || !/PowerPoint isn't running/.test(s.message ?? '')) failures.push(`Apply with PowerPoint closed: ${JSON.stringify(s)}`);
   if (running()) failures.push('Apply started PowerPoint');
 }
+// 10. Theme colours and a same-scale group, live. A CLI deck with two charts in one scale group
+// opens in PowerPoint and gets another colour scheme: the charts recolour by themselves (theme
+// colours). Update chart on the waterfall re-lays out its partner; resizing the stacked chart
+// re-lays out the waterfall at the new scale.
+const THEME_PNG = join(OUT, 'theme-png');
+{
+  const pair: DeckSpec = JSON.parse(readFileSync(join(ROOT, 'examples', 'two-charts.json'), 'utf8'));
+  pair.slides = [pair.slides[0]];
+  const themedDeck = join(PPAM_DIR, 'themed.pptx');
+  writeFileSync(themedDeck, buildDeck(pair, createMeasurer()).pptx);
+  ppt(`activate\nopen POSIX file ${q(themedDeck)}`);
+  ready = false; // PowerPoint started again: the add-in compiles again
+  macro('ExportCopy', join(THEME_PNG, 'before'), 'png');
+  const scheme = '/Applications/Microsoft PowerPoint.app/Contents/Resources/Office Themes/Theme Colors/Red Orange.xml';
+  try {
+    ppt(`apply theme color scheme slide 1 of active presentation file name ${q(scheme)}`);
+  } catch {
+    ppt(`apply theme color scheme slide 1 of active presentation file name (POSIX file ${q(scheme)} as text)`);
+  }
+  ppt('go to slide view of document window 1 number 1');
+  macro('SelectChart', '2');
+  const upd = macro('Run', 'btnUpdate');
+  console.log(upd);
+  if (!/RESULT btnUpdate OK/.test(upd)) failures.push(`theme slide: Update chart failed: ${upd}`);
+  if (!/SYNC revenue 1 of 1 charts/.test(upd)) failures.push(`theme slide: Update chart did not re-lay out the group partner (${upd})`);
+  // Resize the stacked chart (its own scale changes): the selection change re-lays it out and then
+  // its partner, at the new group scale.
+  macro('SelectChart', '1');
+  macro('ResizeChart', '1', '0.8');
+  const before = logLines().length;
+  macro('SelectChart', '0');
+  const synced = waitForLog(/SYNC revenue/, before);
+  sleep(500);
+  console.log(logLines().slice(before).join('\n'));
+  if (!/SYNC revenue 1 of 1 charts/.test(synced)) failures.push(`theme slide: resizing a chart did not re-lay out its group partner (${synced || 'timeout'})`);
+  const themedOut = join(OUT, 'themed.pptx');
+  macro('ExportCopy', themedOut, 'pptx');
+  macro('ExportCopy', join(THEME_PNG, 'after'), 'png');
+  ppt('close active presentation saving no\nquit saving no');
+  rmSync(themedDeck, { force: true });
+  // The add-in drew theme colours as theme colours, and resolved them in the slide's new scheme.
+  const files = unzip(new Uint8Array(readFileSync(themedOut)));
+  const slideXml = files.get('ppt/slides/slide1.xml')?.text() ?? '';
+  for (const slot of ['accent1', 'tx1']) if (!slideXml.includes(`<a:schemeClr val="${slot}"`)) failures.push(`theme slide: no schemeClr ${slot} in the add-in's shapes`);
+  const charts = readCharts(new Uint8Array(readFileSync(themedOut)))[0]?.charts ?? [];
+  console.log(`theme slide: ${charts.map((c) => `${c.name} frame ${JSON.stringify(c.frame)}`).join('; ')}`);
+  if (charts.length !== 2) failures.push(`theme slide: ${charts.length} charts after the updates, expected 2`);
+  console.log(`Theme slide PNGs: ${THEME_PNG}`);
+}
+
 for (const sl of slides) {
   const a = join(PNG_DIR, `slide${sl.index}.png`), b = join(CLI_PNG_DIR, `slide${sl.index}.png`);
   if (!existsSync(a) || !existsSync(b)) { failures.push(`slide ${sl.index}: PNG missing for comparison`); continue; }
@@ -300,7 +355,7 @@ for (const sl of slides) {
   if (off > ia.width * ia.height * 2.5e-5) failures.push(`slide ${sl.index}: add-in rendering differs from the CLI writer (${off} pixels beyond a 3-px shift)`);
 }
 
-/** Pixels of either image with no match (all channels within 48) in the other within ±R px: glyph placement that differs by a pixel or two is not a difference. */
+/** Pixels of either image with no match (all channels within 48) in the other within ±R px, and no blend of its neighbours: glyph placement that differs by a pixel or two, or an anti-aliasing step, is not a difference. */
 function beyondOnePixel(a: Image, b: Image, R = 3): number {
   if (a.width !== b.width || a.height !== b.height) return a.width * a.height;
   const near = (p: Image, q: Image, x: number, y: number) => {
@@ -311,7 +366,16 @@ function beyondOnePixel(a: Image, b: Image, R = 3): number {
       const j = (yy * q.width + xx) * 4;
       if (Math.abs(p.data[i] - q.data[j]) <= 48 && Math.abs(p.data[i + 1] - q.data[j + 1]) <= 48 && Math.abs(p.data[i + 2] - q.data[j + 2]) <= 48) return true;
     }
-    return false;
+    // An anti-aliasing step on a high-contrast edge (white separators on saturated theme colours): the
+    // pixel is a blend that lies between the colours of the other image's 3x3 neighbourhood.
+    const lo = [255, 255, 255], hi = [0, 0, 0];
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const xx = x + dx, yy = y + dy;
+      if (xx < 0 || yy < 0 || xx >= q.width || yy >= q.height) continue;
+      const j = (yy * q.width + xx) * 4;
+      for (let c = 0; c < 3; c++) { lo[c] = Math.min(lo[c], q.data[j + c]); hi[c] = Math.max(hi[c], q.data[j + c]); }
+    }
+    return [0, 1, 2].every((c) => p.data[i + c] >= lo[c] - 8 && p.data[i + c] <= hi[c] + 8);
   };
   let n = 0;
   for (let y = 0; y < a.height; y++) for (let x = 0; x < a.width; x++) if (!near(a, b, x, y) || !near(b, a, x, y)) n++;
