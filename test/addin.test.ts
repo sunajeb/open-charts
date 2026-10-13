@@ -315,7 +315,8 @@ test('request parsing tolerates CRLF and missing fields', async () => {
 test('launcher: installed open-charts command runs the CLI; messages name a command that works', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'oc-launcher-'));
   const path = process.env.PATH;
-  try {
+  // The launcher is a shell script for the Mac install; Windows uses install.ps1 (test/windows.test.ts).
+  if (process.platform !== 'win32') try {
     const cli = join(dir, 'fake cli.js');
     writeFileSync(cli, 'console.log(JSON.stringify(process.argv.slice(2)))\n');
     process.env.PATH = ''; // no folder to link into: the install explains how to add one
@@ -352,7 +353,7 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     let s = setSession('ap1', { chart, state: 'applied' });
     await applyInPowerPoint(s, home, async () => assert.fail('must not run'));
     assert.equal(getSession('ap1')!.state, 'error');
-    assert.match(getSession('ap1')!.message!, /not installed.*addin install/);
+    assert.match(getSession('ap1')!.message!, /not installed.*(addin install|install\.ps1)/);
 
     writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
     // The macro draws the chart: the engine settles the session ("open"), and once the macro has
@@ -375,8 +376,8 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
 
     // Permission prompt unanswered (killed after the timeout), denied, PowerPoint closed, other.
     const cases: [{ message: string; killed?: boolean }, RegExp][] = [
-      [{ message: 'Command failed', killed: true }, /click Allow in that dialog, then Apply again/],
-      [{ message: 'execution error: Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)' }, /click Allow/],
+      [{ message: 'Command failed', killed: true }, process.platform === 'win32' ? /Close any open dialog in PowerPoint/ : /click Allow in that dialog, then Apply again/],
+      [{ message: 'execution error: Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)' }, process.platform === 'win32' ? /Close any open dialog/ : /click Allow/],
       [{ message: 'execution error: Not authorized to send Apple events to Microsoft PowerPoint. (-1743)' }, /System Settings › Privacy & Security › Automation/],
       [{ message: 'execution error: PowerPoint is not running. (-600)' }, /PowerPoint isn't running/],
       [{ message: 'Command failed: osascript\n0:10: execution error: Something odd. (-2700)' }, /could not update the chart \(Something odd\. \(-2700\)\)/],
@@ -491,7 +492,7 @@ test('the AppleScript helper: one request per line, never starts PowerPoint, exi
 
 test('a server that outlived the PowerPoint that started it never sends Apple events and hands over', async () => {
   // A process id that is gone: a child that has exited.
-  const gone = Number(execFileSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).trim());
+  const gone = Number(execFileSync(process.execPath, ['-e', 'console.log(process.pid)'], { encoding: 'utf8' }).trim());
   assert.equal(outlivedPowerPoint(undefined, () => 1), false, 'started without PowerPoint: nothing to outlive');
   assert.equal(outlivedPowerPoint(process.pid, () => 1), false, 'its PowerPoint is still running');
   assert.equal(outlivedPowerPoint(gone, () => undefined), false, 'PowerPoint closed: Apply says it is not running');

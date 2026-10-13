@@ -4,10 +4,11 @@ import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildReport, parseIssue } from '../src/report.ts';
 
-const CLI = new URL('../src/cli.ts', import.meta.url).pathname;
-const EXAMPLE = new URL('../examples/deck.json', import.meta.url).pathname;
+const CLI = fileURLToPath(new URL('../src/cli.ts', import.meta.url));
+const EXAMPLE = fileURLToPath(new URL('../examples/deck.json', import.meta.url));
 const run = (...args: string[]) =>
   spawnSync(process.execPath, ['--experimental-strip-types', '--no-warnings', CLI, ...args], { encoding: 'utf8' });
 
