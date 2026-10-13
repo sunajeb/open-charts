@@ -98,9 +98,9 @@ function model(ctx: Ctx) {
 
 type Model = ReturnType<typeof model>;
 
-/** Arrow heads of a total difference arrow per mode (relative → to, reverse → from, absolute ↔ both). */
+/** Arrow heads of a total difference arrow per mode (relative, the default, → to; reverse → from; absolute ↔ both). */
 const headsOf = (kind: ArrowKind, ref: { mode?: DiffMode }): Heads =>
-  kind === 'cagr' ? 'end' : ref.mode === 'relative' ? 'end' : ref.mode === 'reverse' ? 'start' : 'both';
+  kind === 'cagr' ? 'end' : ref.mode === 'absolute' ? 'both' : ref.mode === 'reverse' ? 'start' : 'end';
 
 /** Value of one end of a level arrow, in axis units (a value line end: the line's value). */
 function endValue(md: Model, end: LevelEnd): number {
@@ -138,7 +138,7 @@ function arrowLabel(ctx: Ctx, md: Model, kind: ArrowKind, ref: { from: number; t
   if (a < 0 || b >= md.nCat || a >= b) { ctx.hidden.push(`${kind}: invalid category range`); return null; }
   const label = kind === 'cagr'
     ? cagrLabel(ctx, md.totalsFor(a), md.totalsFor(b), cagrYears(ctx.spec.categories, a, b, ref.years).years)
-    : diffLabel(ctx, md.totalsFor(a), md.totalsFor(b), (ref as { mode?: DiffMode }).mode ?? 'absolute');
+    : diffLabel(ctx, md.totalsFor(a), md.totalsFor(b), (ref as { mode?: DiffMode }).mode ?? 'relative');
   if (!label) ctx.hidden.push(`${kind}: needs positive totals`);
   return label;
 }

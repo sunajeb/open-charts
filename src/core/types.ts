@@ -45,8 +45,8 @@ export interface ChartOptions {
   cagr?: { from: number; to: number; years?: number } | null;
   /**
    * Total difference arrow between the totals of two categories. `mode` (manual: Arrow modes):
-   * "absolute" (default, ↔, the signed difference), "relative" (→, change in percent from `from` to
-   * `to`) or "reverse" (←, change in percent from `to` to `from`).
+   * "relative" (default, →, change in percent from `from` to `to`), "absolute" (↔, the signed
+   * difference) or "reverse" (←, change in percent from `to` to `from`).
    */
   difference?: { from: number; to: number; mode?: DiffMode } | null;
   /** Level difference arrows between two segment tops / data points (or a value line); mode default "relative". */

@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 (2026-10-13)
+
+The data format is stable from this release: format 1.0 (`specVersion` 1); see docs/DATA-FORMAT.md.
+
+### Changed
+
+- The total difference arrow shows the change in percent (→) by default. Write `"mode": "absolute"`
+  for the signed difference (the old default).
 
 ### Updates and fixes
 

@@ -1225,14 +1225,14 @@ const opt = async (page: Page, k: string) => (await deck(page)).slides[0].chart.
 const has = async (page: Page, t: string) => (await texts(page)).some((x) => x.replace(/\s/g, '') === t);
 const dashed = (page: Page) => page.locator('#preview svg line[stroke-dasharray]').count();
 
-test('difference arrow modes: absolute, relative, reverse; the mode survives a new range', async ({ page }) => {
+test('difference arrow modes: relative (default), absolute, reverse; the mode survives a new range', async ({ page }) => {
   await expect(page.locator('#diffMode')).toBeDisabled();
   await edit(page, () => page.selectOption('#diffFrom', '0'));
   await edit(page, () => page.selectOption('#diffTo', '3'));
-  expect(await has(page, '+84m')).toBe(true);
-  await edit(page, () => page.selectOption('#diffMode', 'relative'));
-  expect(await opt(page, 'difference')).toEqual({ from: 0, to: 3, mode: 'relative' });
   expect(await has(page, '+87%')).toBe(true);
+  await edit(page, () => page.selectOption('#diffMode', 'absolute'));
+  expect(await opt(page, 'difference')).toEqual({ from: 0, to: 3, mode: 'absolute' });
+  expect(await has(page, '+84m')).toBe(true);
   await edit(page, () => page.selectOption('#diffMode', 'reverse'));
   expect(await has(page, '−46%')).toBe(true);
   await edit(page, () => page.selectOption('#diffTo', '4'));

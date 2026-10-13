@@ -68,10 +68,11 @@ const growth: ChartSpec = {
   series: [{ name: 'A', values: [60, 70, 90] }, { name: 'B', values: [40, 50, 30] }],
 };
 
-test('ARR-3: the difference arrow shows the signed absolute difference of the column totals', () => {
-  const s = lay({ ...growth, options: { difference: { from: 0, to: 2 } } });
+test('ARR-3: the difference arrow shows the change in percent by default, the signed difference in absolute mode', () => {
+  assert.deepEqual(textsOf(lay({ ...growth, options: { difference: { from: 0, to: 2 } } }), /^arrow:diff$/), ['+20%']); // 100 → 120
+  const s = lay({ ...growth, options: { difference: { from: 0, to: 2, mode: 'absolute' } } });
   assert.deepEqual(textsOf(s, /^arrow:diff$/), ['+20']);
-  const down = lay({ ...growth, options: { difference: { from: 1, to: 2 } } });
+  const down = lay({ ...growth, options: { difference: { from: 1, to: 2, mode: 'absolute' } } });
   assert.deepEqual(textsOf(down, /^arrow:diff$/), ['0'], 'no difference, no sign');
 });
 

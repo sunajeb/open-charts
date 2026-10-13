@@ -566,8 +566,8 @@ minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail 
   `Jan 2024`, `2025E` all work), or, if the labels aren't dates, the number of columns between them.
   **Years** overrides that number (e.g. `2.5`); empty = automatic. Both totals must be positive;
   otherwise the arrow is left out and reported.
-- **Difference arrow** (stacked and 100%): a bracket between two column totals. **Mode**: *Absolute*
-  (↔, the signed difference; the default), *Relative* (→, the change in percent) or *Reverse* (←, the
+- **Difference arrow** (stacked and 100%): a bracket between two column totals. **Mode**: *Relative*
+  (→, the change in percent; the default), *Absolute* (↔, the signed difference) or *Reverse* (←, the
   change in percent the other way).
 - **Level arrows** (stacked, clustered, 100%, line): **+ Level arrow** adds a row: the two ends (a
   category and a series — the top of that segment, bar or point — or *Total* for the column total),

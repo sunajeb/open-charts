@@ -448,7 +448,7 @@ test('horizontal stacked bars: categories on the left, bars grow right, totals b
   assert.ok((byRole(scene, /^bar:s0:c0$/)[0] as RectShape).y < (byRole(scene, /^bar:s0:c2$/)[0] as RectShape).y, 'first category on top');
   assert.ok(Math.abs(bars[0].h - bars[1].h) < 1e-9 && bars[0].w > bars[0].h, 'bars are horizontal');
   for (const t of totals) assert.ok(bars.every((b) => b.x + b.w <= t.x + 0.01 || b.y + b.h <= t.y || b.y >= t.y + t.h));
-  assert.equal(textsOf(scene, /^arrow:diff$/)[0], '−22');
+  assert.equal(textsOf(scene, /^arrow:diff$/)[0], '−44%');
   assert.deepEqual(checkScene(scene, { strict: true, measurer: m }), []);
 });
 

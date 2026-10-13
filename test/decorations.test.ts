@@ -21,11 +21,11 @@ const stacked = (options: ChartSpec['options'] = {}): ChartSpec => ({
 
 test('total difference arrow: three modes with their labels and heads', () => {
   const heads = (s: Scene) => (byRole(s, /^arrow:diff$/).filter((x) => x.kind === 'line') as LineShape[]).filter((l) => l.arrowEnd).length;
-  const abs = lay(stacked({ difference: { from: 0, to: 3 } }));
+  const abs = lay(stacked({ difference: { from: 0, to: 3, mode: 'absolute' } }));
   assert.deepEqual(texts(abs, /^arrow:diff$/), ['+14']);
   assert.equal(heads(abs), 2, 'absolute is double-ended');
-  const rel = lay(stacked({ difference: { from: 0, to: 3, mode: 'relative' } }));
-  assert.deepEqual(texts(rel, /^arrow:diff$/), ['+67%']);
+  const rel = lay(stacked({ difference: { from: 0, to: 3 } }));
+  assert.deepEqual(texts(rel, /^arrow:diff$/), ['+67%'], 'relative is the default');
   assert.equal(heads(rel), 1);
   const rev = lay(stacked({ difference: { from: 0, to: 3, mode: 'reverse' } }));
   assert.deepEqual(texts(rev, /^arrow:diff$/), ['−40%']);
