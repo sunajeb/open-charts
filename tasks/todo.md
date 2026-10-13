@@ -75,8 +75,8 @@ Rules for this plan
 - [x] F1 Freeze the data format at 1.0 (owner decision, Q5); version, changelog
       (Q5: relative difference arrow by default, format frozen; open-charts 1.0.0, CHANGELOG 1.0.0)
 - [ ] F2 Landing page + download for prosumers; licence and legal review (Q2); name/trademark check (Q6)
-      (page ready: docs/site/index.html with PowerPoint-rendered charts, links to Releases and guides;
-      publishing it, e.g. GitHub Pages from docs/site, waits for Q2/Q6)
+      (published 2026-10-13 at https://sunajeb.github.io/open-charts/ from docs/site (pages workflow),
+      owner's call: name kept, lawyer review later. Left: legal review (Q2))
 
 ## Owner questions (open)
 - Q1 Rewrite git history to remove the old analysis docs (force-push; anyone who cloned keeps old copies)?
@@ -84,7 +84,7 @@ Rules for this plan
 - Q3 (answered 2026-10-13: later; the pilot ships unsigned) Apple Developer and Azure Trusted Signing
 - Q4 Which fonts do target decks use? Share one typical client template if possible.
 - Q5 (answered 2026-10-13: relative % default, freeze now)
-- Q6 Keep the name "open-charts"?
+- Q6 (answered 2026-10-13: keep "open-charts", publish now)
 - Q7 When can the Windows laptop run the test script; can it install unsigned software today?
 
 ## Questions for the reference session
