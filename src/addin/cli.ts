@@ -10,6 +10,7 @@ import { httpSessions, serveAddin, stopServer } from './server.ts';
 import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
+import { checkForUpdate, readSettings, writeSettings } from '../update.ts';
 import { HELPER_APP } from './popup.ts';
 import { buildPopup, canBuildPopup } from './build-popup.ts';
 import { compileBridge, handsOff, installPackaged, osascript, PPAM_DIR, registerPending, registerScript, removePackaged, SCRIPTS_DIR } from './mac-install.ts';
@@ -51,6 +52,8 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
     }
     case 'install':
       return stopServer().then(() => install(opts.register !== false));
+    case 'update':
+      return update(arg);
     case 'register':
       // Run by the LaunchAgent a package install leaves when PowerPoint was not running.
       registerPending();
@@ -61,6 +64,22 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
       console.error(ADDIN_USAGE);
       process.exit(1);
   }
+}
+
+/** `addin update [on|off]`: turn the daily "update available" check on or off, or check now. */
+async function update(arg?: string) {
+  const home = addinHome();
+  if (arg === 'on' || arg === 'off') {
+    writeSettings(home, { updateCheck: arg === 'on' });
+    console.log(`Update check ${arg === 'on' ? 'on: the add-in asks GitHub Releases once a day and tells you about a new version' : 'off'}.`);
+    return;
+  }
+  if (arg) throw new Error(ADDIN_USAGE);
+  const u = await checkForUpdate();
+  console.log(u.available
+    ? `open-charts ${u.latest} is available (you have ${u.current}): ${u.url}${u.asset ? ` (${u.asset})` : ''}`
+    : `open-charts ${u.current} is up to date (latest release ${u.latest}).`);
+  console.log(`Daily check: ${readSettings(home).updateCheck ? 'on' : 'off'} (open-charts addin update on|off).`);
 }
 
 function install(register: boolean) {
