@@ -330,7 +330,7 @@ const SAMPLE_OPTION: Record<string, unknown> = {
   cagr: { from: 0, to: 1 }, difference: { from: 0, to: 1 }, totalsAt: [0], step: true, percentData: true,
   combo: 'clustered', mekko: 'unit', sort: 'reverse', axisTitles: { x: 'x' }, sizeLegend: true,
   labelContent: 'value', shades: [{ from: '2026-01-01', to: '2026-02-01' }],
-  brackets: [{ from: '2026-01-01', to: '2026-02-01' }], today: '2026-01-15', scaleGroup: 'a',
+  brackets: [{ from: '2026-01-01', to: '2026-02-01' }], today: '2026-01-15', scaleGroup: 'a', axisMax: 100,
   levelArrows: [{ from: { category: 0, series: 0 }, to: { category: 1, series: 0 } }], valueLines: [{ value: 1 }],
   percentIndicator: 'left', percentBase: [1, 1], categoryGaps: [0], categoryBreaks: [0], axisBreak: { from: 1, to: 2 }, secondaryAxis: [0],
 };

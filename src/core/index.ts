@@ -181,3 +181,5 @@ export function layoutGroup(items: GroupItem[], m: Measurer, style: Style = defa
 }
 export { parseStyleFile, validateStyleFile, mergeStyles, styleFor, fileStyle, InvalidStyleFileError, STYLE_FILE_KEYS, STYLE_FILE_LIMITS } from './style-file.ts';
 export type { StyleFile } from './style-file.ts';
+export { dragHandles, dragSpec, resetSpec, describeDrag, gapFor, valueAt, niceStep } from './handles.ts';
+export type { DragHandle, HandleKind, Relayout } from './handles.ts';

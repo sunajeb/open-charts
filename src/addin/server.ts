@@ -26,6 +26,7 @@ import { contextOf, handleRequest, layoutForApply, parseRequest, rememberContext
 import { macroRunner, type MacroResult } from './runner.ts';
 import { helperPath, openPopup, popupHelper, type ChartWhere } from './popup.ts';
 import { toolbarRoutes } from './toolbar.ts';
+import { handlesController } from './handles.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
@@ -253,6 +254,19 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   else fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
 }
 
+/**
+ * The selection as NotifySelection reports it, asked now (the add-in's SelectionInfo macro): the drag
+ * handles re-measure the chart on screen after a scroll, zoom or window move. Undefined when the
+ * add-in is not installed, PowerPoint is not the server's, or the macro fails.
+ */
+export async function selectionNow(outlived = () => false, home = addinHome(), run: Run = helperRun): Promise<string | undefined> {
+  let prefix = '';
+  try { prefix = JSON.parse(readFileSync(join(home, 'addin.json'), 'utf8')).prefix; } catch { return undefined; }
+  if (!prefix || outlived()) return undefined;
+  const r = await run(`${prefix}_SelectionInfo`, [], 5000);
+  return 'out' in r && r.out.startsWith('select\n') ? r.out : undefined;
+}
+
 /** `sessions` that add up the time spent in their calls (the engine timing in the log). */
 function timedSessions(sessions: Sessions): Sessions & { ms: number } {
   const out = { ms: 0 } as Sessions & { ms: number };
@@ -341,8 +355,17 @@ export function serveAddin(port = ADDIN_PORT) {
   const showEditor: OpenEditor = (_url, id, where) => { void openPopup(base, id, where, { helper: popup, log }); };
   const routes = addinRoutes(m, httpSessions(base, showEditor), outlived, retire, connect);
   const applyNow = (s: Session) => { void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); };
+  // Drag handles over the selected chart (Mac helper overlay → live layout → Apply on mouse-up).
+  const handles = handlesController({
+    helper: popup,
+    measurer: m,
+    apply: (s) => applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())),
+    measure: () => selectionNow(outlived),
+    log,
+  });
+  popup.onEvent?.((msg) => handles.event(msg));
   // The element mini toolbar (selection → toolbar panel → per-element overrides → Apply).
-  const toolbar = toolbarRoutes({ base, helper: popup, apply: applyNow, log });
+  const toolbar = toolbarRoutes({ base, helper: popup, apply: applyNow, log, onSelect: (r) => { void handles.select(r); } });
   return serve(port, {}, {
     routes: async (req, res) => { idle(); return (await toolbar(req, res)) || routes(req, res); },
     onSession: (s) => { if (s.state === 'applied') applyNow(s); },
