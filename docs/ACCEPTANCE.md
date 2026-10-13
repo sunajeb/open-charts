@@ -311,6 +311,7 @@ was verified:
 | Check | Where | Result |
 |---|---|---|
 | VBA: the Mac compiles exactly the code it did before; Windows compiles no `AppleScriptTask`; `PtrSafe` declares for 32- and 64-bit Office; same `ApplyEdit` on both | unit (`test/windows.test.ts`, VBA run through a `#If` preprocessor) | **Pass** |
+| Mac regression: the add-in with the `#If Mac` branches in real PowerPoint for Mac (`npm run e2e:powerpoint`) | Mac, live | **Pass** for every add-in step: 19 inserts plus the placeholder slide, Edit data and Apply (session `drawn`, `APPLIED … OK (148 ms)`), the ungrouped message, 3 automatic re-layouts, Update chart, export. The run then stopped at its CLI-comparison step: reopening PowerPoint right after quitting it gave `-600`, a timing race in the test harness that does not touch the add-in |
 | PowerShell Apply helper protocol: one request per line, timeout restarts it, tabs, newlines and Unicode survive | unit, with a stand-in helper (macOS) | **Pass** |
 | Real PowerShell helper: ping, and *not running* without PowerPoint | unit on Windows (CI) | runs in the `windows` job |
 | `npm run build:win` on macOS: bundle, node.exe v22.12.0 checked against SHASUMS256.txt, blob injected, SEA fuse set, signature removed | Mac | **Pass** (83.8 MB PE32+ x64) |
