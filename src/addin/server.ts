@@ -191,6 +191,19 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   else fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
 }
 
+/** `sessions` that add up the time spent in their calls (the engine timing in the log). */
+function timedSessions(sessions: Sessions): Sessions & { ms: number } {
+  const out = { ms: 0 } as Sessions & { ms: number };
+  const time = <A extends unknown[], R>(f: (...a: A) => Promise<R>) => async (...a: A) => {
+    const t = performance.now();
+    try { return await f(...a); } finally { out.ms += performance.now() - t; }
+  };
+  out.get = time(sessions.get.bind(sessions));
+  out.open = time(sessions.open.bind(sessions));
+  if (sessions.settle) out.settle = time(sessions.settle.bind(sessions));
+  return out;
+}
+
 /**
  * The add-in's own routes. `outlived` (see outlivedPowerPoint) retires the server: the new
  * PowerPoint's ping and engine calls get 503, so the bridge starts a fresh server, and `retire` stops
@@ -209,10 +222,15 @@ export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = ()
       return true;
     }
     if (req.method === 'POST' && url === '/api/addin/run') {
+      const t0 = performance.now();
       const chunks: Buffer[] = [];
       for await (const c of req) chunks.push(c as Buffer);
-      const out = await handleRequest(parseRequest(Buffer.concat(chunks).toString('utf8')), m(), sessions);
+      const request = parseRequest(Buffer.concat(chunks).toString('utf8'));
+      const timed = timedSessions(sessions);
+      const out = await handleRequest(request, m(), timed);
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(out);
+      const ms = performance.now() - t0;
+      if (request.op !== 'types') log(`ENGINE ${request.op} ${Math.round(ms)} ms (sessions ${Math.round(timed.ms)} ms, layout ${Math.round(ms - timed.ms)} ms)`);
       return true;
     }
     if (req.method === 'POST' && url === '/api/addin/quit') {

@@ -36,6 +36,9 @@ Private gSessionId As String
 ' Milliseconds spent in the engine call and in drawing, for the timing log.
 Private gEngineMs As Single
 Private gDrawMs As Single
+' Finer phases for the timing log (" theme 12 ms, shapes 210 ms, ..."), summed per name.
+Private gPhaseNames As Collection
+Private gPhaseMs As Collection
 
 ' ---- Loading --------------------------------------------------------------------------------
 
@@ -109,7 +112,7 @@ Public Sub OCPREFIX_Run(ByVal controlId As String)
     gSilent = True
     gLastMessage = ""
     t = Timer
-    gEngineMs = 0: gDrawMs = 0
+    ResetTiming
     Dispatch controlId
     Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage) & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
     gSilent = False
@@ -119,8 +122,9 @@ End Sub
 ' add-in server runs this and the editor shows the outcome (the engine marks the session drawn;
 ' the server reports anything else), so no dialog may block it.
 Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
-    Dim target As Object, t As Single
+    Dim target As Object, t As Single, tp As Single
     t = Timer
+    ResetTiming
     gSilent = True
     gLastMessage = ""
     On Error Resume Next
@@ -135,12 +139,14 @@ Public Sub OCPREFIX_ApplyEdit(ByVal sessionId As String)
         Exit Sub
     End If
     gBusy = True
-    gEngineMs = 0: gDrawMs = 0
+    Phase "find", t
     Dim sld As Object, oldGroup As String
     Set sld = target.Parent
     oldGroup = TagValue(target, "OC_SGROUP")
     Set target = Relayout(target, True, sessionId)
+    tp = Timer
     If Not target Is Nothing Then SyncAfter sld, target, oldGroup
+    Phase "sync", tp
     gBusy = False
     If Not target Is Nothing Then
         Set gEditShape = target
@@ -285,18 +291,29 @@ End Sub
 ' place, same stacking order. force=False is the automatic check: the engine answers "nothing to
 ' do" when neither size nor data changed. Returns the new group (or the old one if unchanged).
 Private Function Relayout(ByVal old As Object, ByVal force As Boolean, ByVal sessionId As String) As Object
-    Dim response As String, bounds As String, grp As Object
+    Dim response As String, bounds As String, grp As Object, head As String, theme As String, scl As String, tp As Single
+    tp = Timer
     bounds = Fmt(old.Left) & "," & Fmt(old.Top) & "," & Fmt(old.Width) & "," & Fmt(old.Height)
-    response = Engine(IIf(force, "update", "relayout") & vbLf & sessionId & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf & _
-        ThemeLine(old.Parent) & ScaleLine(old) & SpecOf(old))
+    head = IIf(force, "update", "relayout") & vbLf & sessionId & vbLf & TagValue(old, "OC_FRAME") & vbLf & bounds & vbLf
+    Phase "read", tp: tp = Timer
+    theme = ThemeLine(old.Parent)
+    Phase "theme", tp: tp = Timer
+    scl = ScaleLine(old)
+    Phase "scale", tp: tp = Timer
+    head = head & theme & scl & SpecOf(old)
+    Phase "read", tp
+    response = Engine(head)
     If response = "" Then Exit Function
     Set grp = Draw(old.Parent, response)
     If gNothing Then Set Relayout = old: Exit Function
     If grp Is Nothing Then Exit Function
+    tp = Timer
     Do While grp.ZOrderPosition > old.ZOrderPosition + 1
         grp.ZOrder 3 ' msoSendBackward
     Loop
+    Phase "zorder", tp: tp = Timer
     old.Delete
+    Phase "delete", tp
     Set Relayout = grp
 End Function
 
@@ -318,7 +335,7 @@ Private Sub CheckResized()
         If UBound(f) = 3 Then
             If Abs(shp.Width - Val(f(2))) > 0.5 Or Abs(shp.Height - Val(f(3))) > 0.5 Then
                 t = Timer
-                gEngineMs = 0: gDrawMs = 0
+                ResetTiming
                 selectedId = -1
                 Set sel = FindSelectedChart()
                 If Not sel Is Nothing Then selectedId = sel.Id
@@ -363,8 +380,37 @@ NoBridge:
 End Function
 
 Private Function Timing() As String
+    Dim i As Long
     If gEngineMs > 0 Or gDrawMs > 0 Then Timing = " engine " & Format$(gEngineMs, "0") & " ms, draw " & Format$(gDrawMs, "0") & " ms"
+    If gPhaseNames Is Nothing Then Exit Function
+    If gPhaseNames.Count > 0 Then Timing = Timing & " ["
+    For i = 1 To gPhaseNames.Count
+        Timing = Timing & IIf(i > 1, ", ", "") & gPhaseNames(i) & " " & Format$(gPhaseMs(i), "0")
+    Next i
+    If gPhaseNames.Count > 0 Then Timing = Timing & " ms]"
 End Function
+
+Private Sub ResetTiming()
+    gEngineMs = 0: gDrawMs = 0
+    Set gPhaseNames = New Collection
+    Set gPhaseMs = New Collection
+End Sub
+
+' Adds the time since t0 (a Timer value) to phase `name` of the timing log.
+Private Sub Phase(ByVal name As String, ByVal t0 As Single)
+    Dim i As Long, ms As Single
+    ms = (Timer - t0) * 1000
+    If gPhaseNames Is Nothing Then ResetTiming
+    For i = 1 To gPhaseNames.Count
+        If gPhaseNames(i) = name Then
+            ms = ms + gPhaseMs(i)
+            gPhaseMs.Remove i
+            If i <= gPhaseMs.Count Then gPhaseMs.Add ms, Before:=i Else gPhaseMs.Add ms
+            Exit Sub
+        End If
+    Next i
+    gPhaseNames.Add name: gPhaseMs.Add ms
+End Sub
 
 Private Sub Report(ByVal text As String)
     On Error Resume Next
@@ -386,7 +432,7 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
     Dim names() As Variant, finalNames() As String, roles() As String
     Dim tagKeys() As String, tagVals() As String, nTags As Long
     Dim groupName As String, alt As String, stamp As String, shp As Object
-    Dim t As Single
+    Dim t As Single, tp As Single
     t = Timer
     gNothing = False
     lines = Split(response, vbLf)
@@ -428,6 +474,7 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
         End If
     Next i
     If n = 0 Then Exit Function
+    Phase "shapes", t: tp = Timer
 
     Dim grp As Object, k As Long, idx As Long
     If n = 1 Then
@@ -436,6 +483,7 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
         ReDim Preserve names(0 To n - 1)
         Set grp = sld.Shapes.Range(names).Group
     End If
+    Phase "group", tp: tp = Timer
     grp.Name = groupName
     On Error Resume Next
     grp.AlternativeText = alt
@@ -443,6 +491,7 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
     For k = 0 To nTags - 1
         grp.Tags.Add tagKeys(k), tagVals(k)
     Next k
+    Phase "tags", tp: tp = Timer
     If n > 1 Then
         For k = 1 To grp.GroupItems.Count
             Set shp = grp.GroupItems(k)
@@ -451,6 +500,7 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
             shp.Name = finalNames(idx)
         Next k
     End If
+    Phase "names", tp
     Set Draw = grp
     gDrawMs = gDrawMs + (Timer - t) * 1000
     Exit Function
