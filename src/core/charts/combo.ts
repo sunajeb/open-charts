@@ -1,6 +1,7 @@
 import type { Ctx } from '../common.ts';
 import { axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks } from '../common.ts';
-import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
+import { categoryBreakSymbol, slotLayout, slotUnits } from '../decorations.ts';
+import { formatValue, inferDecimals, niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 
 /**
@@ -20,7 +21,10 @@ import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 export function layoutCombo(ctx: Ctx) {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
   const clustered = (o.combo ?? 'stacked') === 'clustered';
-  if (spec.options?.seriesLabels === undefined) ctx.o.seriesLabels = clustered ? 'legend' : 'right';
+  // Lines on a secondary axis (manual: Secondary axes) are read against a second value axis on the right,
+  // where series names would go: the series are then named in a legend.
+  const sec = new Set((o.secondaryAxis ?? []).filter((s) => spec.series[s]?.as === 'line'));
+  if (spec.options?.seriesLabels === undefined || (sec.size && ctx.o.seriesLabels === 'right')) ctx.o.seriesLabels = clustered || sec.size ? 'legend' : 'right';
   const nCat = spec.categories.length;
   const cats = [...Array(nCat).keys()];
   const isLine = (s: number) => spec.series[s].as === 'line';
@@ -31,7 +35,26 @@ export function layoutCombo(ctx: Ctx) {
 
   const pos = cats.map((c) => colS.reduce((a, s) => a + Math.max(0, val(s, c)), 0));
   const neg = cats.map((c) => colS.reduce((a, s) => a + Math.min(0, val(s, c)), 0));
-  const lineVals = lineS.flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
+  // Secondary values have their own scale: their labels and ticks are formatted from them alone, without
+  // the chart's unit (which describes the primary axis); the primary labels infer decimals without them.
+  if (sec.size) {
+    const prim = spec.series.flatMap((x, i) => (sec.has(i) ? [] : x.values.map(num))).filter((v): v is number => v != null);
+    const d = o.decimals ?? inferDecimals(prim.map((v) => v / ctx.scale.div));
+    const fmt0 = ctx.fmt;
+    ctx.decimals = d;
+    ctx.fmt = (v, opts = {}) => fmt0(v, { decimals: d, ...opts });
+  }
+  const lineVals = lineS.filter((s) => !sec.has(s)).flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
+  const secVals = [...sec].flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
+  let [smin, smax] = [Math.min(0, ...secVals), Math.max(0, ...secVals)];
+  if (smax === smin) smax = smin + 1;
+  const ticks2 = sec.size ? niceTicks(smin, smax, valueTicks(ctx)) : null;
+  if (ticks2) [smin, smax] = [ticks2[0], ticks2[ticks2.length - 1]];
+  const secDec = o.decimals ?? inferDecimals(secVals);
+  const fmtS = (s: number, v: number) => (sec.has(s) ? formatValue(v, { locale: o.locale, decimals: secDec }) : ctx.fmt(v));
+  const d2 = ticks2 ? inferDecimals(ticks2) : 0;
+  const axisFmt2 = (v: number) => formatValue(v, { locale: o.locale, decimals: d2 });
+  const axis2W = ticks2 ? Math.max(...ticks2.map((t) => m.width(axisFmt2(t), fs))) + pad * 1.5 : 0;
   const colVals = colS.flatMap((s) => cats.map((c) => val(s, c)));
   let dmin = clustered ? Math.min(0, ...colVals, ...lineVals) : Math.min(0, ...neg, ...lineVals);
   let dmax = clustered ? Math.max(0, ...colVals, ...lineVals) : Math.max(0, ...pos, ...lineVals);
@@ -48,29 +71,41 @@ export function layoutCombo(ctx: Ctx) {
   const color = (s: number) => (!isLine(s) || spec.series[s].color ? ctx.color(s) : lineColors[lineS.indexOf(s) % lineColors.length]);
   const legendH = legend(ctx, (s) => (isLine(s) ? 'line' : 'box'), color);
   // A line point inside a stack labels above the stack, under the total: room for both.
-  const inStack = !clustered && lineS.some((s) => cats.some((c) => { const v = raw(s, c); return v != null && v > 0 && v < pos[c]; }));
+  const inStack = !clustered && lineS.some((s) => !sec.has(s) && cats.some((c) => { const v = raw(s, c); return v != null && v > 0 && v < pos[c]; }));
   const aboveH = Math.max(showTotals ? lh + pad * 0.3 : 0, clustered ? lh + pad * 0.3 : 0, lineS.length ? lh + pad * 0.5 : 0,
     inStack ? (showTotals ? 2.5 : 1) * lh + pad * 0.5 : 0);
-  const lastLineHalf = Math.max(0, ...lineS.map((s) => (raw(s, nCat - 1) == null ? 0 : m.width(ctx.fmt(raw(s, nCat - 1)!), fs) / 2)));
+  const lastLineHalf = Math.max(0, ...lineS.map((s) => (raw(s, nCat - 1) == null ? 0 : m.width(fmtS(s, raw(s, nCat - 1)!), fs) / 2)));
   let rightW = 0, slot = 0, colW = 0, catH = 0;
   for (let i = 0; i < 3; i++) {
-    slot = (frame.w - axisW - rightW) / nCat;
+    slot = (frame.w - axisW - axis2W - rightW) / slotUnits(nCat, o.categoryGaps);
     colW = slot / (1 + o.gap);
     catH = categoryHeight(ctx, slot);
     rightW = seriesLabelWidth(ctx, (slot - Math.max(colW, lastLineHalf * 2)) / 2);
   }
   const px = frame.x + axisW;
-  const pw = frame.w - axisW - rightW;
+  const pw = frame.w - axisW - axis2W - rightW;
   const py = frame.y + legendH + aboveH;
   const below = dmin < 0 ? lh + pad * 0.3 : 0;
   const ph = frame.y + frame.h - catH - below - py;
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
-  const cx = (c: number) => px + slot * (c + 0.5);
+  const yOf2 = (v: number) => py + ph - ((v - smin) / (smax - smin)) * ph;
+  /** Position of a value of series s on its own axis. */
+  const ys = (s: number, v: number) => (sec.has(s) ? yOf2(v) : yOf(v));
+  const cx = slotLayout(nCat, o.categoryGaps, px, pw).centre;
   const r = Math.max(3, fs * 0.3);
   const bottom = Math.max(yOf(0), yOf(dmin));
 
   if (ticks) valueAxis(ctx, ticks, yOf, px, axisW, axisFmt);
+  if (ticks2) {
+    // Secondary axis: line, ticks and left-aligned labels on the right of the plot.
+    const ax = px + pw;
+    ctx.add('axis:secondary', { kind: 'line', x1: ax, y1: yOf2(ticks2[0]), x2: ax, y2: yOf2(ticks2[ticks2.length - 1]), color: style.axis, width: 0.75 });
+    ticks2.forEach((t, k) => {
+      ctx.add(`axis:secondary:tick:${k}`, { kind: 'line', x1: ax, y1: yOf2(t), x2: ax + 3, y2: yOf2(t), color: style.axis, width: 0.75 });
+      text(ctx, `axis:secondary:tick:${k}`, { x: ax + pad, y: yOf2(t) - lh / 2, w: axis2W - pad, h: lh, text: axisFmt2(t), align: 'left', color: style.muted, role: 'axis' });
+    });
+  }
 
   // Line geometry first, so column labels can keep clear of it.
   const segs: { s: number; x1: number; y1: number; x2: number; y2: number }[] = [];
@@ -79,9 +114,9 @@ export function layoutCombo(ctx: Ctx) {
     for (let c = 0; c < nCat; c++) {
       const v = raw(s, c);
       if (v == null) continue;
-      markers.push({ s, c, x: cx(c) - r, y: yOf(v) - r, w: 2 * r, h: 2 * r });
+      markers.push({ s, c, x: cx(c) - r, y: ys(s, v) - r, w: 2 * r, h: 2 * r });
       const b = raw(s, c + 1);
-      if (c + 1 < nCat && b != null) segs.push({ s, x1: cx(c), y1: yOf(v), x2: cx(c + 1), y2: yOf(b) });
+      if (c + 1 < nCat && b != null) segs.push({ s, x1: cx(c), y1: ys(s, v), x2: cx(c + 1), y2: ys(s, b) });
     }
   }
   const crossed = (b: Box) => segs.some((l) => segmentHitsBox(l.x1, l.y1, l.x2, l.y2, b)) || markers.some((mk) => overlaps(mk, b, 0));
@@ -153,6 +188,9 @@ export function layoutCombo(ctx: Ctx) {
   }
 
   ctx.add('axis', { kind: 'line', x1: px, y1: yOf(0), x2: px + pw, y2: yOf(0), color: style.axis, width: 0.75 });
+  for (const i of new Set(o.categoryBreaks ?? [])) {
+    if (i >= 0 && i < nCat - 1) categoryBreakSymbol(ctx, `break:cat:${i}`, false, (cx(i) + cx(i + 1)) / 2, yOf(0));
+  }
   categoryLabels(ctx, cats.map(cx), slot, bottom + below);
 
   // Lines and markers on top of the columns.
@@ -183,7 +221,7 @@ export function layoutCombo(ctx: Ctx) {
     return u !== null && clear(u ? grow(b, lh * 0.4) : b, extra);
   };
   const lineSpots = (mk: Box & { s: number; c: number }, preferBelow: boolean): Box[] => {
-    const w = m.width(ctx.fmt(raw(mk.s, mk.c)!), fs) + 2;
+    const w = m.width(fmtS(mk.s, raw(mk.s, mk.c)!), fs) + 2;
     const xc = mk.x + r, yc = mk.y + r, g = pad * 0.3;
     const vertical = (dir: 1 | -1) => [0, 0.15, 0.3, 0.45, 0.6, 0.8].map((k) => ({ x: xc - w / 2, y: dir < 0 ? yc - r - g - lh - k * lh : yc + r + g + k * lh, w, h: lh }));
     const side = (dir: 1 | -1, above: boolean) => ({ x: xc + dir * (r + g) - (dir < 0 ? w : 0), y: above ? yc - g - lh : yc + g, w, h: lh });
@@ -232,7 +270,7 @@ export function layoutCombo(ctx: Ctx) {
       placed.push(spot);
       if (c === nCat - 1) lastBoxes.push(spot);
       const fill = under(spot);
-      text(ctx, `label:value:s${mk.s}:c${c}`, { ...spot, text: ctx.fmt(raw(mk.s, c)!), role: 'value', ...(fill ? { color: textOn(fill) } : {}) });
+      text(ctx, `label:value:s${mk.s}:c${c}`, { ...spot, text: fmtS(mk.s, raw(mk.s, c)!), role: 'value', ...(fill ? { color: textOn(fill) } : {}) });
     });
   }
 
