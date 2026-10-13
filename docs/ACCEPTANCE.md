@@ -152,7 +152,7 @@ Wall clock includes AppleScript `run VB macro` (about 0.3–0.4 s that a real ri
 | Update chart | 0.77–1.06 s (n=4) | 0.41–0.63 s | < 1 s | Pass in VBA; ~1 s wall |
 | Edit data → session open | 0.93–1.11 s | 0.36 s | ~1 s | Pass |
 | Editor loads session | 0.62 s | — | — | — |
-| Apply in editor → chart updated | 1.45 s first, 0.96 s second (click to log); e2e 2.25 s | 0.59–0.85 s | — | Pass (no extra click) |
+| Apply in editor → chart updated | 1.45 s first, 0.96 s second (click to log); e2e 2.25 s; after O7 0.21–0.28 s steady (pair 0.64–0.67 s), first right after Edit data 1.4–4.4 s (see O7) | 0.59–0.85 s; after O7 0.19–0.25 s steady, 0.52–0.97 s first | ≤ 2 s, VBA ≤ 0.8 s | Pass in VBA; wall clock see O7 |
 | Resize → re-layout on selection change | 0.90–1.64 s | 0.24–0.76 s | — | Pass |
 
 ## 8. Ribbon controls
@@ -223,6 +223,26 @@ Fixed on this branch:
   retired: PowerPoint 45249 has quit` → `SERVER started (… PowerPoint 45480)` → session 2 `drawn` in
   4.6 s. `e2e:powerpoint` now edits the same-scale pair's data and applies it in the third PowerPoint
   session (drawn, partner `SYNC revenue 1 of 1`): 2.7 s and 3.8 s in two consecutive passing runs.
+- **O7 — Apply timing — fixed.** Was ~3.3 s from Apply to drawn (VBA ~1.7 s) after the theme and
+  same-scale work, against ~1.9 s / 0.6 s before. Profile (new phase timing in `addin.log`: VBA
+  `[find, read, theme, scale, shapes, group, tags, names, zorder, delete, sync, context]`, server
+  `ENGINE <op> … (sessions, layout)` and `APPLY … (layout, to macro, macro, back)`): the theme read
+  (0–2 ms) and same-scale scan (0 ms without `OC_SGROUP`) were never the cost. Every AppleScriptTask
+  from VBA costs a fixed ~217 ms (a no-op handler as much as the engine call, whose server work is
+  ~10 ms), and Apply made two (engine, then the `APPLIED` log line), four for a same-scale pair; each
+  Apply also started osascript (0.12–0.25 s, 1.5–2.8 s while the editor's browser launches). Fix:
+  Edit data sends the chart's context (frame, bounds, theme, scale line); on Apply the server runs the
+  same `update` request in process (`layoutForApply`) and passes the response to `ApplyEdit`, which
+  only draws and answers its log lines and the new context through `run VB macro`'s return value (a
+  moved/resized/re-themed chart answers its context and is laid out again); the Apple event goes
+  through one long-lived JXA helper (`src/addin/runner.ts`), whose connection Edit data opens with one
+  read-only event. Live A/B, same machine, back to back (repeated Applies, steady state): single chart
+  0.81–1.15 s → 0.21–0.28 s (VBA 0.43–0.56 s → 0.19–0.25 s); same-scale pair 1.48–1.97 s →
+  0.64–0.67 s (the partner still goes through the engine call). The first Apply posted within a second
+  of Edit data (what `e2e:powerpoint` does) is dominated by the editor's browser starting: on this
+  8 GB Mac with 6.6 GB of swap in use, PowerPoint did not take the Apple event for up to 4.7 s and drew
+  3–6× slower in that window, before and after alike; e2e single-chart Apply 3.6 s before, 1.4–4.4 s
+  after, VBA 2.0 s before, 0.52–0.97 s after.
 - **O2 — Cosmetic layout:** combo line labels inside bars; pie "3%" box wider than its slice; boxed
   segment labels wider than narrow columns (section 2).
 - **O3 — Ungrouped chart message — fixed.** A selected shape that carries `OC_ROLE` with no group

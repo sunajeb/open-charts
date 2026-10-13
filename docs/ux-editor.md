@@ -73,8 +73,9 @@ Flow:
 2. Editor: `GET` the session, edits the chart (type, data, options), **Apply** → `POST { chart, state: "applied" }`.
    The window stays open; the user may apply again (each Apply bumps `rev`).
 3. Add-in: reacts in `onSession` (PowerPoint for Mac VBA cannot poll): on `state: "applied"` it runs
-   the add-in's `ApplyEdit` macro through AppleScript (`run VB macro`, 20 s timeout; it never starts
-   PowerPoint). The server lays the chart out itself, for the chart's context (frame, bounds, slide
+   the add-in's `ApplyEdit` macro (`run VB macro`, 20 s timeout; it never starts PowerPoint) through
+   one long-lived AppleScript helper (`src/addin/runner.ts`: no osascript start-up per Apply; Edit data
+   has it open its connection to PowerPoint with one read-only Apple event). The server lays the chart out itself, for the chart's context (frame, bounds, slide
    theme, same-scale line) that Edit data sent and each Apply answers, and passes the response to
    `ApplyEdit`, which only draws it (no engine round trip from PowerPoint: each AppleScriptTask costs
    about 0.2 s). If the chart was moved, resized or re-themed meanwhile, `ApplyEdit` answers its
