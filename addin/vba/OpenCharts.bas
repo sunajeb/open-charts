@@ -1240,16 +1240,19 @@ Private Sub SetText(ByVal s As Object, f() As String)
         .SpaceAfter = 0
         .SpaceWithin = 1
     End With
-    If Col(f, 28) <> "" Then SetBullet tr.ParagraphFormat, Col(f, 27), Col(f, 28), Val(Col(f, 29)), Val(Col(f, 30))
+    If Col(f, 28) <> "" Then SetBullet s, tr.ParagraphFormat, Col(f, 27), Col(f, 28), Val(Col(f, 29)), Val(Col(f, 30))
 End Sub
 
 ' A list paragraph (agenda heading): text level, bullet "u<code point>" or number "n<start>", the
-' bullet `at` pt from the left edge and the text `hang` pt after it.
-Private Sub SetBullet(ByVal pf As Object, ByVal level As String, ByVal bullet As String, ByVal at As Single, ByVal hang As Single)
+' bullet `at` pt from the left edge and the text `hang` pt after it. The indents are set after the
+' bullet (turning a bullet on brings back the level's default indents), on the paragraph and on the
+' text frame's ruler level, so PowerPoint draws the text where the engine measured it.
+Private Sub SetBullet(ByVal s As Object, ByVal pf As Object, ByVal level As String, ByVal bullet As String, ByVal at As Single, ByVal hang As Single)
+    Dim lvl As Long
     On Error Resume Next
-    If Val(level) > 1 Then pf.IndentLevel = CLng(Val(level))
-    pf.LeftIndent = at + hang
-    pf.FirstLineIndent = -hang
+    lvl = CLng(Val(level))
+    If lvl < 1 Then lvl = 1
+    If lvl > 1 Then pf.IndentLevel = lvl
     With pf.Bullet
         .Visible = -1
         If Left$(bullet, 1) = "n" Then
@@ -1263,6 +1266,12 @@ Private Sub SetBullet(ByVal pf As Object, ByVal level As String, ByVal bullet As
         .UseTextColor = -1
         .UseTextFont = -1
     End With
+    With s.TextFrame.Ruler.Levels(lvl)
+        .FirstMargin = at
+        .LeftMargin = at + hang
+    End With
+    pf.LeftIndent = at + hang
+    pf.FirstLineIndent = -hang
 End Sub
 
 ' points: "x,y x,y ... [z]" per sub-path, sub-paths separated by "|". All sub-paths become one
@@ -2044,7 +2053,7 @@ Failed:
 End Sub
 
 ' Lists every slide for the test log: n, kind, hidden, the agenda headings (">" per level, "*" current).
-Public Sub OCPREFIX_AgendaDump()
+Public Sub OCPREFIX_AgendaDump(ByVal withIndents As String)
     Dim sld As Object, grp As Object, k As Long, out As String, row As String, role As String, tr As Object
     For Each sld In ActivePresentation.Slides
         row = "SLIDE " & sld.SlideIndex & " " & IIf(TagValue(sld, "OC_KIND") = "", "-", TagValue(sld, "OC_KIND")) & IIf(sld.SlideShowTransition.Hidden, " hidden", "") & IIf(TagValue(sld, "OC_SPLIT") = "1", " split", "")
@@ -2056,6 +2065,7 @@ Public Sub OCPREFIX_AgendaDump()
                 If Left$(role, 8) = "chapter:" Then
                     Set tr = grp.GroupItems(k).TextFrame2.TextRange
                     row = row & " " & String$(tr.Paragraphs(1).ParagraphFormat.IndentLevel - 1, ">") & HeadingText(tr) & IIf(Mid$(role, 9) = TagValue(sld, "OC_CHAPTER"), "*", "")
+                    If withIndents = "1" Then row = row & "[" & Fmt(tr.Paragraphs(1).ParagraphFormat.LeftIndent) & "/" & Fmt(tr.Paragraphs(1).ParagraphFormat.FirstLineIndent) & "/" & Fmt(grp.GroupItems(k).Width) & "]"
                 End If
             Next k
         End If
