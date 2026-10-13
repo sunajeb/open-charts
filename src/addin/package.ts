@@ -8,7 +8,9 @@ import { writePptx, XML } from '../render/pptx.ts';
 import { unzip } from '../ooxml/unzip.ts';
 import { zip, type ZipInput } from '../render/zip.ts';
 import { ENGINE_VERSION } from '../version.ts';
-import { galleryItems, type ChartTypeEntry } from './registry.ts';
+import { flatLabel, galleryItems, iconOf, tileDirections, type ChartTypeEntry } from './registry.ts';
+import { iconFile } from './icons.ts';
+import { DIRECTIONS } from '../core/spec.ts';
 import { vbaProjectBin } from './vba-project.ts';
 import { reinstallCommand } from './launcher.ts';
 
@@ -24,6 +26,9 @@ export const VBA_CT = 'application/vnd.ms-office.vbaProject';
 export const VBA_REL = 'http://schemas.microsoft.com/office/2006/relationships/vbaProject';
 export const UI_REL = 'http://schemas.microsoft.com/office/2007/relationships/ui/extensibility';
 export const UI_NS = 'http://schemas.microsoft.com/office/2009/07/customui';
+export const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
+/** The ribbon's icons (tools/icons.ts writes them from src/addin/icons.ts). */
+export const ICON_DIR = new URL('../../addin/icons/', import.meta.url);
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -32,19 +37,41 @@ export function buildPrefix(...parts: string[]): string {
   return `OC${createHash('sha1').update(parts.join('\0')).digest('hex').slice(0, 24).toUpperCase()}`;
 }
 
+/** customUI image id of an icon (a relationship id in customUI/_rels/customUI14.xml.rels). */
+const img = (icon: string) => `ic_${icon}`;
+
+/** The direction buttons beside the gallery: ▲ ▼ ◀ ▶. */
+export const DIRS = [
+  { id: 'dirUp', icon: 'dirUp', label: 'Up', tip: 'columns growing up' },
+  { id: 'dirDown', icon: 'dirDown', label: 'Down', tip: 'columns hanging down from the top' },
+  { id: 'dirLeft', icon: 'dirLeft', label: 'Left', tip: 'bars growing to the left' },
+  { id: 'dirRight', icon: 'dirRight', label: 'Right', tip: 'bars growing to the right (a line chart becomes a profile)' },
+] as const;
+
+/** The icons the ribbon shows and the PNG size embedded for each (2× the size drawn: crisp on Retina). */
+export function ribbonImages(items: ChartTypeEntry[]): { icon: string; px: number }[] {
+  return [...[...new Set(items.map(iconOf))].map((icon) => ({ icon, px: 64 })), ...DIRS.map((d) => ({ icon: d.icon, px: 32 }))];
+}
+
 export function ribbonXml(prefix: string, items: ChartTypeEntry[]): string {
   const cb = (name: string) => `${prefix}_${name}`;
-  const families = [...new Set(items.map((g) => g.family ?? 'More'))];
-  const menu = families.map((fam, i) => {
-    const buttons = items.filter((g) => (g.family ?? 'More') === fam).map((g) =>
-      `<button id="chart_${esc(g.id)}" label="${esc(g.label)}" imageMso="${esc(g.imageMso)}"${g.description ? ` description="${esc(g.description)}" supertip="${esc(g.description)}"` : ''} screentip="${esc(g.label)} chart" onAction="${cb('onAction')}"/>`).join('');
-    return `<menuSeparator id="sepFamily${i}" title="${esc(fam)}"/>${buttons}`;
+  // The gallery: one tile per chart, its icon over its label, 5 per row like the reference's.
+  const tiles = items.map((g) => {
+    const dirs = tileDirections(g);
+    const tip = `${g.description ?? ''}${dirs.length > 1 ? ` Directions: ${dirs.join(', ')} (the arrows beside the gallery).` : ''}`.trim();
+    return `<item id="chart_${esc(g.id)}" label="${esc(flatLabel(g))}" image="${img(iconOf(g))}" screentip="${esc(flatLabel(g))}"${tip ? ` supertip="${esc(tip)}"` : ''}/>`;
   }).join('');
+  const dirButton = (d: typeof DIRS[number]) =>
+    `<toggleButton id="${d.id}" label="${d.label}" showLabel="false" image="${img(d.icon)}" screentip="Direction: ${d.label.toLowerCase()}" supertip="With a chart selected: draw it ${d.tip}. With none: insert the next chart this way." onAction="${cb('onDirection')}" getPressed="${cb('getDirPressed')}" getEnabled="${cb('getDirEnabled')}"/>`;
   return `${XML}<customUI xmlns="${UI_NS}" onLoad="${cb('onLoad')}">
 <ribbon><tabs>
 <tab id="tabOpenCharts" label="open-charts" insertBeforeMso="TabHome">
-<group id="grpCharts" label="Charts" imageMso="ChartInsert">
-<menu id="menuCharts" label="Insert chart" imageMso="ChartInsert" size="large" itemSize="large" screentip="Insert chart" supertip="Insert a chart on this slide with sample data. It goes into an empty content placeholder if there is one. Then click Edit data to type your numbers.">${menu}</menu>
+<group id="grpCharts" label="Charts" image="${img('stacked')}">
+<gallery id="galCharts" label="Insert chart" image="${img('stacked')}" size="large" columns="5" itemWidth="48" itemHeight="48" showItemLabel="true" screentip="Insert chart" supertip="Insert a chart on this slide with sample data. It goes into an empty content placeholder if there is one. Pick a direction with the arrows beside the gallery first, or change it afterwards. Then click Edit data to type your numbers." onAction="${cb('onGallery')}">${tiles}</gallery>
+<labelControl id="lblDirection" label="Direction"/>
+<box id="boxDirUpDown" boxStyle="horizontal">${dirButton(DIRS[0])}${dirButton(DIRS[1])}</box>
+<box id="boxDirLeftRight" boxStyle="horizontal">${dirButton(DIRS[2])}${dirButton(DIRS[3])}</box>
+<separator id="sepCharts"/>
 <button id="btnEditData" label="Edit data" imageMso="ChartEditDataSource" size="large" screentip="Edit data" supertip="Open the selected chart's datasheet. Apply there and the chart on the slide updates." onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>
 <button id="btnUpdate" label="Update chart" imageMso="RefreshAll" size="large" screentip="Update chart" supertip="Lay the selected chart out again at its current size and position, with any applied edits. Resized charts also update by themselves when you click elsewhere." onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>
 </group>
@@ -54,17 +81,30 @@ export function ribbonXml(prefix: string, items: ChartTypeEntry[]): string {
 `;
 }
 
+/** customUI/_rels/customUI14.xml.rels: one image relationship per icon. */
+export function ribbonRels(images: { icon: string }[]): string {
+  return `${XML}<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${images.map((i) =>
+    `<Relationship Id="${img(i.icon)}" Type="${IMAGE_REL}" Target="images/${i.icon}.png"/>`).join('')}</Relationships>`;
+}
+
+/** The directions each chart type can grow in, for VBA: "stacked:up,down,left,right;line:up,left,right;…". */
+export const directionTable = () => Object.entries(DIRECTIONS).map(([t, ds]) => `${t}:${ds.join(',')}`).join(';');
+
 /** The module source: callback prefix filled in, and the reinstall command the error messages show. */
 export function vbaSource(prefix: string, bas = readFileSync(BAS_FILE, 'utf8')): string {
   const reinstall = `"${reinstallCommand().replace(/"/g, '""')}"`;
-  return bas.replace(PLACEHOLDER, prefix).replace(/^(Private Const REINSTALL As String = ).*$/m, (_, decl) => decl + reinstall);
+  return bas.replace(PLACEHOLDER, prefix)
+    .replace(/^(Private Const REINSTALL As String = ).*$/m, (_, decl) => decl + reinstall)
+    .replace(/^(Private Const DIRECTIONS As String = ).*$/m, (_, decl) => `${decl}"${directionTable()}"`);
 }
 
 export interface BuiltAddin { ppam: Uint8Array; prefix: string; ribbon: string; source: string }
 
 export function buildAddin(bas = readFileSync(BAS_FILE, 'utf8'), cls = readFileSync(CLS_FILE, 'utf8')): BuiltAddin {
   const items = galleryItems();
-  const prefix = buildPrefix(ENGINE_VERSION, bas, cls, JSON.stringify(items));
+  const images = ribbonImages(items);
+  const pngs = images.map((i) => ({ ...i, data: readFileSync(new URL(iconFile(i.icon, i.px), ICON_DIR)) }));
+  const prefix = buildPrefix(ENGINE_VERSION, bas, cls, JSON.stringify(items), directionTable(), ...pngs.map((p) => p.data.toString('base64')));
   const ribbon = ribbonXml(prefix, items);
   const source = vbaSource(prefix, bas);
   const hex = createHash('sha1').update(prefix).digest('hex').toUpperCase();
@@ -79,7 +119,7 @@ export function buildAddin(bas = readFileSync(BAS_FILE, 'utf8'), cls = readFileS
     if (name === '[Content_Types].xml') {
       text = text
         .replace('application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml', ADDIN_CT)
-        .replace('<Default Extension="rels"', `<Default Extension="bin" ContentType="${VBA_CT}"/><Default Extension="rels"`);
+        .replace('<Default Extension="rels"', `<Default Extension="bin" ContentType="${VBA_CT}"/><Default Extension="png" ContentType="image/png"/><Default Extension="rels"`);
     } else if (name === '_rels/.rels') {
       text = text.replace('</Relationships>', `<Relationship Id="rIdUI" Type="${UI_REL}" Target="customUI/customUI14.xml"/></Relationships>`);
     } else if (name === 'ppt/_rels/presentation.xml.rels') {
@@ -91,5 +131,7 @@ export function buildAddin(bas = readFileSync(BAS_FILE, 'utf8'), cls = readFileS
   }
   files.push({ name: 'ppt/vbaProject.bin', data: vba });
   files.push({ name: 'customUI/customUI14.xml', data: ribbon });
+  files.push({ name: 'customUI/_rels/customUI14.xml.rels', data: ribbonRels(images) });
+  for (const p of pngs) files.push({ name: `customUI/images/${p.icon}.png`, data: p.data });
   return { ppam: zip(files), prefix, ribbon, source };
 }

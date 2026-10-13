@@ -3,8 +3,9 @@
 // (format.ts) that VBA turns into native shapes.
 //
 // Request, one field per line:
-//   1  op       insert | update | relayout | edit | types
-//   2  arg      gallery item (insert) or edit-session id (update, optional)
+//   1  op       insert | update | relayout | edit | direction | types
+//   2  arg      gallery item (insert; "<item>@<direction>" inserts in that direction), edit-session id
+//               (update, optional) or the direction (direction: up | down | left | right)
 //   3  frame    "x,y,w,h" pt: target frame (insert) or the chart's OC_FRAME tag
 //   4  bounds   "x,y,w,h" pt: the group's current bounds on the slide (update, relayout)
 //   then, optional, one "key=value" per line:
@@ -20,9 +21,11 @@
 // update   re-lays the chart out where it now is, with the applied edit session if there is one
 // relayout the same, but answers "N" (nothing to do) when neither the frame nor the data changed
 // edit     opens the chart in the editor (an edit session, docs/ux-editor.md)
+// direction lays the chart out again where it is, growing in the direction `arg` (spec.ts DIRECTIONS)
 import { createHash } from 'node:crypto';
-import { defaultStyle, layoutChart, THEME_SLOTS, type ChartSpec, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
+import { defaultStyle, layoutChart, migrate, THEME_SLOTS, type ChartSpec, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
 import { chartContent } from '../deck.ts';
+import { directionsOf, type Direction } from '../core/spec.ts';
 import { shapeName } from '../render/pptx.ts';
 import { parseFrame } from '../render/tags.ts';
 import type { Session } from '../server.ts';
@@ -162,6 +165,20 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         await sessions.open(id, style ? { ...chart, style } : chart, `${typeLabel(chart.type)} chart`);
         if (req.context) rememberContext(id, req.context, req.spec);
         return `${header()}\n${record('I', id)}\n`;
+      }
+      case 'direction': {
+        // The ribbon's direction buttons: the selected chart, laid out again in its place growing `arg`.
+        if (!req.spec) return error(SELECT_FIRST);
+        const { chart: stored, style } = readSpec(req.spec);
+        const chart = migrate(stored);
+        const dir = req.arg as Direction;
+        const ok = directionsOf(chart.type);
+        if (!ok.includes(dir)) {
+          return error(ok.length > 1 ? `${typeLabel(chart.type)} charts can grow ${ok.join(', ')}, not ${dir}.` : `${typeLabel(chart.type)} charts have no direction to change.`);
+        }
+        const frame = resolveFrame(chart, style, req.frame, req.bounds, m, env);
+        const { direction: _, ...rest } = chart.options ?? {};
+        return respond({ ...chart, options: dir === 'up' ? rest : { ...rest, direction: dir } }, style, frame, m, env);
       }
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';
