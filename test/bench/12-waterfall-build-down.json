@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "From gross bookings to net revenue: 38% leaks out",
+      "chart": {
+        "specVersion": 1,
+        "type": "waterfall",
+        "categories": ["Gross bookings","Cancellations","Discounts","Partner fees","Taxes","Net revenue"],
+        "series": [{"name":"Revenue","values":[1250,-142,-118,-165,-50,"e"]}],
+        "options": {"unit":"m","valueAxis":true}
+      }
+    }
+  ]
+}

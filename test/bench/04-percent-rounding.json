@@ -1,0 +1,18 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Every column reads 100% even when the shares are thirds",
+      "chart": {
+        "specVersion": 1,
+        "type": "percent",
+        "categories": ["North","South","East","West","Online"],
+        "series": [
+          {"name":"Promoters","values":[33.33,41.6,28.1,50.2,46]},
+          {"name":"Passives","values":[33.33,39,41.5,29.4,53.6]},
+          {"name":"Detractors","values":[33.34,19.4,30.4,20.4,0.4]}
+        ]
+      }
+    }
+  ]
+}

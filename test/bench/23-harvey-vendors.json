@@ -1,0 +1,26 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Vendor assessment: no vendor leads on every criterion",
+      "chart": {
+        "specVersion": 1,
+        "type": "harvey",
+        "categories": [
+          "Functional fit",
+          "Total cost of ownership",
+          "Implementation risk",
+          "Vendor viability",
+          "Integration effort",
+          "Reference customers"
+        ],
+        "series": [
+          {"name":"Vendor A","values":[4,2,3,4,2,3]},
+          {"name":"Vendor B","values":[3,4,2,3,3,2]},
+          {"name":"Vendor C","values":[2,3,4,1,4,1]},
+          {"name":"Vendor D","values":[1,4,3,2,0,4]}
+        ]
+      }
+    }
+  ]
+}

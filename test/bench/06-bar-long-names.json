@@ -1,0 +1,31 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Twelve initiatives, ranked by run-rate savings",
+      "chart": {
+        "specVersion": 1,
+        "type": "stacked",
+        "categories": [
+          "Procurement category management programme",
+          "Shared-service centre consolidation (EMEA)",
+          "Logistics network redesign and rationalisation",
+          "Spans-and-layers review of corporate functions",
+          "Pricing excellence and discount governance",
+          "Energy efficiency retrofit across plants",
+          "IT application portfolio simplification",
+          "Real-estate footprint reduction",
+          "Marketing spend effectiveness",
+          "Indirect spend demand management",
+          "Working-capital release (inventory)",
+          "Travel policy"
+        ],
+        "series": [
+          {"name":"Year 1","values":[14.2,11.8,9.6,8.1,7.4,4.9,4.4,3.8,3.1,2.6,1.9,0.8]},
+          {"name":"Year 2","values":[6.1,5.4,6.2,3.5,4.1,3.2,2.2,1.9,1.7,1.1,1.4,0.4]}
+        ],
+        "options": {"orientation":"horizontal","unit":"m","totals":true}
+      }
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Channel mix: online reached half of sales in 2025",
+      "chart": {
+        "specVersion": 1,
+        "type": "area100",
+        "categories": ["2018","2019","2020","2021","2022","2023","2024","2025"],
+        "series": [
+          {"name":"Stores","values":[182,179,140,151,149,144,139,133]},
+          {"name":"Online","values":[41,52,98,117,131,152,171,192]},
+          {"name":"Marketplace","values":[3,6,14,22,29,38,46,57]}
+        ]
+      }
+    }
+  ]
+}

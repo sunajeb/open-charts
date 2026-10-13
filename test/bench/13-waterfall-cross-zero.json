@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Cash bridge: the balance dipped below zero before the asset sale",
+      "chart": {
+        "specVersion": 1,
+        "type": "waterfall",
+        "categories": ["Opening cash","Operations","Capex","Interest","Dividends","Asset sale","Fees","FX","Closing cash"],
+        "series": [{"name":"Cash","values":[12,6.5,-21.4,-3.2,-4.1,18.6,-0.3,0.2,"e"]}],
+        "options": {"unit":"m","decimals":1}
+      }
+    }
+  ]
+}

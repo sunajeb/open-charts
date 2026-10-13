@@ -64,12 +64,18 @@ function arrowLabel(ctx: Ctx, md: Model, kind: ArrowKind, ref: { from: number; t
 
 /** Stacked, 100% and clustered column (or, with orientation "horizontal", bar) charts. */
 export function layoutColumns(ctx: Ctx) {
-  const md = model(ctx);
-  if (ctx.o.orientation === 'horizontal') layoutBars(ctx, md);
-  else layoutVertical(ctx, md);
+  if (ctx.o.orientation === 'horizontal') { layoutBars(ctx, model(ctx)); return; }
+  if (layoutVertical(ctx, model(ctx)) !== 'labels-too-wide' || ctx.o.valueAxis) return;
+  // Clustered bars too narrow for their value labels even at the smallest size: a value axis carries the
+  // numbers instead (a row of labels with gaps reads as missing data).
+  ctx.shapes.length = 0;
+  ctx.roles.length = 0;
+  ctx.hidden.length = 0;
+  ctx.o.valueAxis = true;
+  layoutVertical(ctx, model(ctx));
 }
 
-function layoutVertical(ctx: Ctx, md: Model) {
+function layoutVertical(ctx: Ctx, md: Model): 'labels-too-wide' | void {
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
   const { nCat, nSer, percent, clustered, raw, val, cats, sers, total, shown, segLabel, showTotals } = md;
   let { dmin, dmax, ticks, axisFmt } = md;
@@ -105,13 +111,31 @@ function layoutVertical(ctx: Ctx, md: Model) {
   const totalsFit = !showTotals || cats.every((c) => m.width(totalText(c), fs, true) + 2 <= slot);
   if (!totalsFit) ctx.hidden.push('column totals wider than their slots: hidden');
 
+  // Bar labels (clustered) share one size: the largest, down to the theme minimum, at which every label
+  // fits over its bar. If none does, they are all left out: labels on some bars only would look like gaps.
+  // A label may be a little wider than its bar only where the neighbouring bar does not reach it.
+  const barW = colW / nSer;
+  const barLabels = clustered ? cats.flatMap((c) => sers.flatMap((s) => { const v = raw(s, c); return v == null ? [] : [{ s, c, v, text: ctx.fmt(v) }]; })) : [];
+  const clearOf = (v: number, n: number | null) => n == null || (v >= 0 ? n < 0 || yOf(n) >= yOf(v) - pad * 0.15 : n >= 0 || yOf(n) <= yOf(v) + pad * 0.15);
+  const barLabelsFit = (size: number) => barLabels.every(({ s, c, v, text: t }) => {
+    const tw = m.width(t, size) + 2;
+    return tw <= barW || (tw <= barW + pad * 0.4 && clearOf(v, s > 0 ? raw(s - 1, c) : null) && clearOf(v, s < nSer - 1 ? raw(s + 1, c) : null));
+  });
+  let barFs = fs;
+  while (barFs - 1 >= ctx.minFs && !barLabelsFit(barFs)) barFs--;
+  const showBarLabels = barLabelsFit(barFs);
+  if (clustered && !showBarLabels) {
+    if (!o.valueAxis) return 'labels-too-wide';
+    ctx.hidden.push(`value labels wider than their bars (${barLabels.length} hidden): the value axis shows the values`);
+  } else if (clustered && barFs < fs) ctx.hidden.push(`value labels shrunk to ${barFs} pt to fit their bars`);
+  const barLh = m.lineHeight(barFs);
+
   const tops: number[] = [];
   const lastSegs: { s: number; y: number }[] = [];
   const pending: PendingLabel[] = [];
 
   for (const c of cats) {
     if (clustered) {
-      const barW = colW / nSer;
       let top = yOf(0);
       for (const s of sers) {
         const v = raw(s, c);
@@ -119,12 +143,12 @@ function layoutVertical(ctx: Ctx, md: Model) {
         const x = cx(c) - colW / 2 + s * barW;
         const y1 = yOf(Math.max(0, v)), y2 = yOf(Math.min(0, v));
         ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', x, y: y1, w: barW, h: Math.max(0.01, y2 - y1), fill: ctx.color(s), stroke: style.background, strokeWidth: 0.5 });
-        const label = ctx.fmt(v);
-        const tw = m.width(label, fs);
-        if (tw <= barW + pad * 0.4) {
-          const ly = v >= 0 ? y1 - lh - pad * 0.15 : y2 + pad * 0.15;
-          text(ctx, `label:value:s${s}:c${c}`, { x: x + barW / 2 - tw / 2 - 1, y: ly, w: tw + 2, h: lh, text: label, role: 'value' });
-        } else ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label too wide`);
+        if (showBarLabels) {
+          const label = ctx.fmt(v);
+          const tw = m.width(label, barFs);
+          const ly = v >= 0 ? y1 - barLh - pad * 0.15 : y2 + pad * 0.15;
+          text(ctx, `label:value:s${s}:c${c}`, { x: x + barW / 2 - tw / 2 - 1, y: ly, w: tw + 2, h: barLh, text: label, role: 'value', size: barFs });
+        }
         top = Math.min(top, y1);
       }
       tops.push(top);

@@ -67,6 +67,7 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 ## Review
 
 ## Questions for the owner (collected overnight, 2026-10-13)
+- **Scope beyond P1:** the goal says "complete the master plan" (P1–P5), but you cut the first build to "every chart type into PowerPoint, no AI or other apps". P1 (chart quality parity) is being finished now. Should P2 (AI, data inputs, template fill), P3 (Office.js for Windows/web), P4 (native Windows) and P5 (Excel links, agenda) be built next, or stay out?
 - Optional: grant Accessibility permission to the terminal app (System Settings → Privacy & Security → Accessibility) so live PowerPoint tests can click their own "Enable Macros"/"OK" dialogs.
 - Old test entries vA–vD may still be listed in PowerPoint → Tools → PowerPoint Add-ins (files deleted); remove them with "−".
 
@@ -76,3 +77,9 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - **Timings (live):** insert median 0.86 s (VBA 0.50 s), first insert 1.3 s, update ~1 s, resize ~1 s, edit-data open 0.95 s, apply 1.9 s end to end.
 - **Not built (planned, by owner decision for the first build):** AI (P2 AI), data inputs / template fill / SDKs (P2), Office.js and native Windows add-ins (P3/P4), Excel links, agenda (P5), user label dragging. Gantt and tables are built at first-build depth.
 - **Known minor:** a few labels render 1–3 px differently between add-in and CLI decks in PowerPoint; at very small frames some labels are hidden (and reported) rather than overflowing.
+
+## P1 completion — unmerged branches (state at usage limit, 2026-10-13)
+- `worktree-agent-a7009d645a2127149` (bench): 28 bench fixtures + snapshots, gallery 63 pages, `npm run quality` (gate passes), 3 engine fixes. Ready to merge after full `npm test`/`e2e`/goldens. Behaviour-spec and optional-rows sub-work may be missing (check for WIP commits).
+- `worktree-agent-aaf1bf041b0c27de5` (theme, WIP 8556bfd): theme slots + schemeClr, style.theme/numbers, scaleGroup, multi-chart slides, add-in format v2. Left: docs (2 failing doc tests), editor swatches for slots, examples/goldens, e2e-powerpoint theme comparison, live run.
+- `worktree-agent-a4e3bbc3ce7f9e418` (decorations, WIP cbb3f94, NOT merge-ready): level/difference arrows (3 modes), value lines, 100% indicator + percentBase, category gaps/breaks, value axis break. Left: waterfall/combo gaps, combo secondary axis drawing, schema/docs, engine.test roles/options, resolve/quality roles, unit tests, editor controls, example deck, full suites + goldens.
+- Merge order suggestion: bench → theme → decorations; reinstall the add-in from the main repo after theme.
