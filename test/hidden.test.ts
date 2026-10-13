@@ -112,3 +112,31 @@ test('hidden: table and Harvey rows drop out; alt text names visible series only
   assert.ok(!altText(harvey).includes(harvey.series[1].name));
   assert.equal(defaultStyle.palette.length, 6, 'palette untouched');
 });
+
+test('hidden: level arrows and the secondary axis follow the visible rows', () => {
+  const arrowText = (s: Scene) => s.shapes.filter((x, i) => x.kind === 'text' && /^arrow:level/.test(s.roles![i])).map((x) => (x as { text: string }).text);
+  const spec: ChartSpec = {
+    type: 'clustered', categories: ['A', 'B', 'C'],
+    series: [{ name: 'X', values: [10, 20, 30] }, { name: 'Y', values: [5, 6, 7], hidden: true }, { name: 'Z', values: [12, 18, 40] }],
+    options: { levelArrows: [{ from: { category: 2, series: 2 }, to: { category: 2, series: 0 }, mode: 'absolute' }] },
+  };
+  const removed = clone(spec);
+  removed.series.splice(1, 1);
+  removed.options!.levelArrows = [{ from: { category: 2, series: 1 }, to: { category: 2, series: 0 }, mode: 'absolute' }];
+  assert.equal(arrowText(lay(spec)).length, 1);
+  assert.deepEqual(arrowText(lay(spec)), arrowText(lay(removed)));
+  // An arrow at the hidden row is left out and reported.
+  spec.options!.levelArrows![0].from = { category: 2, series: 1 };
+  const s = lay(spec);
+  assert.equal(arrowText(s).length, 0);
+  assert.ok(s.hidden.includes('level arrow 1: points at a hidden series'));
+  // A line keeps its secondary axis when a row before it hides.
+  const combo: ChartSpec = {
+    type: 'combo', categories: ['A', 'B'],
+    series: [{ name: 'C1', values: [10, 12] }, { name: 'C2', values: [4, 5], hidden: true }, { name: 'Share', values: [0.2, 0.3], as: 'line' }],
+    options: { secondaryAxis: [2] },
+  };
+  const c = lay(combo);
+  assert.ok(c.roles!.some((r) => r.startsWith('axis:secondary')));
+  assert.ok(c.roles!.some((r) => r.startsWith('line:s2')));
+});

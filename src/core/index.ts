@@ -77,7 +77,7 @@ const layouts: Record<ChartSpec['type'], Layout> = {
  */
 export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle): Scene {
   // Hidden series (optional rows) are left out here; roles name the spec's series again at the end.
-  const { spec: s, style: st, index } = visibleSeries(prepareSpec(spec), style);
+  const { spec: s, style: st, index, notes } = visibleSeries(prepareSpec(spec), style);
   style = st;
   const min = minimumSize(s);
   // Lay out at the frame, or — when it is too small — find the size to ask for: at least the type's
@@ -96,7 +96,7 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     }
     if (size.w !== frame.w || size.h !== frame.h) break;
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
-    ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m));
+    ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
     restoreRoles(ctx.roles, index);
     return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden };
   }

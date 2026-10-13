@@ -118,6 +118,8 @@ index in shape roles (`bar:s2:c0` stays `bar:s2:c0` when series 1 is hidden).
   XY chart's width row (and a Mekko XY chart keeps at least one visible height row).
 - Pie and doughnut charts show the first visible series.
 - Waterfall categories marked `"e"` in a hidden row stay totals.
+- `secondaryAxis` and level arrows keep naming rows by their index in `series`; a level arrow that
+  points at a hidden row is left out (and reported).
 
 ```json
 {
