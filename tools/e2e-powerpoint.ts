@@ -38,6 +38,38 @@ const osa = (script: string, timeoutSec = 120): string =>
   execFileSync('osascript', ['-e', `with timeout of ${timeoutSec} seconds\n${script}\nend timeout`], { encoding: 'utf8' }).trim();
 const ppt = (body: string, timeoutSec?: number) => osa(`tell application "Microsoft PowerPoint"\n${body}\nend tell`, timeoutSec);
 const q = (s: string) => JSON.stringify(s);
+// Start PowerPoint with a new presentation. After a quit, PowerPoint keeps its process for a moment;
+// talking to it then fails with -609/-600, so wait until it is gone and retry once if it still races.
+let quitting = false;
+// Text of a PowerPoint dialog/sheet, pressing its default button; '' when there is none.
+const dismissDialog = (): string => {
+  try {
+    return osa(`tell application "System Events" to tell process "Microsoft PowerPoint"
+set out to ""
+repeat with w in windows
+  if (subrole of w is "AXDialog") or (exists sheet 1 of w) then
+    try
+      set out to out & (value of static texts of w as text)
+    end try
+    keystroke return
+  end if
+end repeat
+return out
+end tell`, 20);
+  } catch { return ''; }
+};
+const launch = () => {
+  for (let i = 0; quitting && i < 60; i++) {
+    try { execFileSync('pgrep', ['-x', 'Microsoft PowerPoint']); } catch { break; } // not running
+    try { if (osa('application "Microsoft PowerPoint" is running') === 'false') break; } catch { /* quitting */ }
+    sleep(500);
+  }
+  try { launch(); } catch (e) {
+    if (!/-60[09]/.test(String((e as Error).message))) throw e;
+    sleep(3000);
+    launch();
+  }
+};
 const logLines = () => (existsSync(LOG) ? readFileSync(LOG, 'utf8').split('\n').filter(Boolean) : []);
 
 rmSync(OUT, { recursive: true, force: true });
@@ -59,10 +91,13 @@ function macro(proc: string, ...args: string[]): string {
   const before = logLines().length;
   for (let attempt = 1; ; attempt++) {
     try {
-      ppt(`run VB macro macro name ${q(`${prefix}_${proc}`)} list of parameters {${args.map(q).join(', ')}}`, 300);
+      // While the add-in is still loading, fail fast and look for whatever is blocking PowerPoint.
+      ppt(`run VB macro macro name ${q(`${prefix}_${proc}`)} list of parameters {${args.map(q).join(', ')}}`, ready ? 300 : 60);
       break;
     } catch (err) {
-      if (ready || attempt >= 8) throw err;
+      const dialog = dismissDialog();
+      if (dialog) console.log(`PowerPoint dialog while running ${proc}: ${dialog} (dismissed)`);
+      if (ready || attempt >= 5) throw err;
       sleep(5000);
     }
   }
@@ -109,7 +144,7 @@ const abortIfFailed = (what: string) => {
   if (bad.length) { console.error(`${what} failed:\n  ${bad.join('\n  ')}`); process.exit(1); }
 };
 
-ppt('activate\nmake new presentation');
+launch();
 let slideNo = 0;
 const newSlide = (layout = 'blank') => {
   slideNo++;
@@ -230,7 +265,7 @@ abortIfFailed('Updating charts');
 const exportCopy = (dest: string, kind: string) => macro('ExportCopy', dest, kind);
 results.push(exportCopy(DECK, 'pptx'));
 results.push(exportCopy(PNG_DIR, 'png'));
-ppt('close active presentation saving no\nquit saving no');
+ppt('close active presentation saving no\nquit saving no'); quitting = true;
 if (!existsSync(DECK)) throw new Error(`The deck was not exported:\n${results.slice(-2).join('\n')}`);
 
 if (!readdirSync(PNG_DIR, { recursive: true }).some((f) => String(f).toLowerCase().endsWith('.png'))) {
@@ -288,7 +323,7 @@ writeFileSync(compareDeck, writePptx(cliSlides, style.font, deckTheme));
 ppt(`activate\nopen POSIX file ${q(compareDeck)}`);
 ready = false; // PowerPoint restarted: the add-in compiles again
 macro('ExportCopy', CLI_PNG_DIR, 'png');
-ppt('close active presentation saving no\nquit saving no');
+ppt('close active presentation saving no\nquit saving no'); quitting = true;
 rmSync(compareDeck, { force: true });
 
 // 9b. Apply with PowerPoint closed: the session (and so the editor) says so instead of "updated".
@@ -364,7 +399,7 @@ const THEME_PNG = join(OUT, 'theme-png');
   const themedOut = join(OUT, 'themed.pptx');
   macro('ExportCopy', themedOut, 'pptx');
   macro('ExportCopy', join(THEME_PNG, 'after'), 'png');
-  ppt('close active presentation saving no\nquit saving no');
+  ppt('close active presentation saving no\nquit saving no'); quitting = true;
   rmSync(themedDeck, { force: true });
   // The add-in drew theme colours as theme colours, and resolved them in the slide's new scheme.
   const files = unzip(new Uint8Array(readFileSync(themedOut)));
@@ -384,7 +419,7 @@ const undoCounts: Record<string, string> = {};
 {
   // PowerPoint for Mac shows a selection made by one macro to the next only after a moment.
   const select = (proc: string, ...args: string[]) => { macro(proc, ...args); sleep(800); };
-  ppt('activate\nmake new presentation');
+  launch();
   ready = false; // PowerPoint started again: the add-in compiles again
   ppt('set s to make new slide at end of active presentation with properties {layout:slide layout blank}\ngo to slide view of document window 1 number 1');
   results.push(macro('Run', 'chart_stacked'));
@@ -515,7 +550,7 @@ return acc`);
     const b = logLines().length; macro('SelectChart', '0'); waitForLog(/RELAYOUT/, b);
   });
   measure('same scale', () => { macro('SelectCharts', '1,3'); macro('Run', 'btnSameScale'); });
-  ppt('close active presentation saving no\nquit saving no');
+  ppt('close active presentation saving no\nquit saving no'); quitting = true;
   console.log(`Undo entries per action (Cmd+Z presses): ${Object.entries(undoCounts).map(([k, v]) => `${k} ${v}`).join(', ')}`);
   // One press per action; a resize is the user's drag plus the add-in's re-layout: two.
   for (const [k, v] of Object.entries(undoCounts)) if (!v.startsWith('not measured') && v !== (k === 'resize' ? '2' : '1')) failures.push(`undo ${k}: ${v} presses`);
