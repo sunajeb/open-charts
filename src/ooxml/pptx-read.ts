@@ -95,6 +95,8 @@ export interface ChartInfo {
   engine?: string;
   font?: string;
   spec?: string;
+  /** Why `spec` is missing when the tags are damaged (a chunk of OC_SPEC deleted). */
+  error?: string;
   specChunks: number;
   /** Bytes of all group-level tag values (UTF-8). */
   tagBytes: number;
@@ -120,10 +122,12 @@ export function readCharts(bytes: Uint8Array): SlideInfo[] {
         const tags = shapeTags(entries, rels, s);
         if (tags.OC_V === undefined) { visit(s); continue; }
         const members = s.children.filter(isShape);
-        const spec = specJson(tags);
+        // A damaged chart (a chunk of OC_SPEC missing) is reported, not fatal for the deck.
+        let spec: string | undefined, error: string | undefined;
+        try { spec = specJson(tags); } catch (e) { error = (e as Error).message; }
         charts.push({
           slide: i + 1, name: nm, frame: parseFrame(tags.OC_FRAME), bounds: xfrmFrame(s),
-          contract: tags.OC_V, engine: tags.OC_ENGINE, font: tags.OC_FONT, spec,
+          contract: tags.OC_V, engine: tags.OC_ENGINE, font: tags.OC_FONT, spec, ...(error ? { error } : {}),
           specChunks: tags.OC_SPEC_N ? Number(tags.OC_SPEC_N) : spec === undefined ? 0 : 1,
           tagBytes: Object.values(tags).reduce((a, v) => a + Buffer.byteLength(v), 0),
           children: members.length,
@@ -156,8 +160,11 @@ export function importDeck(bytes: Uint8Array): { deck: DeckSpec; warnings: strin
     const charts: { frame?: Frame; chart: ChartSpec }[] = [];
     for (const c of s.charts) {
       if (Number(c.contract) > Number(TAG_CONTRACT_VERSION)) warnings.push(`slide ${s.index}: "${c.name}" was made with a newer open-charts (tag contract ${c.contract}); importing as-is`);
-      if (c.spec === undefined) { warnings.push(`slide ${s.index}: "${c.name}" has no OC_SPEC`); continue; }
-      const { style: st, ...chart } = JSON.parse(c.spec) as ChartSpec & { style?: Partial<Style> };
+      if (c.spec === undefined) { warnings.push(`slide ${s.index}: "${c.name}" ${c.error ? `is damaged (${c.error})` : 'has no OC_SPEC'}; skipped`); continue; }
+      let parsed: unknown;
+      try { parsed = JSON.parse(c.spec); } catch { /* reported below */ }
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) { warnings.push(`slide ${s.index}: "${c.name}" has a damaged OC_SPEC; skipped`); continue; }
+      const { style: st, ...chart } = parsed as ChartSpec & { style?: Partial<Style> };
       if (st && !style) style = st;
       if (st && JSON.stringify(st) !== JSON.stringify(style)) chart.style = st;
       charts.push({ ...(c.frame ? { frame: c.frame } : {}), chart });

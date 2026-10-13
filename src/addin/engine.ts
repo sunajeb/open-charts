@@ -40,7 +40,7 @@
 //          data (totals, cagr, difference, unpin, scaleGroup: core/commands.ts runCommand); laid
 //          out like update, keeping formatting changed in PowerPoint (base= / native=)
 import { createHash } from 'node:crypto';
-import { defaultStyle, detachElement, runCommand, kindOf, layoutChart, mergeNativeEdits, migrate, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors, type ThemeFonts } from '../core/index.ts';
+import { defaultStyle, detachElement, InvalidSpecError, runCommand, kindOf, layoutChart, mergeNativeEdits, migrate, renderedOf, SPEC_VERSION, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors, type ThemeFonts } from '../core/index.ts';
 import { chartContent } from '../deck.ts';
 import { directionsOf, type Direction } from '../core/spec.ts';
 import { shapeName } from '../render/pptx.ts';
@@ -272,8 +272,7 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
       case 'direction': {
         // The ribbon's direction buttons: the selected chart, laid out again in its place growing `arg`.
         if (!req.spec) return error(SELECT_FIRST);
-        const { chart: stored, style } = readSpec(req.spec);
-        const chart = migrate(stored);
+        const { chart, style } = readSpec(req.spec);
         const dir = req.arg as Direction;
         const ok = directionsOf(chart.type);
         if (!ok.includes(dir)) {
@@ -289,6 +288,8 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         return error(`This add-in and its engine do not match ("${req.op}"). In Terminal, run: ${reinstallCommand()}`);
     }
   } catch (err) {
+    // A chart whose stored data was edited into something the engine cannot lay out: say where.
+    if (err instanceof InvalidSpecError) return error(`This chart's data (OC_SPEC tag) is not valid, so it cannot be laid out:\n${err.errors.map((x) => `${x.path || '/'}: ${x.message}`).join('\n')}`);
     return error((err as Error).message);
   }
 }
@@ -299,14 +300,25 @@ const sameFrame = (a: Frame, b: Frame) =>
 const header = () => record('OC', FORMAT_VERSION);
 const error = (msg: string) => `${header()}\n${record('E', msg)}\n`;
 
+const DAMAGED = 'This chart\'s data (OC_SPEC tag) is damaged and cannot be read.';
+export const NEWER_SPEC = 'This chart was made with a newer version of open-charts. Install the latest open-charts to change it; until then it stays as it is.';
+
+/**
+ * The chart in an OC_SPEC tag, upgraded to the current spec version (migrate): a chart from an older
+ * version is laid out, edited and stored again as a current one. Throws a plain message for a tag
+ * that is not a chart object or that a newer open-charts wrote.
+ */
 function readSpec(json: string): { chart: ChartSpec; style?: Partial<Style> } {
-  let parsed: ChartSpec & { style?: Partial<Style> };
+  let parsed: unknown;
   try {
     parsed = JSON.parse(json);
   } catch {
-    throw new Error('This chart\'s data (OC_SPEC tag) is damaged and cannot be read.');
+    throw new Error(DAMAGED);
   }
-  return splitSpec(parsed);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || typeof (parsed as { type?: unknown }).type !== 'string') throw new Error(DAMAGED);
+  const v = (parsed as { specVersion?: unknown }).specVersion;
+  if (typeof v === 'number' && v > SPEC_VERSION) throw new Error(NEWER_SPEC);
+  return splitSpec(migrate(parsed as ChartSpec & { style?: Partial<Style> }));
 }
 
 function splitSpec(parsed: ChartSpec & { style?: Partial<Style> }): { chart: ChartSpec; style?: Partial<Style> } {
