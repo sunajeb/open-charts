@@ -16,6 +16,7 @@ export const SCENARIOS: ScenarioDef[] = [
   { name: 'theme', budgetSec: 90, module: './scenarios/theme.ts', description: 'theme colours follow a new colour scheme; same-scale pair re-laid out on Update, Apply and resize' },
   { name: 'fill', budgetSec: 90, module: './scenarios/fill.ts', description: '`open-charts fill` decks open without a repair prompt and export every slide' },
   { name: 'cli-compare', budgetSec: 120, module: './scenarios/cli-compare.ts', description: 'add-in charts vs the CLI writer\'s, rendered by the same PowerPoint, pixel-compared' },
+  { name: 'big-deck', budgetSec: 120, module: './scenarios/big-deck.ts', description: 'a 100-slide deck with 50 charts opens, Update chart on the first, middle and last chart, every chart reads back' },
 ];
 
 /** What a scenario gets: the shared PowerPoint, its output folder, and the recorder. */
