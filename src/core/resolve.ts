@@ -5,7 +5,7 @@
 // tests as the quality gate (src/core/quality.ts) with the same tolerance, so a resolved scene passes it.
 import type { Frame, LineShape, Shape, TextShape } from './types.ts';
 import type { Measurer } from './text.ts';
-import { bounds, coversMark, ownedBy, roleOwner, shrink } from './quality.ts';
+import { bounds, coversMark, ownedBy, roleOwner, shrink, textNeed } from './quality.ts';
 import { overlaps, segmentHitsBox } from './place.ts';
 
 const TOL = 1;
@@ -49,7 +49,9 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
   // A grouped role without text (e.g. a stray leader) is not a unit.
   for (const [k, idx] of units) if (!idx.some((i) => shapes[i].kind === 'text')) units.delete(k);
 
-  const order = [...units.entries()].sort((a, b) => priority(roles[b[1][0]]) - priority(roles[a[1][0]]) || a[1][0] - b[1][0]);
+  // A label placed by hand (pinned) keeps its place first; everything else yields to it.
+  const rank = (idx: number[]) => (idx.some((i) => (shapes[i] as TextShape).pinned) ? 1000 : priority(roles[idx[0]]));
+  const order = [...units.entries()].sort((a, b) => rank(b[1]) - rank(a[1]) || a[1][0] - b[1][0]);
   const marks = shapes.map((s, i) => i).filter((i) => shapes[i].kind === 'rect' && /^(bar|marker):/.test(roles[i]));
   const dataLines = shapes.map((s, i) => i).filter((i) => shapes[i].kind === 'line' && roles[i].startsWith('line:'));
   const lineOwners = new Set(dataLines.map((i) => roleOwner(roles[i])));
@@ -77,15 +79,14 @@ export function resolveCollisions(shapes: Shape[], roles: string[], frame: Frame
         return !ownedBy(roles[i], roles[k]) && segmentHitsBox(l.x1, l.y1, l.x2, l.y2, inner);
       });
       if (ln != null) return `crosses ${roles[ln]}`;
-      const lines = s.text.split('\n');
-      const w = Math.max(...lines.map((l) => m.width(l, s.size, s.bold)));
-      if (w > s.w + TOL || lines.length * (s.lineHeight ?? m.lineHeight(s.size)) > s.h + TOL) return 'does not fit its box';
+      const need = textNeed(s, m);
+      if (need.w > s.w + TOL || need.h > s.h + TOL) return 'does not fit its box';
     }
     return null;
   };
 
   for (const [, idx] of order) {
-    const why = problem(idx);
+    const why = idx.some((i) => (shapes[i] as TextShape).pinned) ? null : problem(idx);
     if (!why) { for (const i of idx) if (shapes[i].kind === 'text') kept.push(i); continue; }
     for (const i of idx) drop.add(i);
     const t = idx.map((i) => shapes[i]).find((s): s is TextShape => s.kind === 'text')!;

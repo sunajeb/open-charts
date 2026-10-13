@@ -299,6 +299,8 @@ Private Sub Dispatch(ByVal id As String)
         UpdateChart
     ElseIf id = "btnEditData" Then
         EditData
+    ElseIf id = "btnPlainText" Then
+        ConvertToPlainText
     Else
         Tell "This button is not known to this version of the add-in (" & id & ")."
     End If
@@ -354,17 +356,156 @@ Private Sub EditData()
     End If
 End Sub
 
+' Convert to plain text: the selected label keeps the text it shows now, which data edits no longer
+' rewrite; it stays in the chart and moves with it (engine op "detach").
+Private Sub ConvertToPlainText()
+    Dim chart As Object, sel As Object, shp As Object, role As String, response As String
+    Set chart = SelectedChart()
+    If chart Is Nothing Then Exit Sub
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If sel.HasChildShapeRange Then Set shp = sel.ChildShapeRange(1)
+    On Error GoTo 0
+    If Not shp Is Nothing Then role = TagValue(shp, "OC_ROLE")
+    If role = "" Then Tell "Click one label of the chart (so only it is selected), then convert it to plain text.": Exit Sub
+    response = Engine("detach" & vbLf & role & vbLf & ChartContext(chart) & SpecOf(chart))
+    If response = "" Then Exit Sub
+    Set chart = ReplaceChart(chart, response)
+    If Not chart Is Nothing Then chart.Select
+End Sub
+
+' Scripted tests: convert the label with role `role` of the selected chart to plain text.
+Public Sub OCPREFIX_ConvertToPlainText(ByVal role As String)
+    Dim chart As Object, response As String
+    Set chart = FindSelectedChart()
+    If chart Is Nothing Then Report "PLAINTEXT failed: no chart selected": Exit Sub
+    response = Engine("detach" & vbLf & role & vbLf & ChartContext(chart) & SpecOf(chart))
+    If response <> "" Then Set chart = ReplaceChart(chart, response)
+    Report "PLAINTEXT " & IIf(chart Is Nothing, "failed: " & gLastMessage, "OK")
+End Sub
+
 ' Lays a chart out again where it now is (its group's bounds are its frame) and replaces it in
 ' place, same stacking order. force=False is the automatic check: the engine answers "nothing to
 ' do" when neither size nor data changed. Returns the new group (or the old one if unchanged).
 Private Function Relayout(ByVal old As Object, ByVal force As Boolean) As Object
     Dim response As String, request As String, tp As Single
     tp = Timer
-    request = IIf(force, "update", "relayout") & vbLf & "" & vbLf & ChartContext(old) & SpecOf(old)
+    request = IIf(force, "update", "relayout") & vbLf & "" & vbLf & ChartContext(old) & NativeLines(old) & SpecOf(old)
     Phase "read", tp
     response = Engine(request)
     If response = "" Then Exit Function
     Set Relayout = ReplaceChart(old, response)
+End Function
+
+'  Formatting changed with PowerPoint's own tools is kept: the request carries the chart's OC_BASE
+' (its formatting as last drawn) and what its shapes look like now ("base=" and "native=" lines);
+' the engine turns every difference into an override in the spec (core/overrides.ts mergeNativeEdits).
+' "" for a chart drawn before OC_BASE existed.
+Private Function NativeLines(ByVal chart As Object) As String
+    Dim base As String, k As Long, shp As Object, role As String, out As String, item As String
+    base = ChunkedTag(chart, "OC_BASE")
+    If base = "" Then Exit Function
+    For k = 1 To chart.GroupItems.Count
+        Set shp = chart.GroupItems(k)
+        role = TagValue(shp, "OC_ROLE")
+        If role <> "" And role <> "frame" Then
+            item = ShapeEntry(shp, role)
+            If item <> "" Then out = out & IIf(out = "", "", ",") & item
+        End If
+    Next k
+    NativeLines = "base=" & base & vbLf & "native=[" & out & "]" & vbLf
+End Function
+
+' One shape as {"role", "kind": text | mark | line, "props"} (core/overrides.ts RenderedEntry).
+Private Function ShapeEntry(ByVal shp As Object, ByVal role As String) As String
+    Dim p As String, kind As String, tr As Object, o As Long
+    On Error GoTo Failed
+    If shp.Type = 9 Then ' msoLine
+        kind = "line"
+        p = """line"":" & JsonStr(ColorOf(shp.Line.ForeColor, shp.Line.Visible)) & ",""lineWidth"":" & Fmt3(shp.Line.Weight)
+    Else
+        kind = "mark"
+        p = """fill"":" & JsonStr(ColorOf(shp.Fill.ForeColor, shp.Fill.Visible)) & ",""outline"":" & JsonStr(ColorOf(shp.Line.ForeColor, shp.Line.Visible))
+        If shp.Line.Visible Then p = p & ",""outlineWidth"":" & Fmt3(shp.Line.Weight)
+        If shp.HasTextFrame Then
+            If shp.TextFrame2.HasText Then
+                kind = "text"
+                Set tr = shp.TextFrame2.TextRange
+                o = shp.TextFrame2.Orientation
+                p = p & ",""text"":" & JsonStr(Replace(tr.Text, vbCr, vbLf)) & ",""font"":" & JsonStr(tr.Font.Name) & _
+                    ",""size"":" & Fmt3(tr.Font.Size) & ",""bold"":" & IIf(tr.Font.Bold = -1, "true", "false") & _
+                    ",""color"":" & JsonStr(ColorOf(tr.Font.Fill.ForeColor, -1)) & ",""rotate"":" & IIf(o = 2, "-90", IIf(o = 3, "90", "0"))
+            End If
+        End If
+    End If
+    ShapeEntry = "{""role"":" & JsonStr(role) & ",""kind"":""" & kind & """,""props"":{" & p & "}}"
+    Exit Function
+Failed:
+    ShapeEntry = ""
+End Function
+
+' A colour as "RRGGBB", or "RRGGBB@accent1-lighter40" for a theme colour; "none" when not visible.
+Private Function ColorOf(ByVal cf As Object, ByVal visible As Long) As String
+    Dim c As Long, t As Long, nm As String, ts As Single
+    If visible = 0 Then ColorOf = "none": Exit Function
+    c = cf.RGB
+    ColorOf = Right$("0" & Hex$(c And 255), 2) & Right$("0" & Hex$((c \ 256) And 255), 2) & Right$("0" & Hex$((c \ 65536) And 255), 2)
+    On Error Resume Next
+    t = cf.ObjectThemeColor
+    nm = ThemeName(t)
+    If nm = "" Then Exit Function
+    ts = cf.TintAndShade
+    If ts > 0.004 Then nm = nm & "-lighter" & CStr(CLng(ts * 100))
+    If ts < -0.004 Then nm = nm & "-darker" & CStr(CLng(-ts * 100))
+    ColorOf = ColorOf & "@" & nm
+End Function
+
+' Theme colour name of an msoThemeColorIndex (the inverse of ThemeIndex), "" for none.
+Private Function ThemeName(ByVal t As Long) As String
+    Select Case t
+        Case 1: ThemeName = "dk1"
+        Case 2: ThemeName = "lt1"
+        Case 3: ThemeName = "dk2"
+        Case 4: ThemeName = "lt2"
+        Case 5 To 10: ThemeName = "accent" & (t - 4)
+        Case 11: ThemeName = "hlink"
+        Case 12: ThemeName = "folHlink"
+        Case 13: ThemeName = "tx1"
+        Case 14: ThemeName = "bg1"
+        Case 15: ThemeName = "tx2"
+        Case 16: ThemeName = "bg2"
+    End Select
+End Function
+
+' A JSON string literal.
+Private Function JsonStr(ByVal v As String) As String
+    Dim i As Long, ch As String, code As Long, out As String
+    For i = 1 To Len(v)
+        ch = Mid$(v, i, 1)
+        code = AscW(ch)
+        Select Case code
+            Case 34: out = out & "\"""
+            Case 92: out = out & "\\"
+            Case 10: out = out & "\n"
+            Case 9: out = out & "\t"
+            Case 0 To 31: out = out & "\u" & Right$("000" & Hex$(code), 4)
+            Case Else: out = out & ch
+        End Select
+    Next i
+    JsonStr = """" & out & """"
+End Function
+
+' A tag written in chunks by the engine (render/tags.ts chunkedTags): NAME, or NAME_0..n + NAME_N.
+Private Function ChunkedTag(ByVal shp As Object, ByVal key As String) As String
+    Dim s As String, n As Long, i As Long
+    s = TagValue(shp, key)
+    If s = "" Then
+        n = CLng(Val(TagValue(shp, key & "_N")))
+        For i = 0 To n - 1
+            s = s & TagValue(shp, key & "_" & i)
+        Next i
+    End If
+    ChunkedTag = s
 End Function
 
 ' Draws an engine response in place of chart `old` (same stacking order) and deletes it. Returns the
@@ -686,7 +827,7 @@ End Function
 ' Columns (src/addin/format.ts SHAPE_COLUMNS), f(0) = "S":
 '  1 kind 2 x 3 y 4 w 5 h 6 fill 7 lineColor 8 lineWidth 9 dash 10 arrowEnd 11 text 12 font
 '  13 size 14 bold 15 color 16 align 17 valign 18 wrap 19 autosize 20 role 21 name 22 points
-'  23 textGeom
+'  23 textGeom 24 rotate 25 arrowStart 26 pattern (per-element overrides; absent from older engines)
 Private Function DrawShape(ByVal sld As Object, f() As String) As Object
     Dim kind As String, x As Single, y As Single, w As Single, h As Single, s As Object
     kind = f(1)
@@ -699,26 +840,119 @@ Private Function DrawShape(ByVal sld As Object, f() As String) As Object
                 SetColor .ForeColor, f(7)
                 .Weight = Val(f(8))
                 If f(9) = "1" Then .DashStyle = 4 ' msoLineDash
+                If f(9) = "dot" Then .DashStyle = 2 ' msoLineSquareDot
                 If f(10) = "1" Then .EndArrowheadStyle = 2 ' msoArrowheadTriangle
+                If Col(f, 25) = "1" Then .BeginArrowheadStyle = 2
             End With
         Case "text"
             If f(6) = "" And f(7) = "" Then
-                Set s = sld.Shapes.AddTextbox(1, x, y, w, h) ' msoTextOrientationHorizontal
+                Set s = sld.Shapes.AddTextbox(Orientation(Col(f, 24)), x, y, w, h)
             Else
                 Set s = sld.Shapes.AddShape(IIf(f(23) = "roundRect", 5, 1), x, y, w, h)
                 If f(23) = "roundRect" Then s.Adjustments(1) = 0.5
             End If
             FillAndLine s, f(6), f(7), f(8), "0"
+            If Col(f, 24) <> "" Then s.TextFrame2.Orientation = Orientation(Col(f, 24))
             SetText s, f
             s.Left = x: s.Top = y: s.Width = w: s.Height = h
         Case "path"
             Set s = DrawPath(sld, f(22))
             FillAndLine s, f(6), f(7), f(8), f(9)
+            If Col(f, 26) <> "" Then SetPattern s, f(6), Col(f, 26)
         Case Else
             Set s = sld.Shapes.AddShape(AutoShapeType(kind), x, y, w, h)
-            FillAndLine s, f(6), f(7), f(8), "0"
+            FillAndLine s, f(6), f(7), f(8), f(9)
+            If Col(f, 26) <> "" Then SetPattern s, f(6), Col(f, 26)
     End Select
     Set DrawShape = s
+End Function
+
+' A pattern fill (an override): OOXML preset `prst` in colour `fillHex` on the theme background.
+Private Sub SetPattern(ByVal s As Object, ByVal fillHex As String, ByVal prst As String)
+    Dim n As Long
+    n = PatternType(prst)
+    If n = 0 Or fillHex = "" Then Exit Sub
+    On Error Resume Next
+    With s.Fill
+        .Patterned n
+        SetColor .ForeColor, fillHex
+        .BackColor.ObjectThemeColor = 14 ' msoThemeColorBackground1
+    End With
+End Sub
+
+' msoPatternType of an OOXML preset pattern (DrawingML ST_PresetPatternVal), 0 if unknown.
+Private Function PatternType(ByVal prst As String) As Long
+    Select Case prst
+        Case "pct5": PatternType = 1
+        Case "pct10": PatternType = 2
+        Case "pct20": PatternType = 3
+        Case "pct25": PatternType = 4
+        Case "pct30": PatternType = 5
+        Case "pct40": PatternType = 6
+        Case "pct50": PatternType = 7
+        Case "pct60": PatternType = 8
+        Case "pct70": PatternType = 9
+        Case "pct75": PatternType = 10
+        Case "pct80": PatternType = 11
+        Case "pct90": PatternType = 12
+        Case "dkHorz": PatternType = 13
+        Case "dkVert": PatternType = 14
+        Case "dkDnDiag": PatternType = 15
+        Case "dkUpDiag": PatternType = 16
+        Case "smCheck": PatternType = 17
+        Case "trellis": PatternType = 18
+        Case "ltHorz": PatternType = 19
+        Case "ltVert": PatternType = 20
+        Case "ltDnDiag": PatternType = 21
+        Case "ltUpDiag": PatternType = 22
+        Case "smGrid": PatternType = 23
+        Case "dotDmnd": PatternType = 24
+        Case "wdDnDiag": PatternType = 25
+        Case "wdUpDiag": PatternType = 26
+        Case "dashUpDiag": PatternType = 27
+        Case "dashDnDiag": PatternType = 28
+        Case "narVert": PatternType = 29
+        Case "narHorz": PatternType = 30
+        Case "dashVert": PatternType = 31
+        Case "dashHorz": PatternType = 32
+        Case "lgConfetti": PatternType = 33
+        Case "lgGrid": PatternType = 34
+        Case "horzBrick": PatternType = 35
+        Case "lgCheck": PatternType = 36
+        Case "smConfetti": PatternType = 37
+        Case "zigZag": PatternType = 38
+        Case "solidDmnd": PatternType = 39
+        Case "diagBrick": PatternType = 40
+        Case "openDmnd": PatternType = 41
+        Case "plaid": PatternType = 42
+        Case "sphere": PatternType = 43
+        Case "weave": PatternType = 44
+        Case "dotGrid": PatternType = 45
+        Case "divot": PatternType = 46
+        Case "shingle": PatternType = 47
+        Case "wave": PatternType = 48
+        Case "horz": PatternType = 49
+        Case "vert": PatternType = 50
+        Case "cross": PatternType = 51
+        Case "dnDiag": PatternType = 52
+        Case "upDiag": PatternType = 53
+        Case "diagCross": PatternType = 54
+    End Select
+End Function
+
+' Column i of a record, "" when an older engine did not send it.
+Private Function Col(f() As String, ByVal i As Long) As String
+    If i <= UBound(f) Then Col = f(i)
+End Function
+
+' Text direction (rotate column): -90 reads bottom to top (msoTextOrientationUpward), 90 top to
+' bottom (msoTextOrientationDownward), else horizontal.
+Private Function Orientation(ByVal rotate As String) As Long
+    Select Case rotate
+        Case "-90": Orientation = 2
+        Case "90": Orientation = 3
+        Case Else: Orientation = 1
+    End Select
 End Function
 
 Private Function AutoShapeType(ByVal kind As String) As Long
@@ -751,6 +985,7 @@ Private Sub FillAndLine(ByVal s As Object, ByVal fillHex As String, ByVal lineHe
             SetColor .ForeColor, lineHex
             .Weight = Val(lineWidth)
             If dash = "1" Then .DashStyle = 4
+            If dash = "dot" Then .DashStyle = 2 ' msoLineSquareDot
         End If
     End With
     On Error Resume Next
@@ -950,9 +1185,23 @@ End Function
 ' A colour field of the line format: RRGGBB, or a theme colour name. A theme colour is set as such
 ' (ObjectThemeColor), so the chart follows the presentation's theme like PowerPoint's own shapes.
 Private Sub SetColor(ByVal cf As Object, ByVal v As String)
-    Dim t As Long
+    Dim t As Long, at As Long, shade As Single
+    ' A theme colour with a tint / shade (per-element overrides): "accent1-lighter40" / "accent1-darker25".
+    at = InStr(v, "-lighter")
+    If at > 0 Then
+        shade = Val(Mid$(v, at + 8)) / 100
+    Else
+        at = InStr(v, "-darker")
+        If at > 0 Then shade = -Val(Mid$(v, at + 7)) / 100
+    End If
+    If at > 0 Then v = Left$(v, at - 1)
     t = ThemeIndex(v)
-    If t > 0 Then cf.ObjectThemeColor = t Else cf.RGB = HexColor(v)
+    If t > 0 Then
+        cf.ObjectThemeColor = t
+        If at > 0 Then cf.TintAndShade = shade
+    Else
+        cf.RGB = HexColor(v)
+    End If
 End Sub
 
 ' msoThemeColorIndex of a theme colour name (src/core/theme.ts), 0 for anything else.
@@ -968,6 +1217,8 @@ Private Function ThemeIndex(ByVal v As String) As Long
         Case "accent4": ThemeIndex = 8
         Case "accent5": ThemeIndex = 9
         Case "accent6": ThemeIndex = 10
+        Case "hlink": ThemeIndex = 11 ' msoThemeColorHyperlink
+        Case "folHlink": ThemeIndex = 12 ' msoThemeColorFollowedHyperlink
         Case "tx1": ThemeIndex = 13 ' msoThemeColorText1: follows the slide master's colour map
         Case "bg1": ThemeIndex = 14 ' msoThemeColorBackground1
         Case "tx2": ThemeIndex = 15 ' msoThemeColorText2
