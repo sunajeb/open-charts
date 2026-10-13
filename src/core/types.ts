@@ -118,6 +118,12 @@ export interface ChartOptions {
    * smallest of their own), so equal values are equally tall across the charts.
    */
   scaleGroup?: string;
+  /**
+   * Top of the value axis (the drag handle on the axis sets it): the axis reaches at least this
+   * value, leaving headroom above the data; it never cuts data off (a value below the data's top is
+   * ignored). Left out or null: the axis fits the data.
+   */
+  axisMax?: number | null;
 }
 
 /** Difference arrow mode (manual: Arrow modes): relative →, absolute ↔, reverse ← (relative, other direction). */
@@ -311,4 +317,8 @@ export interface Scene {
  * The value scale a chart drew with: its domain, how long one value unit is (points), and how long
  * it would be on its own (`own`; smaller `ptPerUnit` = the chart follows a same-scale group).
  */
-export interface ValueScale { min: number; max: number; ptPerUnit: number; own: number }
+export interface ValueScale {
+  min: number; max: number; ptPerUnit: number; own: number;
+  /** Where `min` and `max` are on the slide: [x1, y1, x2, y2] (the plot's value direction; drag handles). */
+  at?: [number, number, number, number];
+}

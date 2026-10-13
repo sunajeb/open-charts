@@ -193,7 +193,7 @@ function layoutVertical(ctx: Ctx, md: Model): 'labels-too-wide' | void {
   const py = frame.y + legendH + arrowsH + Math.max(totalsH + barLabelH, ticks || indicator || md.valueLines.length ? lh / 2 : 0);
   const ph = frame.y + frame.h - catH - (clustered && dmin < 0 ? barLabelH : 0) - py;
   if (!brk) {
-    ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+    ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks, [px, py + ph, px, py]));
     if (ticks) axisFmt = axisFormatter(ctx, ticks, percent);
   }
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
@@ -405,7 +405,7 @@ function layoutBars(ctx: Ctx, md: Model) {
   }
   if (pw < lh * 2 || ph < lh * nCat * 0.5) ctx.hidden.push('chart frame too small');
   if (!brk) {
-    ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks));
+    ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks, [px, yA, px + pw, yA]));
     if (ticks) axisFmt = axisFormatter(ctx, ticks, percent);
   }
   const dist = axisDistance(dmin, dmax, brk, pw);

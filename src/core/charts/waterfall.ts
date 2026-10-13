@@ -45,7 +45,7 @@ export function layoutWaterfall(ctx: Ctx) {
   const pw = frame.w - axisW;
   const py = frame.y + legendH + labelH;
   const ph = frame.y + frame.h - catH - belowH - py;
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks, [px, py + ph, px, py]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
@@ -224,7 +224,7 @@ function layoutWaterfallBars(ctx: Ctx, md: Model) {
     if (Math.abs(nl - left) < 0.5 && Math.abs(nr - right) < 0.5) break;
     [left, right] = [nl, nr];
   }
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks, [px, py + ph, px + pw, py + ph]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   if (pw < lh * 2 || ph < lh * nCat * 0.5) ctx.hidden.push('chart frame too small');
   const xOf = (v: number) => px + ((v - dmin) / (dmax - dmin)) * pw;

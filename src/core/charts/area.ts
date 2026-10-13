@@ -50,7 +50,7 @@ export function layoutArea(ctx: Ctx) {
   const totalsH = showTotals ? lh + pad * 0.3 : 0;
   const py = frame.y + legendH + totalsH + lh * 0.5;
   const ph = frame.y + frame.h - catH - py;
-  ({ dmax, ticks } = sharedScale(ctx, 0, dmax, ph, ticks));
+  ({ dmax, ticks } = sharedScale(ctx, 0, dmax, ph, ticks, [pxL, py + ph, pxL, py]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks, percent);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - (v / dmax) * ph;
@@ -213,7 +213,7 @@ function layoutAreaBars(ctx: Ctx, md: AreaModel) {
   const px = frame.x + catW + pad;
   const pw = frame.x + frame.w - totalW - px;
   const ph = bottom - top;
-  ({ dmax, ticks } = sharedScale(ctx, 0, dmax, pw, ticks));
+  ({ dmax, ticks } = sharedScale(ctx, 0, dmax, pw, ticks, [px, yA, px + pw, yA]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks, md.percent);
   if (pw < lh * 2 || ph < lh * 2) ctx.hidden.push('chart frame too small');
   const xOf = (v: number) => px + (v / dmax) * pw;

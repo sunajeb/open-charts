@@ -74,6 +74,34 @@ someone else: the data travels inside the file. Don't ungroup the chart or edit 
 if you want to keep editing its data: the next Update chart or Apply redraws the chart from its data
 and replaces those changes.
 
+### Dragging handles
+
+On the Mac, a selected chart shows small **yellow handles** next to PowerPoint's own selection
+handles. Drag one to change the chart directly; the chart follows the mouse live, and when you let
+go it is laid out once more in place (one update, like Apply). **Double-click a handle** to put it
+back to automatic.
+
+| Handle | Where | What dragging it does |
+|---|---|---|
+| Gap width | right edge of the first column (bottom edge of the first bar on a bar chart) | wider or thinner columns: `gap` |
+| Axis top | top end of the value axis (right end on a bar chart; only while the value axis is shown) | more headroom above the data: `axisMax`. Dragging below the top of the data gives the automatic axis again |
+| Level arrow | right edge of the arrow's bubble | moves the arrow beside the later column or into the gap before it |
+| Label | the label itself, once you have selected it (click the chart, then the label) | puts the label where you drop it; it stays there through data edits until you double-click it |
+
+The handles only take the mouse while the pointer is on one: every other click goes to PowerPoint
+as usual. They hide while you scroll or zoom, while another app is in front and while you drag
+something in PowerPoint, and come back once the chart has been measured again (a moment later).
+Zooming with the keyboard (⌘+ / ⌘−) is not noticed: click the chart again to bring the handles back
+to the right place.
+
+**Permissions:** none. The handles are a transparent window of the open-charts pop-up helper; it
+watches where the mouse is (macOS needs no permission for that) and only catches a press that
+starts on a handle. It never asks for Accessibility or Input Monitoring and never sees your
+keyboard. (The live test, `tools/e2e-handles-live.ts`, moves the mouse itself and needs
+Accessibility for the terminal it runs in; users never do.)
+
+Windows: not yet (the handles are a panel of the Mac helper).
+
 ## Choosing a chart and its direction
 
 ![The chart gallery](ux-shots/chart-gallery.png)
