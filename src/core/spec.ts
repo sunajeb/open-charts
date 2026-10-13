@@ -5,6 +5,7 @@ import type { ChartOptions, ChartSpec } from './types.ts';
 import { LOCALES } from './numbers.ts';
 import { COLOR_NAMES, isColor } from './theme.ts';
 import { parseCategoryDate } from './dates.ts';
+import { checkOverrides } from './overrides.ts';
 
 export const SPEC_VERSION = 1;
 
@@ -19,7 +20,7 @@ export const CHART_TYPES = [
   'area', 'area100', 'pie', 'doughnut', 'harvey',
   'combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt',
 ] as const;
-export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options', 'style'] as const;
+export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options', 'style', 'overrides'] as const;
 export const SERIES_KEYS = ['name', 'values', 'color', 'as', 'hidden'] as const;
 export type ChartTypeName = typeof CHART_TYPES[number];
 const except = (...types: ChartTypeName[]) => CHART_TYPES.filter((t) => !types.includes(t));
@@ -249,6 +250,7 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
     else validateOptions(e, spec.options, type as string, nCat, Array.isArray(spec.series) ? spec.series : []);
   }
   if (spec.style !== undefined) validateStyle(e, spec.style);
+  if (spec.overrides !== undefined) for (const p of checkOverrides(spec.overrides)) e.add(p.path, p.message);
   return e.list;
 }
 

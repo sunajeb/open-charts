@@ -1,6 +1,6 @@
 import type { RectShape, Shape } from './types.ts';
 import type { Ctx } from './common.ts';
-import { text } from './common.ts';
+import { labelSpec, text } from './common.ts';
 import { textOn } from './numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from './place.ts';
 import { pathBounds } from './path.ts';
@@ -208,12 +208,18 @@ export interface PendingLabel {
  */
 export function placePending(ctx: Ctx, items: PendingLabel[], bounds: Box = ctx.frame) {
   if (!items.length) return;
+  // Each label is placed at the size it will be drawn: its role's override may change text, size or direction.
+  const size = (it: PendingLabel): [number, number] => {
+    if (!ctx.ov) return [ctx.m.width(it.text, ctx.fs, it.bold) + LABEL_PAD, ctx.lh];
+    const L = labelSpec(ctx, it.role ?? `label:value:s${it.s}:c${it.c}`, it.text, ctx.fs, !!it.bold);
+    return [L.w + LABEL_PAD, L.h];
+  };
   const obstacles = ctx.shapes.map(shapeBox);
   // A boxed label never covers a segment whose own label points at it from outside.
   const anchors = new Set<Box>(items.map((it) => it.seg));
   const reqs: LabelRequest[] = items.map((it) => ({
     anchor: it.seg,
-    candidates: segmentCandidates(it.seg, ctx.m.width(it.text, ctx.fs, it.bold) + LABEL_PAD, ctx.lh, {
+    candidates: segmentCandidates(it.seg, ...size(it), {
       sides: it.sides, lead: ctx.pad * 0.8, boxCover: it.boxCover?.filter((b) => !anchors.has(b)),
     }),
   }));

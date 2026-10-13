@@ -18,7 +18,12 @@
 // uses the bounding box there and the outline in `points`. Text with a box behind it (fill or
 // line set) is drawn as an autoshape of `textGeom` (rect | roundRect) carrying the text. Numbers use "." and at most 2 decimals,
 // so VBA's locale-independent Val() reads them. Colours are RRGGBB, or a theme colour name
-// (accent1…accent6, dk1 lt1 dk2 lt2, tx1 bg1 tx2 bg2) that VBA sets as ObjectThemeColor; "" = none.
+// (accent1…accent6, dk1 lt1 dk2 lt2, tx1 bg1 tx2 bg2, hlink folHlink) that VBA sets as ObjectThemeColor,
+// optionally with a tint / shade ("accent1-lighter40", "accent1-darker25": TintAndShade ±0.4); "" = none.
+// Per-element overrides (core/overrides.ts) arrive as: `font` per shape (a font name, or the theme's
+// "+mj-lt" / "+mn-lt"), `dash` 0 | 1 | dot, `rotate` -90 | 90 | "" (text direction: TextFrame
+// Orientation upward / downward), `arrowStart` 0 | 1, and `pattern`: an OOXML preset pattern
+// (dkUpDiag, narVert, …) VBA draws with Fill.Patterned in the fill colour on the background.
 import type { PathCmd, Shape, TextShape } from '../core/types.ts';
 import { flattenPath } from '../core/path.ts';
 import { colorHex, colorSlot } from '../core/theme.ts';
@@ -28,7 +33,7 @@ export const FORMAT_VERSION = '2';
 export const SHAPE_COLUMNS = [
   'kind', 'x', 'y', 'w', 'h', 'fill', 'lineColor', 'lineWidth', 'dash', 'arrowEnd',
   'text', 'font', 'size', 'bold', 'color', 'align', 'valign', 'wrap', 'autosize',
-  'role', 'name', 'points', 'textGeom',
+  'role', 'name', 'points', 'textGeom', 'rotate', 'arrowStart', 'pattern',
 ] as const;
 
 export type ShapeRecord = Record<(typeof SHAPE_COLUMNS)[number], string>;
@@ -40,8 +45,13 @@ export const unescapeField = (s: string) =>
   s.replace(/\\(.)/g, (_, c: string) => ({ t: '\t', n: '\n', r: '\r' } as Record<string, string>)[c] ?? c);
 
 export const num = (v: number) => (Number.isFinite(v) ? String(+v.toFixed(2)) : '0');
-const hex = (c?: string) => (c ? colorSlot(c) ?? colorHex(c).toUpperCase() : '');
+const hex = (c?: string) => {
+  if (!c) return '';
+  const theme = c.split('@')[1];
+  return colorSlot(c) ?? (theme && /-(lighter|darker)\d+$|^(hlink|folHlink)$/.test(theme) ? theme : colorHex(c).toUpperCase());
+};
 const flag = (b?: boolean) => (b ? '1' : '0');
+const dash = (d?: boolean | 'dot') => (d === 'dot' ? 'dot' : flag(!!d));
 
 export const record = (...fields: string[]) => fields.map(escapeField).join('\t');
 
@@ -69,14 +79,14 @@ const VALIGN = { top: 't', middle: 'm', bottom: 'b' } as const;
 export function shapeRecord(s: Shape, font: string, role = '', name = ''): string {
   const any = s as Shape & Record<string, unknown>;
   const base: ShapeRecord = Object.fromEntries(SHAPE_COLUMNS.map((c) => [c, ''])) as ShapeRecord;
-  Object.assign(base, { dash: '0', arrowEnd: '0', bold: '0', wrap: '0', autosize: '0', role, name });
+  Object.assign(base, { dash: '0', arrowEnd: '0', bold: '0', wrap: '0', autosize: '0', arrowStart: '0', role, name });
   switch (any.kind) {
     case 'rect': {
       const r = s as Extract<Shape, { kind: 'rect' }> & { geom?: string };
       const kind = r.geom && r.geom !== 'rect' ? r.geom : r.ellipse ? 'ellipse' : 'rect';
       Object.assign(base, {
         kind, x: num(r.x), y: num(r.y), w: num(r.w), h: num(r.h), fill: hex(r.fill),
-        lineColor: hex(r.stroke), lineWidth: r.stroke ? num(r.strokeWidth ?? 0.75) : '',
+        lineColor: hex(r.stroke), lineWidth: r.stroke ? num(r.strokeWidth ?? 0.75) : '', dash: dash(r.dash), pattern: r.pattern ?? '',
       });
       break;
     }
@@ -84,7 +94,7 @@ export function shapeRecord(s: Shape, font: string, role = '', name = ''): strin
       const l = s as Extract<Shape, { kind: 'line' }>;
       Object.assign(base, {
         kind: 'line', x: num(l.x1), y: num(l.y1), w: num(l.x2), h: num(l.y2),
-        lineColor: hex(l.color), lineWidth: num(l.width), dash: flag(l.dash), arrowEnd: flag(l.arrowEnd),
+        lineColor: hex(l.color), lineWidth: num(l.width), dash: dash(l.dash), arrowEnd: flag(l.arrowEnd), arrowStart: flag(l.arrowStart),
       });
       break;
     }
@@ -92,20 +102,21 @@ export function shapeRecord(s: Shape, font: string, role = '', name = ''): strin
       const t = s as TextShape;
       Object.assign(base, {
         kind: 'text', x: num(t.x), y: num(t.y), w: num(t.w), h: num(t.h),
-        fill: hex(t.fill), lineColor: hex(t.stroke), lineWidth: t.stroke ? '0.75' : '',
-        text: t.text, font, size: num(t.size), bold: flag(t.bold), color: hex(t.color),
+        fill: hex(t.fill), lineColor: hex(t.stroke), lineWidth: t.stroke ? num(t.strokeWidth ?? 0.75) : '',
+        text: t.text, font: t.font ?? font, size: num(t.size), bold: flag(t.bold), color: hex(t.color),
         align: ALIGN[t.align] ?? 'l', valign: VALIGN[t.valign] ?? 't', textGeom: t.rounded ? 'roundRect' : '',
+        rotate: t.rotate ? String(t.rotate) : '',
       });
       break;
     }
     case 'path': {
-      const p = any as unknown as { commands: PathCmd[]; fill?: string; stroke?: string; strokeWidth?: number; dash?: boolean };
+      const p = any as unknown as { commands: PathCmd[]; fill?: string; stroke?: string; strokeWidth?: number; dash?: boolean | 'dot' };
       const subs = flattenPath(p.commands ?? []); // the same points every renderer draws
       const b = shapeBounds(s);
       Object.assign(base, {
         kind: 'path', x: num(b.x0), y: num(b.y0), w: num(b.x1 - b.x0), h: num(b.y1 - b.y0),
         fill: hex(p.fill), lineColor: hex(p.stroke), lineWidth: p.stroke ? num(p.strokeWidth ?? 0.75) : '',
-        dash: flag(p.dash),
+        dash: dash(p.dash as boolean | 'dot' | undefined), pattern: (any.pattern as string | undefined) ?? '',
         // "x,y x,y ...", sub-paths separated by "|", a trailing "z" marks a closed sub-path.
         points: subs.map((sp) => sp.points.map((p) => `${num(p.x)},${num(p.y)}`).join(' ') + (sp.closed ? ' z' : '')).join('|'),
       });

@@ -66,6 +66,12 @@
   .apply-alert { flex: none; display: flex; align-items: flex-start; gap: 10px; padding: 8px 14px; background: var(--err-soft); color: var(--err); border-bottom: 1px solid currentColor; font-weight: 600; }
   .apply-alert[data-kind="wait"] { background: var(--accent-soft); color: var(--ink); border-color: var(--accent); font-weight: 400; }
   .apply-alert span { flex: 1; min-width: 0; }
+  /* ---- Office task pane (?host=office): 320–420 px wide ---- */
+  body[data-host="office"] .topbar { flex-wrap: wrap; padding: 6px 10px; gap: 6px; }
+  body[data-host="office"] .brand, body[data-host="office"] #applyBtn kbd { display: none; }
+  body[data-host="office"] .session-title { flex-basis: 100%; white-space: normal; }
+  body[data-host="office"] .actions { flex: 1; justify-content: flex-end; flex-wrap: wrap; }
+  body[data-host="office"] .apply-alert { align-items: center; padding: 6px 10px; }
 
   /* ---- App shell: work area (preview over datasheet) + options sidebar ---- */
   .app { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) var(--side); }
@@ -231,17 +237,19 @@
     <button id="addSlide" class="ghost icon" type="button" aria-label="Add slide" data-tip="Duplicate this slide after the current one"><svg class="ico" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg></button>
     <button id="delSlide" class="ghost icon" type="button" aria-label="Delete slide" data-tip="Delete this slide"><svg class="ico" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5"/></svg></button>
   </div>
-  <div class="session-title" data-mode="session" id="sessionTitle">Chart data from PowerPoint</div>
+  <div class="session-title" data-mode="session office" id="sessionTitle">Chart data from PowerPoint</div>
   <div class="actions">
-    <span class="status" id="status" role="status" aria-live="polite" data-mode="session"><span class="dot"></span><span id="statusText">Loading…</span></span>
+    <span class="status" id="status" role="status" aria-live="polite" data-mode="session office"><span class="dot"></span><span id="statusText">Loading…</span></span>
     <button id="importBtn" type="button" data-mode="deck" data-tip="Open a deck or chart JSON file">Import JSON</button>
     <input id="importFile" type="file" accept=".json,application/json" hidden>
     <button id="exportBtn" type="button" data-mode="deck" data-tip="Save the deck as JSON (the source of truth for every chart)">Export JSON</button>
     <button id="downloadBtn" class="primary" type="button" data-mode="deck"><svg class="ico" viewBox="0 0 16 16"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>Download .pptx</button>
     <button id="cancelBtn" type="button" data-mode="session" data-tip="Close without changing the slide (Esc twice)">Cancel</button>
-    <button id="applyBtn" class="primary" type="button" data-mode="session" aria-keyshortcuts="Meta+Enter Control+Enter">Apply to slide <kbd style="color:inherit;border-color:currentColor;opacity:.8">⌘↵</kbd></button>
+    <button id="revertBtn" type="button" data-mode="office" hidden data-tip="Put back the chart as it was before the last Apply">Revert</button>
+    <button id="applyBtn" class="primary" type="button" data-mode="session office" aria-keyshortcuts="Meta+Enter Control+Enter"><span id="applyLabel">Apply to slide</span> <kbd style="color:inherit;border-color:currentColor;opacity:.8">⌘↵</kbd></button>
   </div>
 </header>
+<div class="apply-alert office-banner" id="officeBanner" data-mode="office" data-kind="wait" hidden><span id="officeBannerText"></span><button id="relayoutBtn" class="primary" type="button" hidden>Re-layout to new size</button></div>
 <div class="apply-alert" id="applyAlert" role="alert" hidden><span id="applyAlertText"></span><button id="applyAlertClose" class="ghost" type="button">Dismiss</button></div>
 
 <div class="app">
@@ -520,14 +528,19 @@ const SHEET_HINTS = {
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
 const session = params.get('session') ? { id: params.get('session'), rev: 0, dirty: false } : null;
-let deck = session ? structuredClone(SAMPLE) : load();
+// ?host=office: the Office.js task pane (src/officejs/taskpane.ts) provides window.OC_HOST, which lays
+// charts out in the browser and draws them in PowerPoint (see "Office host" below).
+const office = !session && params.get('host') === 'office' && window.OC_HOST ? window.OC_HOST : null;
+const MODE = session ? 'session' : office ? 'office' : 'deck';
+if (office) document.body.dataset.host = 'office';
+let deck = session || office ? structuredClone(SAMPLE) : load();
 let cur = 0;
 let focusCell = null; // { r, c } of the last focused datasheet cell
 let invalid = new Map(); // "r,c" -> text that is not a number (or point/date) for this chart type
 const cellErrors = new Map(); // "r,c" -> engine validation message for that cell
 let hasError = false;
 
-for (const el of document.querySelectorAll('[data-mode]')) el.hidden = el.dataset.mode !== (session ? 'session' : 'deck');
+for (const el of document.querySelectorAll('[data-mode]')) el.hidden = !el.dataset.mode.split(' ').includes(MODE) || el.id === 'revertBtn' || el.id === 'officeBanner';
 // Numeric inputs take the validator's limits (LIMITS in src/core/spec.ts).
 for (const [k, { min, max, step }] of Object.entries(SPEC.limits)) {
   Object.assign($(k), { min: String(min), max: String(max), step: String(step) });
@@ -551,7 +564,7 @@ function toDeck(d) {
 function load() {
   try { return toDeck(JSON.parse(localStorage.getItem(STORE))); } catch { return structuredClone(SAMPLE); }
 }
-function save() { if (!session) try { localStorage.setItem(STORE, JSON.stringify(deck)); } catch {} }
+function save() { if (!session && !office) try { localStorage.setItem(STORE, JSON.stringify(deck)); } catch {} }
 const slide = () => deck.slides[cur];
 const chart = () => slide().chart;
 const opts = () => (chart().options ??= {});
@@ -612,7 +625,21 @@ function convertData(c, from, to) {
 const unitText = (u) => (u && typeof u === 'object' ? u.text ?? '' : u ?? '');
 
 /** Re-index category references (arrows, waterfall totals) after categories move. map(old) → new index or -1. */
+// Per-element overrides follow their series / category through inserts and deletes (core/overrides.ts remapOverrides).
+function remapOverrides(p, map) {
+  const c = chart();
+  if (!c.overrides) return;
+  const re = new RegExp(`(^|:)${p}(\\d+)(?=:|$)`), out = {};
+  for (const [key, st] of Object.entries(c.overrides)) {
+    const m = re.exec(key);
+    if (!m) { out[key] = st; continue; }
+    const j = map(+m[2]);
+    if (j >= 0) out[key.replace(re, `$1${p}${j}`)] = st;
+  }
+  c.overrides = out;
+}
 function remapCategories(map) {
+  remapOverrides('c', map);
   const o = opts();
   for (const key of ['cagr', 'difference']) {
     if (!o[key]) continue;
@@ -1126,6 +1153,7 @@ function markCellErrors() {
 function insertSeries(at) {
   const c = chart();
   c.series.splice(at, 0, { name: `Series ${c.series.length + 1}`, values: c.categories.map(() => null) });
+  remapOverrides('s', (i) => (i >= at ? i + 1 : i));
   invalid.clear(); changed(true, 'struct');
   moveTo(at, -1);
 }
@@ -1140,6 +1168,7 @@ function insertCategory(at) {
 function deleteSeries(i) {
   const c = chart(); if (c.series.length < 2) return;
   c.series.splice(i, 1);
+  remapOverrides('s', (k) => (k === i ? -1 : k > i ? k - 1 : k));
   invalid.clear(); focusCell = null; sel = null; changed(true, 'struct');
 }
 function deleteCategory(j) {
@@ -1351,7 +1380,7 @@ document.addEventListener('keydown', (e) => {
     if (session) { escArmed = true; setTimeout(() => { escArmed = false; }, 800); }
     return;
   }
-  if (mod && e.key === 'Enter') { e.preventDefault(); if (session) apply(); return; }
+  if (mod && e.key === 'Enter') { e.preventDefault(); if (session || office) apply(); return; }
   if (e.target.closest?.('#colorPop') || e.target.type === 'file') return;
   const k = e.key.toLowerCase();
   if (mod && !e.altKey && k === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); }
@@ -1691,7 +1720,10 @@ function toast(text, warn = false) {
 
 // ---- Add-in session: load, apply, cancel ----------------------------------------------------------
 function setStatus(state, text) { $('status').dataset.state = state; $('statusText').textContent = text; }
-function markDirty() { if (session && !session.loading) { session.dirty = true; setStatus('dirty', 'Unsaved changes'); } }
+function markDirty() {
+  if (session && !session.loading) { session.dirty = true; setStatus('dirty', 'Unsaved changes'); }
+  if (office && !officeLoading) setStatus('dirty', officeMode === 'edit' ? 'Unsaved changes' : 'Not on the slide yet');
+}
 function notifyHost(type) {
   const msg = { type, id: session.id, rev: session.rev };
   try { window.Office?.context?.ui?.messageParent?.(JSON.stringify(msg)); } catch {}
@@ -1724,6 +1756,7 @@ async function slideOutcome(rev) {
 }
 let applying = false;
 async function apply() {
+  if (office) return officeApply();
   if (!session || applying || session.loading) return;
   if (hasError) { toast('Fix the highlighted error before applying', true); return; }
   applying = true;
@@ -1788,6 +1821,65 @@ async function loadSession() {
   moveTo(0, 0); // straight into the datasheet
 }
 
+// ---- Office host (?host=office): insert / apply / revert through window.OC_HOST ------------------------
+// The task pane calls OC_EDITOR.load() when an open-charts chart is selected in PowerPoint and
+// OC_EDITOR.setOffice() whenever the pane's state changes (insert, edit, resized, can revert).
+let officeMode = 'insert', officeLoading = false;
+async function officeHostCall(what, f) {
+  if (applying) return;
+  if (hasError) { toast('Fix the highlighted error first', true); return; }
+  applying = true;
+  const btn = $('applyBtn'), revert = $('revertBtn');
+  btn.disabled = true; revert.disabled = true; $('relayoutBtn').disabled = true;
+  applyAlert('');
+  setStatus('pending', what);
+  try {
+    const r = await f();
+    setStatus('applied', officeMode === 'edit' ? 'On the slide' : 'Inserted');
+    toast(`✓ ${r?.message ?? 'Done'}`);
+  } catch (err) {
+    setStatus('error', 'Not changed');
+    applyAlert(err.message);
+  } finally {
+    applying = false; btn.disabled = false; revert.disabled = false; $('relayoutBtn').disabled = false;
+  }
+}
+function officeApply() {
+  if (officeMode === 'unavailable') { toast('Open this pane from PowerPoint to insert charts', true); return; }
+  return officeHostCall(officeMode === 'edit' ? 'Updating the slide…' : 'Inserting…', () => office.apply(chart()));
+}
+if (office) {
+  $('revertBtn').onclick = () => officeHostCall('Reverting…', () => office.revert());
+  $('relayoutBtn').onclick = () => officeHostCall('Re-laying out…', () => office.relayout());
+  window.OC_EDITOR = {
+    load(c, info = {}) {
+      officeLoading = true;
+      try {
+        deck = toDeck(structuredClone(c));
+        deck.slides[0].title = '';
+        cur = 0; invalid.clear(); sel = null;
+        renderAll(); resetHistory();
+      } finally { officeLoading = false; }
+      setStatus('clean', 'No changes');
+    },
+    setOffice(st) {
+      officeMode = st.mode;
+      $('applyLabel').textContent = st.mode === 'edit' ? 'Apply to slide' : 'Insert on slide';
+      $('applyBtn').toggleAttribute('aria-disabled', st.mode === 'unavailable' || hasError);
+      $('revertBtn').hidden = !(st.mode === 'edit' && st.canRevert);
+      const title = $('sessionTitle');
+      title.replaceChildren();
+      if (st.mode === 'edit') title.append('Editing ', Object.assign(document.createElement('b'), { textContent: st.title || 'chart' }));
+      else title.append(st.mode === 'insert' ? 'New chart: Insert draws it on the current slide' : 'open-charts');
+      const banner = st.resized ? 'This chart was resized: re-layout plans its labels for the new size.' : st.note ?? '';
+      $('officeBanner').hidden = !banner;
+      $('officeBannerText').textContent = banner;
+      $('relayoutBtn').hidden = !st.resized;
+      if (st.mode !== 'edit' && $('status').dataset.state !== 'dirty') setStatus('clean', st.mode === 'insert' ? 'Not on the slide yet' : 'Not in PowerPoint');
+    },
+  };
+}
+
 // ---- Live preview: one request in flight; edits made meanwhile are sent as soon as it returns. ----
 let seq = 0, editAt = 0, inflight = false, dirty = false, lastSvg = '';
 function schedule() {
@@ -1799,10 +1891,14 @@ async function preview() {
   inflight = true; dirty = false;
   const id = seq;
   try {
-    const s = session ? { chart: chart() } : slide();
-    const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [s] }) });
-    if (!res.ok) showError(await errorText(res));
-    else showSlide((await res.json()).slides[0]);
+    const s = session || office ? { chart: chart() } : slide();
+    if (office) {
+      try { showSlide((await office.render({ style: deck.style, slides: [s] })).slides[0]); } catch (err) { showError(err.message); }
+    } else {
+      const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify({ style: deck.style, slides: [s] }) });
+      if (!res.ok) showError(await errorText(res));
+      else showSlide((await res.json()).slides[0]);
+    }
   } catch (err) { showError(`Preview failed: ${err.message}`); }
   inflight = false;
   if (dirty) return preview();
@@ -2000,6 +2096,7 @@ buildGallery();
 applyZoom();
 if (session) loadSession();
 else { renderAll(); resetHistory(); }
+if (office) { setStatus('clean', 'Loading…'); window.OC_EDITOR.setOffice({ mode: 'unavailable', note: 'Connecting to PowerPoint…' }); }
 </script>
 </body>
 </html>

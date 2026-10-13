@@ -4,7 +4,7 @@
 // PowerPoint tags: p:custDataLst → ppt/tags/tagN.xml, visible to VBA Shape.Tags and Office.js.
 import type { PathShape, Scene, Shape, TextShape } from '../core/types.ts';
 import { flattenPath, pathBounds, rectGeom } from '../core/path.ts';
-import { colorHex, colorSlot, DEFAULT_THEME, type ThemeColors } from '../core/theme.ts';
+import { colorHex, colorSlot, colorTheme, DEFAULT_THEME, type ThemeColors } from '../core/theme.ts';
 import type { Tags } from './tags.ts';
 import { zip } from './zip.ts';
 
@@ -44,9 +44,17 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 /** A scene colour as DrawingML: a theme colour (`schemeClr`) when it came from a theme slot, else RGB. */
 export const clrXml = (c: string) => {
   const slot = colorSlot(c);
-  return slot ? `<a:schemeClr val="${slot}"/>` : `<a:srgbClr val="${colorHex(c)}"/>`;
+  if (slot) return `<a:schemeClr val="${slot}"/>`;
+  // A theme colour with a tint / shade (an element override): lumMod / lumOff as PowerPoint writes them.
+  const t = colorTheme(c);
+  if (!t) return `<a:srgbClr val="${colorHex(c)}"/>`;
+  const mod = t.mod ? `<a:lumMod val="${(100 - t.pct) * 1000}"/>${t.mod === 'lighter' && t.pct ? `<a:lumOff val="${t.pct * 1000}"/>` : ''}` : '';
+  return mod ? `<a:schemeClr val="${t.slot}">${mod}</a:schemeClr>` : `<a:schemeClr val="${t.slot}"/>`;
 };
-const fill = (c?: string) => (c ? `<a:solidFill>${clrXml(c)}</a:solidFill>` : '<a:noFill/>');
+const dashXml = (d?: boolean | 'dot') => (d ? `<a:prstDash val="${d === 'dot' ? 'sysDot' : 'dash'}"/>` : '');
+const fill = (c?: string, pattern?: string) => (c
+  ? pattern ? `<a:pattFill prst="${pattern}"><a:fgClr>${clrXml(c)}</a:fgClr><a:bgClr><a:schemeClr val="bg1"/></a:bgClr></a:pattFill>` : `<a:solidFill>${clrXml(c)}</a:solidFill>`
+  : '<a:noFill/>');
 const ln = (c?: string, w = 0.75, extra = '') =>
   c ? `<a:ln w="${e(w)}">${fill(c)}${extra}</a:ln>` : '<a:ln><a:noFill/></a:ln>';
 const nvPr = (tagsRel?: string) =>
@@ -84,13 +92,13 @@ function shapeXml(s: Shape, ids: Ids, font: string, role?: string, addTags?: Add
   const name = esc(shapeName(s, id, role));
   const nv = nvPr(role && addTags ? addTags([['OC_ROLE', role]]) : undefined);
   if (s.kind === 'rect') {
-    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${rectGeom(s)}"><a:avLst/></a:prstGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth)}</p:spPr></p:sp>`;
+    return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(s.x)}" y="${e(s.y)}"/><a:ext cx="${e(s.w)}" cy="${e(s.h)}"/></a:xfrm><a:prstGeom prst="${rectGeom(s)}"><a:avLst/></a:prstGeom>${fill(s.fill, s.pattern)}${ln(s.stroke, s.strokeWidth, dashXml(s.dash))}</p:spPr></p:sp>`;
   }
   if (s.kind === 'path') return pathXml(s, id, name, nv);
   if (s.kind === 'line') {
     const x = Math.min(s.x1, s.x2), y = Math.min(s.y1, s.y2);
     const flip = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
-    const extra = `${s.dash ? '<a:prstDash val="dash"/>' : ''}${s.arrowEnd ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}`;
+    const extra = `${dashXml(s.dash)}${s.arrowStart ? '<a:headEnd type="triangle" w="med" len="med"/>' : ''}${s.arrowEnd ? '<a:tailEnd type="triangle" w="med" len="med"/>' : ''}`;
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvCxnSpPr/>${nv}</p:nvCxnSpPr><p:spPr><a:xfrm${flip}><a:off x="${e(x)}" y="${e(y)}"/><a:ext cx="${e(Math.abs(s.x2 - s.x1))}" cy="${e(Math.abs(s.y2 - s.y1))}"/></a:xfrm><a:prstGeom prst="line"><a:avLst/></a:prstGeom>${ln(s.color, s.width, extra)}</p:spPr></p:cxnSp>`;
   }
   return textXml(s, id, font, name, nv);
@@ -104,18 +112,22 @@ function pathXml(s: PathShape, id: number, name: string, nv: string): string {
   const paths = flattenPath(s.commands).map(({ points, closed }) =>
     `<a:path w="${w}" h="${h}"${s.fill && closed ? '' : ' fill="none"'}><a:moveTo>${pt(points[0])}</a:moveTo>${points.slice(1).map((p) => `<a:lnTo>${pt(p)}</a:lnTo>`).join('')}${closed ? '<a:close/>' : ''}</a:path>`,
   ).join('');
-  const dash = s.dash ? '<a:prstDash val="dash"/>' : '';
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(b.x)}" y="${e(b.y)}"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst>${paths}</a:pathLst></a:custGeom>${fill(s.fill)}${ln(s.stroke, s.strokeWidth, dash)}</p:spPr></p:sp>`;
+  const dash = dashXml(s.dash);
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(b.x)}" y="${e(b.y)}"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst>${paths}</a:pathLst></a:custGeom>${fill(s.fill, s.pattern)}${ln(s.stroke, s.strokeWidth, dash)}</p:spPr></p:sp>`;
 }
 
-function textXml(t: TextShape, id: number, font: string, name: string, nv = '<p:nvPr/>'): string {
+function textXml(t: TextShape, id: number, chartFont: string, name: string, nv = '<p:nvPr/>'): string {
+  // An element's own font (an override; "+mj-lt" / "+mn-lt" name the theme's fonts, as DrawingML does).
+  const font = t.font ?? chartFont;
+  // Turned text (an override): vert270 reads bottom to top (90° left), vert top to bottom (90° right).
+  const vert = t.rotate === -90 ? ' vert="vert270"' : t.rotate === 90 ? ' vert="vert"' : '';
   const anchor = { top: 't', middle: 'ctr', bottom: 'b' }[t.valign];
   const algn = { left: 'l', center: 'ctr', right: 'r' }[t.align];
   const geom = t.rounded ? '<a:prstGeom prst="roundRect"><a:avLst><a:gd name="adj" fmla="val 50000"/></a:avLst></a:prstGeom>' : '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
   const rPr = `<a:rPr lang="en-US" sz="${Math.round(t.size * 100)}"${t.bold ? ' b="1"' : ''} kern="400000" dirty="0">${fill(t.color)}<a:latin typeface="${esc(font)}"/><a:cs typeface="${esc(font)}"/></a:rPr>`;
   const paras = t.text.split('\n').map((line) =>
     `<a:p><a:pPr${paraAttrs(t)} algn="${algn}"><a:lnSpc><a:spcPct val="100000"/></a:lnSpc>${bulletXml(t)}</a:pPr><a:r>${rPr}<a:t>${esc(line)}</a:t></a:r></a:p>`).join('');
-  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr txBox="1"/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(t.x)}" y="${e(t.y)}"/><a:ext cx="${e(t.w)}" cy="${e(t.h)}"/></a:xfrm>${geom}${fill(t.fill)}${ln(t.stroke)}</p:spPr><p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvSpPr txBox="1"/>${nv}</p:nvSpPr><p:spPr><a:xfrm><a:off x="${e(t.x)}" y="${e(t.y)}"/><a:ext cx="${e(t.w)}" cy="${e(t.h)}"/></a:xfrm>${geom}${fill(t.fill)}${ln(t.stroke, t.strokeWidth)}</p:spPr><p:txBody><a:bodyPr${vert} wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${anchor}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${paras}</p:txBody></p:sp>`;
 }
 
 /** Outline level and hanging indent of a list paragraph (agenda headings). */

@@ -6,6 +6,7 @@ import { spread } from './place.ts';
 import { parseCategoryDate } from './dates.ts';
 import { TooSmall } from './minsize.ts';
 import { appliesTo, optionDefaults } from './spec.ts';
+import { pinText, styleMark, styleText, labelContent, type ContentSource, type ElementStyle, type OverrideCtx } from './overrides.ts';
 
 /** Inputs to one layout that come from outside the chart's spec. */
 export interface LayoutHints {
@@ -47,12 +48,14 @@ export interface Ctx {
   hints: LayoutHints;
   /** The chart's own value scale, set by `sharedScale` (same-scale groups compare these). */
   valueScale?: ValueScale;
+  /** Per-element overrides (core/overrides.ts); absent when the chart has none. */
+  ov?: OverrideCtx;
 }
 
 /** Numeric values of a series cell (null and markers such as "e" are not numbers). */
 export const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
-export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer, hints: LayoutHints = {}): Ctx {
+export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer, hints: LayoutHints = {}, ov?: OverrideCtx): Ctx {
   const horizontal = spec.options?.orientation === 'horizontal';
   // seriesLabels is only a starting point here: chart types refine it from the data when it is unset.
   const defaults = {
@@ -70,7 +73,7 @@ export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer
   const shapes: Shape[] = [];
   const roles: string[] = [];
   return {
-    spec, style, frame, m, o, fs, hints,
+    spec, style, frame, m, o, fs, hints, ...(ov ? { ov } : {}),
     minFs: Math.min(fs, 8),
     lh: m.lineHeight(fs),
     pad: fs * 0.4,
@@ -80,7 +83,10 @@ export function makeCtx(spec: ChartSpec, style: Style, frame: Frame, m: Measurer
     decimals,
     scale,
     color: (i) => (spec.series[i]?.color ?? style.palette[i % style.palette.length]).replace('#', ''),
-    add(role, ...list) { for (const s of list) { shapes.push(s); roles.push(role); } },
+    add(role, ...list) {
+      const st = ov?.get(role);
+      for (const s of list) { shapes.push(st ? styleMark(s, st, role, ov!) : s); roles.push(role); }
+    },
     fmt: (v, opts = {}) => formatValue(opts.scaled ? v : v / scale.div, {
       locale: o.locale, decimals, format: o.format, unit: o.unit, magnitude: scale.suffix, ...opts,
     }),
@@ -92,10 +98,36 @@ type TextInput = Omit<TextShape, 'kind' | 'size' | 'color' | 'align' | 'valign'>
 
 export function text(ctx: Ctx, role: string, t: TextInput) {
   const size = t.size ?? ctx.fs;
-  ctx.add(role, {
+  const shape: TextShape = {
     kind: 'text', size, color: ctx.style.text, align: 'center', valign: 'middle',
     lineHeight: ctx.m.lineHeight(size), ...t,
-  });
+  };
+  const st = ctx.ov?.get(role);
+  if (!st) { ctx.add(role, shape); return; }
+  const hasMark = ctx.roles.some((r, i) => r === role && (ctx.shapes[i].kind === 'rect' || ctx.shapes[i].kind === 'path'));
+  // Pushed directly: ctx.add would apply the role's fill / outline to the text a second time.
+  const styled = styleText(shape, st, role, contentSource(ctx), ctx.ov!, ctx.m, hasMark);
+  ctx.shapes.push(st.pin ? pinText(styled, st.pin, ctx.frame) : styled);
+  ctx.roles.push(role);
+}
+
+const contentSource = (ctx: Ctx): ContentSource => ({
+  spec: ctx.spec, decimals: ctx.decimals, pctDecimals: 0,
+  fmt: (v, o) => ctx.fmt(v, o ?? {}), pct: (v, d, signed) => ctx.pct(v, d, signed),
+});
+
+/**
+ * A label as its role's override will draw it — text, size, bold and the measured box (turned when
+ * rotated) — so a chart type can decide inside / outside / hidden on what will really be drawn. Without
+ * an override it is the chart's own text at `size`.
+ */
+export function labelSpec(ctx: Ctx, role: string, own: string, size = ctx.fs, bold = false): { text: string; size: number; bold: boolean; w: number; h: number; st?: ElementStyle } {
+  const st = ctx.ov?.get(role);
+  const t = st ? labelContent(contentSource(ctx), role, st, own) ?? own : own;
+  const sz = st?.size ?? size, b = st?.bold ?? bold;
+  const w = ctx.m.width(t, sz, b), h = t.split('\n').length * ctx.m.lineHeight(sz);
+  const rot = st?.rotate === 90 || st?.rotate === -90;
+  return { text: t, size: sz, bold: b, w: rot ? h : w, h: rot ? w : h, ...(st ? { st } : {}) };
 }
 
 // ---- Category labels: wrap, shrink the whole row one step at a time, then hide (B8) ------------
@@ -118,19 +150,28 @@ export function fitCategories(
 ): CategoryFit {
   const width = (i: number) => (Array.isArray(slot) ? slot[i] : slot) - 2;
   const cats = ctx.spec.categories;
+  // Overridden category labels (core/overrides.ts) wrap and fit at their own text, size and weight;
+  // a turned label stays on one line and needs its line height across the slot, its width down.
+  const ovs = ctx.ov ? cats.map((_, i) => ctx.ov!.get(`label:category:c${i}`)) : [];
+  const txt = cats.map((c, i) => (ovs[i] ? labelSpec(ctx, `label:category:c${i}`, c).text : c));
+  const rot = (i: number) => ovs[i]?.rotate === 90 || ovs[i]?.rotate === -90;
+  const szOf = (i: number, size: number) => ovs[i]?.size ?? size;
+  const bold = (i: number) => ovs[i]?.bold ?? false;
+  const fitsSlot = (l: string[], w: number, i: number, size: number) =>
+    rot(i) ? ctx.m.lineHeight(szOf(i, size)) <= w + 0.01 : fits(l, w, szOf(i, size), ctx.m, bold(i));
   const shrinkFit = (w: (i: number) => number, only: (i: number) => boolean, lineCap = maxLines, from = ctx.fs) => {
     let size = from;
     let lines: string[][] = [];
     for (;;) {
-      lines = cats.map((c, i) => (only(i) ? wrap(c, w(i), size, ctx.m, lineCap) : ['']));
-      const ok = lines.every((l, i) => !only(i) || fits(l, w(i), size, ctx.m));
+      lines = cats.map((_, i) => (!only(i) ? [''] : rot(i) ? [txt[i]] : wrap(txt[i], w(i), szOf(i, size), ctx.m, lineCap, bold(i))));
+      const ok = lines.every((l, i) => !only(i) || fitsSlot(l, w(i), i, size));
       if (ok || size - 1 < ctx.minFs) return { lines, size, ok };
       size -= 1;
     }
   };
   let { lines, size } = shrinkFit(width, () => true);
   const hidden = new Set<number>();
-  lines.forEach((l, i) => { if (!fits(l, width(i), size, ctx.m)) hidden.add(i); });
+  lines.forEach((l, i) => { if (!fitsSlot(l, width(i), i, size)) hidden.add(i); });
   let span = 1;
   if (thin && hidden.size && !Array.isArray(slot) && cats.length > 2 && cats.every((c) => parseCategoryDate(c))) {
     // Thinned labels sit on one line, so a sparser axis is never taller.
@@ -145,8 +186,8 @@ export function fitCategories(
     }
   }
   const lh = ctx.m.lineHeight(size);
-  const n = Math.max(1, ...lines.filter((_, i) => !hidden.has(i)).map((l) => l.length));
-  return { lines, size, lh, height: n * lh + ctx.pad * 0.6, hidden, span };
+  const heights = lines.map((l, i) => (hidden.has(i) ? 0 : rot(i) ? ctx.m.width(txt[i], szOf(i, size), bold(i)) + 2 : l.length * ctx.m.lineHeight(szOf(i, size))));
+  return { lines, size, lh, height: Math.max(lh, ...heights) + ctx.pad * 0.6, hidden, span };
 }
 
 /** Height needed for category labels wrapped into slots of the given width. */

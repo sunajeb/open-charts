@@ -24,6 +24,14 @@ export const bounds = (s: Shape): Box =>
     ? { x: Math.min(s.x1, s.x2), y: Math.min(s.y1, s.y2), w: Math.abs(s.x2 - s.x1), h: Math.abs(s.y2 - s.y1) }
     : s.kind === 'path' ? pathBounds(s) : { x: s.x, y: s.y, w: s.w, h: s.h };
 
+/** Room a text needs on the slide (turned text: its footprint), from the measured lines. */
+export function textNeed(s: TextShape, m: Measurer): { w: number; h: number } {
+  const lines = s.text.split('\n');
+  const w = Math.max(...lines.map((l) => m.width(l, s.size, s.bold)));
+  const h = lines.length * (s.lineHeight ?? m.lineHeight(s.size));
+  return s.rotate ? { w: h, h: w } : { w, h };
+}
+
 export const shrink = (b: Box, d: number): Box => ({ x: b.x + d, y: b.y + d, w: Math.max(0, b.w - 2 * d), h: Math.max(0, b.h - 2 * d) });
 
 /** "bar:s1:c2" / "label:value:s1:c2" → "s1:c2"; "line:s1" → "s1". */
@@ -111,9 +119,7 @@ export function checkScene(scene: Scene, options: number | CheckOptions = {}): I
   if (opts.measurer) {
     const m = opts.measurer;
     for (const { s } of texts) {
-      const lines = s.text.split('\n');
-      const w = Math.max(...lines.map((l) => m.width(l, s.size, s.bold)));
-      const h = lines.length * (s.lineHeight ?? m.lineHeight(s.size));
+      const { w, h } = textNeed(s, m);
       if (w > s.w + tol || h > s.h + tol) {
         issues.push({ kind: 'overflow', detail: `"${s.text}" needs ${w.toFixed(1)}×${h.toFixed(1)} pt, box is ${s.w.toFixed(1)}×${s.h.toFixed(1)}` });
       }
