@@ -31,7 +31,7 @@ Rules for this plan
 - [x] C1 Mac: bundled engine binary (no Node; arm64 + x64) + pop-up helper + .ppam in one per-user .pkg; uninstaller
       (npm run build:mac + check:mac-pkg; first real Installer.app run and PowerPoint registration: live window)
 - [x] C2 Windows: per-user installer (no admin) with the exe + .ppam; silent mode; enterprise MSI for Intune
-      (npm run build:msi, WiX v5; validated in CI only: first CI run pending)
+      (npm run build:msi, WiX v5; CI builds both MSIs and installs/uninstalls them silently: green 2026-10-13)
 - [ ] C3 Signing pipeline in CI: Apple Developer ID + notarization (Mac), Azure Trusted Signing (Windows exe,
       installer, VBA project) — needs owner accounts (Q3)
 - [ ] C4 Office.js production: static https hosting, production manifest, M365 admin-center deployment guide;
