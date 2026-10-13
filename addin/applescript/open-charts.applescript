@@ -8,12 +8,19 @@ property nodePath : "__NODE__"
 property cliPath : "__CLI__"
 property homeDir : "__HOME__"
 
+-- The add-in server answers only requests carrying the install's token (src/addin/token.ts). The
+-- token file holds the header line itself, so curl reads it from the file (-H @file) and the token
+-- never appears on a command line.
+on tokenHeader()
+	return " -H @" & quoted form of (homeDir & "/token")
+end tokenHeader
+
 -- One request in, the engine's line-format response out (src/addin/engine.ts, format.ts).
 on engine(request)
 	set requestText to quoted form of request
 	-- 1. The warm engine: the add-in's local server, if it is running (fast path, no node start-up).
 	try
-		return do shell script "printf '%s' " & requestText & " | /usr/bin/curl -sf --connect-timeout 0.3 --max-time 30 --data-binary @- http://127.0.0.1:4174/api/addin/run" without altering line endings
+		return do shell script "printf '%s' " & requestText & " | /usr/bin/curl -sf --connect-timeout 0.3 --max-time 30 --data-binary @-" & my tokenHeader() & " http://127.0.0.1:4174/api/addin/run" without altering line endings
 	end try
 	-- 2. Cold: answer with a one-off node process and start the server for the next call.
 	try
@@ -27,11 +34,16 @@ on engine(request)
 end engine
 
 -- Starts the warm engine in the background unless it is already up. The add-in calls this as it
--- loads, so the first chart inserted gets the fast path above. Returns at once.
+-- loads, so the first chart inserted gets the fast path above. Returns at once: "OK", or "OK verbose"
+-- when the user turned verbose logging on (`open-charts addin verbose on`, settings.json).
 on startServer(ignored)
 	try
 		set serverCommand to "nohup " & quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin serve"
 		do shell script "{ /usr/bin/curl -sf --connect-timeout 0.3 --max-time 1 http://127.0.0.1:4174/api/addin/ping || " & serverCommand & "; } > /dev/null 2>&1 &"
+		try
+			do shell script "/usr/bin/grep -Eq '\"verbose\": *true' " & quoted form of (homeDir & "/settings.json")
+			return "OK verbose"
+		end try
 		return "OK"
 	on error message
 		return "failed: " & my oneLine(message)
@@ -42,7 +54,7 @@ end startServer
 -- request to the add-in server in the background and returns at once, so PowerPoint never waits.
 on elementSelection(request)
 	try
-		do shell script "printf '%s' " & quoted form of request & " | /usr/bin/curl -sf --connect-timeout 0.3 --max-time 3 --data-binary @- http://127.0.0.1:4174/api/addin/selection > /dev/null 2>&1 &"
+		do shell script "printf '%s' " & quoted form of request & " | /usr/bin/curl -sf --connect-timeout 0.3 --max-time 3 --data-binary @-" & my tokenHeader() & " http://127.0.0.1:4174/api/addin/selection > /dev/null 2>&1 &"
 	end try
 	return ""
 end elementSelection

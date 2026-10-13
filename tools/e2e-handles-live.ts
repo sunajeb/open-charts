@@ -13,7 +13,8 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { addinMain } from '../src/addin/cli.ts';
-import { addinHome } from '../src/addin/server.ts';
+import { addinHome, verboseUntilRestored } from '../src/addin/server.ts';
+import { tokenHeaders } from '../src/addin/token.ts';
 import { buildAddin } from '../src/addin/package.ts';
 
 if (process.platform !== 'darwin') { console.log('macOS only; skipped.'); process.exit(0); }
@@ -30,6 +31,8 @@ const say = (s: string) => { report.push(s); console.log(s); };
 const check = (ok: boolean, what: string) => { if (!ok) failed++; say(`${ok ? 'ok  ' : 'FAIL'} ${what}`); };
 const quit = () => { try { ppt('quit saving no', 60); } catch { /* gone */ } };
 process.on('exit', quit);
+// The HANDLES lines this reads are verbose ones.
+process.on('exit', verboseUntilRestored());
 
 // Mouse events (CGEvent, global top-left points): a tiny Swift tool compiled once.
 const MOUSE_SRC = `import CoreGraphics
@@ -76,7 +79,7 @@ const macro = (proc: string, ...args: string[]) => {
 };
 type State = { id?: string; view?: { k: number; ox: number; oy: number }; options?: Record<string, unknown>; overrides?: Record<string, { pin?: unknown }>; roles?: string[];
   handles?: Array<{ id: string; rect: number[] }>; labels?: Array<{ role: string; rect: number[] }>; overlay?: Record<string, unknown> };
-const state = async (): Promise<State> => (await fetch('http://127.0.0.1:4174/api/addin/handles')).json() as Promise<State>;
+const state = async (): Promise<State> => (await fetch('http://127.0.0.1:4174/api/addin/handles', { headers: tokenHeaders() })).json() as Promise<State>;
 const until = async (ok: (s: State) => boolean, ms = 8000) => {
   let s: State = {};
   for (const end = Date.now() + ms; Date.now() < end; await new Promise((r) => setTimeout(r, 150))) {

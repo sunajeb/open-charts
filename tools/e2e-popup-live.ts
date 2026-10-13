@@ -9,7 +9,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { addinMain } from '../src/addin/cli.ts';
-import { addinHome } from '../src/addin/server.ts';
+import { addinHome, verboseUntilRestored } from '../src/addin/server.ts';
+import { tokenHeaders } from '../src/addin/token.ts';
 import { buildAddin } from '../src/addin/package.ts';
 
 const LOG = join(addinHome(), 'addin.log');
@@ -30,6 +31,8 @@ const report: string[] = [];
 const say = (s: string) => { report.push(s); console.log(s); };
 const quit = () => { try { ppt('quit saving no', 60); } catch { /* gone */ } };
 process.on('exit', quit);
+// The POPUP and timing lines this reads are verbose ones.
+process.on('exit', verboseUntilRestored());
 
 await addinMain(['install'], { register: true });
 const { prefix } = buildAddin();
@@ -50,7 +53,7 @@ macro('Run', 'chart_clustered');
 sleep(1500); // the server (and with it the helper) starts as the ribbon loads; let it preload
 // What reached the slide: the session's chart once the server logged "APPLY … done" (ApplyEdit
 // answered "APPLIED … OK" after drawing it).
-const session = async (id: string) => (await (await fetch(`http://127.0.0.1:4174/api/session/${id}`)).json()) as { state: string; chart: { series: Array<{ values: unknown[] }> } };
+const session = async (id: string) => (await (await fetch(`http://127.0.0.1:4174/api/session/${id}`, { headers: tokenHeaders() })).json()) as { state: string; chart: { series: Array<{ values: unknown[] }> } };
 
 for (let round = 1; round <= 2; round++) {
   macro('SelectChart', '1');

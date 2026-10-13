@@ -32,6 +32,9 @@ Private Const DIRECTIONS As String = ""
 ' Windows: the engine's local server (127.0.0.1 only) and where install.ps1 puts the engine.
 Private Const ENGINE_URL As String = "http://127.0.0.1:4174/api/addin/"
 Private Const ENGINE_EXE As String = "\open-charts\open-charts.exe"
+' The server's per-install token ("X-OC-Token: <hex>", src/addin/token.ts) and the user's settings.
+Private Const TOKEN_FILE As String = "\open-charts\token"
+Private Const SETTINGS_FILE As String = "\open-charts\settings.json"
 Private Const WIN_REINSTALL As String = "Run install.ps1 from the open-charts-win folder again (README, Install on Windows), then restart PowerPoint."
 #If VBA7 Then
 Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
@@ -54,6 +57,8 @@ Private gAutoBusy As Boolean
 Private gAbortAuto As Boolean
 ' Set by the automation entry points: messages are logged instead of shown in a dialog.
 Private gSilent As Boolean
+' The user turned verbose logging on (`open-charts addin verbose on`): Verbose lines are logged too.
+Private gVerbose As Boolean
 Private gLastMessage As String
 ' The chart last opened with Edit data, so Apply in the editor can update it in place.
 Private gEditShape As Object
@@ -102,7 +107,9 @@ Private Sub StartEngine()
     On Error Resume Next
 #If Mac Then
     ignored = AppleScriptTask(SCRIPT_FILE, "startServer", "")
+    gVerbose = (ignored = "OK verbose")
 #Else
+    gVerbose = InStr(Replace(WinReadText(Environ("LOCALAPPDATA") & SETTINGS_FILE), " ", ""), """verbose"":true") > 0
     WinStartServer 0
 #End If
 End Sub
@@ -1183,6 +1190,11 @@ Private Sub Report(ByVal text As String)
 #End If
 End Sub
 
+' A diagnostic line: logged only with verbose logging on (results and errors use Report).
+Private Sub Verbose(ByVal text As String)
+    If gVerbose Then Report text
+End Sub
+
 Private Sub Tell(ByVal text As String)
     gLastMessage = text
     If gSilent Then Exit Sub
@@ -1229,8 +1241,9 @@ Private Function WinStartServer(ByVal waitMs As Long) As Boolean
     Loop
 End Function
 
-' One call to the server: GET for "ping", else POST of body (sent as UTF-8). ok is True on 200; the
-' result is then the response, otherwise what went wrong. Never through a proxy.
+' One call to the server: GET for "ping", else POST of body (sent as UTF-8) with the install's token
+' (the server refuses calls without it). ok is True on 200; the result is then the response,
+' otherwise what went wrong. Never through a proxy.
 Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeoutMs As Long, ByRef ok As Boolean) As String
     Dim http As Object
     ok = False
@@ -1246,6 +1259,7 @@ Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeo
     Else
         http.Open "POST", ENGINE_URL & path, False
         http.setRequestHeader "Content-Type", "text/plain; charset=utf-8"
+        http.setRequestHeader "X-OC-Token", WinToken()
         http.send body
     End If
     If http.Status = 200 Then
@@ -1257,6 +1271,30 @@ Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeo
     Exit Function
 Failed:
     WinHttp = Err.Description
+End Function
+
+' The install's token: the file holds "X-OC-Token: <hex>" ("" when it is missing).
+Private Function WinToken() As String
+    Dim t As String
+    t = Replace(Replace(WinReadText(Environ("LOCALAPPDATA") & TOKEN_FILE), vbCr, ""), vbLf, "")
+    If Left$(t, 12) = "X-OC-Token: " Then WinToken = Trim$(Mid$(t, 13))
+End Function
+
+' A small text file's contents ("" when it cannot be read).
+Private Function WinReadText(ByVal path As String) As String
+    Dim f As Integer
+    On Error GoTo Failed
+    If Dir(path) = "" Then Exit Function
+    f = FreeFile
+    Open path For Binary Access Read As #f
+    WinReadText = Space$(LOF(f))
+    Get #f, , WinReadText
+    Close #f
+    Exit Function
+Failed:
+    WinReadText = ""
+    On Error Resume Next
+    If f <> 0 Then Close #f
 End Function
 
 ' Appends one line to %LOCALAPPDATA%\open-charts\addin.log, as the Mac bridge's logLine does.
@@ -2330,7 +2368,7 @@ Private Sub AgendaAutoCheck()
     If gAbortAuto Then Exit Sub ' a user action arrived meanwhile; check again on the next selection
     If response <> "" Then ApplyAgenda response, ""
     gAgendaSig = AgendaSignature()
-    Report "AGENDA auto-update"
+    Verbose "AGENDA auto-update"
 End Sub
 
 ' A field of a request line: \ tab CR LF escaped as the engine reads them (format.ts unescapeField).

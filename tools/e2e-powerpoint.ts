@@ -14,7 +14,8 @@ import { DEFAULT_THEME, defaultStyle, layoutChart } from '../src/core/index.ts';
 import { buildDeck, chartContent, type DeckSpec } from '../src/deck.ts';
 import { writePptx } from '../src/render/pptx.ts';
 import { decodePng, diffImages, encodePng, type Image } from '../test/goldens/png.ts';
-import { addinHome } from '../src/addin/server.ts';
+import { addinHome, verboseUntilRestored } from '../src/addin/server.ts';
+import { tokenHeaders } from '../src/addin/token.ts';
 import { specKey } from '../src/addin/engine.ts';
 import { buildAddin } from '../src/addin/package.ts';
 import { galleryItems, insertableItems, sampleFor } from '../src/addin/registry.ts';
@@ -28,6 +29,8 @@ const DECK = join(OUT, 'addin.pptx');
 const PNG_DIR = join(OUT, 'png');
 const CLI_PNG_DIR = join(OUT, 'cli-png');
 const LOG = join(addinHome(), 'addin.log');
+// The APPLIED/SYNC lines of an Apply and the timings this reads are verbose ones.
+process.on('exit', verboseUntilRestored());
 
 if (process.platform !== 'darwin') {
   console.log('e2e:powerpoint runs on macOS with PowerPoint installed; skipped.');
@@ -124,11 +127,11 @@ function waitForLog(re: RegExp, from: number, ms = 20_000): string {
 async function applyInEditor(id: string, chart: unknown) {
   const before = logLines().length, t = Date.now();
   // A pooled keep-alive socket may have been closed by the server meanwhile: retry once.
-  const post = () => fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart, state: 'applied' }) });
+  const post = () => fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', headers: tokenHeaders(), body: JSON.stringify({ chart, state: 'applied' }) });
   const rev = (await (await post().catch(post)).json()).rev;
   let outcome: { state: string; rev: number; message?: string } | undefined;
   for (const end = Date.now() + 30_000; Date.now() < end && !(outcome && outcome.rev > rev && ['drawn', 'error'].includes(outcome.state)); sleep(100)) {
-    outcome = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
+    outcome = await fetch(`http://127.0.0.1:4174/api/session/${id}`, { headers: tokenHeaders() }).then((r) => r.json(), () => undefined);
   }
   const ms = Date.now() - t;
   const applied = waitForLog(/APPLIED|APPLY .* (failed|skipped)/, before, 1000);
@@ -191,7 +194,7 @@ if ('spec' in wf && slideOf.waterfall) {
   results.push(macro('Run', 'btnEditData'));
   timings.edit = Date.now() - t;
   const id = specKey(JSON.stringify(wf.spec));
-  const session = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => (r.ok ? r.json() : undefined), () => undefined);
+  const session = await fetch(`http://127.0.0.1:4174/api/session/${id}`, { headers: tokenHeaders() }).then((r) => (r.ok ? r.json() : undefined), () => undefined);
   if (!session) failures.push(`Edit data did not open session ${id} on the add-in server`);
   const edited = structuredClone(wf.spec);
   edited.categories.splice(5, 0, 'One-offs');
@@ -333,11 +336,11 @@ if ('spec' in wf) {
   const running = () => execFileSync('osascript', ['-e', 'application "Microsoft PowerPoint" is running'], { encoding: 'utf8' }).trim() === 'true';
   for (const end = Date.now() + 20_000; Date.now() < end && running(); sleep(250)); // PowerPoint is quitting
   // A pooled keep-alive socket from minutes ago may have been closed by the server: retry once.
-  const post = () => fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart: wf.spec, state: 'applied' }) });
+  const post = () => fetch(`http://127.0.0.1:4174/api/session/${id}`, { method: 'POST', headers: tokenHeaders(), body: JSON.stringify({ chart: wf.spec, state: 'applied' }) });
   const rev = (await (await post().catch(post)).json()).rev;
   let s: { state: string; rev: number; message?: string } | undefined;
   for (const end = Date.now() + 30_000; Date.now() < end && !(s && s.rev > rev && ['drawn', 'error'].includes(s.state)); sleep(100)) {
-    s = await fetch(`http://127.0.0.1:4174/api/session/${id}`).then((r) => r.json(), () => undefined);
+    s = await fetch(`http://127.0.0.1:4174/api/session/${id}`, { headers: tokenHeaders() }).then((r) => r.json(), () => undefined);
   }
   console.log(`Apply with PowerPoint closed: ${s?.state}: ${s?.message}`);
   if (s?.state !== 'error' || !/PowerPoint isn't running/.test(s.message ?? '')) failures.push(`Apply with PowerPoint closed: ${JSON.stringify(s)}`);

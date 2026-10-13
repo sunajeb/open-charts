@@ -58,6 +58,8 @@ if (-not $SkipInstall) {
 $prefix = (Get-Content -LiteralPath (Join-Path $home_ 'addin.json') -Raw | ConvertFrom-Json).prefix
 $exe = Join-Path $home_ 'open-charts.exe'
 Log "callback prefix $prefix"
+# The engine's server answers only callers with the install's token (src/addin/token.ts).
+$auth = @{ 'X-OC-Token' = ((Get-Content -LiteralPath (Join-Path $home_ 'token') -TotalCount 1) -replace '^X-OC-Token: ', '') }
 
 # 2. Gallery items the engine can insert.
 $items = @(& $exe addin types | Where-Object { $_ -match '\savailable$' } | ForEach-Object { ($_ -split '\s+')[0] })
@@ -196,17 +198,17 @@ try {
     $t = Get-Date
     $out = Macro 'Run' @('btnEditData')
     Log "  edit data ($(Ms $t) ms): $out"
-    try { $session = Invoke-RestMethod -Uri "$base/api/session/$id" -TimeoutSec 5; Log "  session $id state $($session.state)" }
+    try { $session = Invoke-RestMethod -Uri "$base/api/session/$id" -Headers $auth -TimeoutSec 5; Log "  session $id state $($session.state)" }
     catch { Failed "edit data: no session $id on the server ($($_.Exception.Message))" }
     $chart = $spec | ConvertFrom-Json
     $chart.categories[1] = 'Edited on Windows'
     $body = ConvertTo-Json -InputObject @{ chart = $chart; state = 'applied' } -Depth 50 -Compress
     $t = Get-Date
-    $rev = (Invoke-RestMethod -Method Post -Uri "$base/api/session/$id" -Body ([Text.Encoding]::UTF8.GetBytes($body)) -ContentType 'application/json' -TimeoutSec 10).rev
+    $rev = (Invoke-RestMethod -Method Post -Uri "$base/api/session/$id" -Headers $auth -Body ([Text.Encoding]::UTF8.GetBytes($body)) -ContentType 'application/json' -TimeoutSec 10).rev
     $s = $null
     $end = (Get-Date).AddSeconds(30)
     while ((Get-Date) -lt $end) {
-      $s = Invoke-RestMethod -Uri "$base/api/session/$id" -TimeoutSec 5
+      $s = Invoke-RestMethod -Uri "$base/api/session/$id" -Headers $auth -TimeoutSec 5
       if ($s.rev -gt $rev -and ($s.state -eq 'drawn' -or $s.state -eq 'error')) { break }
       Start-Sleep -Milliseconds 100
     }
