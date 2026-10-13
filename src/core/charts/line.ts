@@ -75,7 +75,7 @@ export function layoutLine(ctx: Ctx) {
   // Headroom for a label above a point at the top of the scale.
   const py = frame.y + legendH + lh + pad * 0.5 + r;
   const ph = frame.y + frame.h - catH - py - lh * 0.5;
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks, [px, py + ph, px, py]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
   const xOf = (c: number) => px + slot * (c + 0.5);

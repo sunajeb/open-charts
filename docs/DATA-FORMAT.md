@@ -300,6 +300,7 @@ same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optio
 | [`sizeLegend`](#sizelegend) | boolean or caption | bubble | off |
 | [`labelContent`](#labelcontent) | `percent` `value` `both` | pie, doughnut | `percent` |
 | [`scaleGroup`](#scalegroup) | group name | stacked, clustered, waterfall, line, area, combo | none (own scale) |
+| [`axisMax`](#axismax) | number: the value axis reaches at least this high | stacked, clustered, waterfall, line, area, combo | fits the data |
 | [`shades`](#shades) | array of `{from, to, label?}` | gantt | none |
 | [`brackets`](#brackets) | array of `{from, to, label?}` | gantt | none |
 | [`today`](#today) | date | gantt | none |
@@ -418,6 +419,13 @@ data. `true` forces zero in; `false` always fits the data.
 
 Space between columns as a fraction of the column width: `0` makes columns touch, `0.5` (the
 default) leaves half a column between them. From 0 to 10, in the editor too.
+
+#### `axisMax`
+
+The top of the value axis: it reaches at least this value, so the columns or lines leave room
+above them. It only ever adds headroom — a value below the top of the data is ignored, so it never
+cuts a column off. In PowerPoint, drag the handle at the top of the value axis to set it (USER-GUIDE
+"Dragging handles"); `null` or leaving it out fits the axis to the data again.
 
 #### `scaleGroup`
 

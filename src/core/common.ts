@@ -401,18 +401,31 @@ export function axisFormatter(ctx: Ctx, ticks: number[] | null, percent = false)
  * own), stretches the domain away from the baseline so one unit is that long, and returns the ticks
  * that fall inside the stretched domain.
  */
-export function sharedScale(ctx: Ctx, dmin: number, dmax: number, len: number, ticks: number[] | null) {
+export function sharedScale(ctx: Ctx, dmin: number, dmax: number, len: number, ticks: number[] | null, at?: [number, number, number, number]) {
+  // options.axisMax: the axis reaches at least that high (headroom only, never cuts data off).
+  const user = userAxisMax(ctx);
+  if (user !== undefined && user > dmax && dmax >= 0) {
+    dmax = user;
+    const eps = (dmax - dmin) * 1e-9;
+    if (ticks) ticks = niceTicks(dmin, dmax, Math.max(3, ticks.length - 1)).filter((t) => t >= dmin - eps && t <= dmax + eps);
+  }
   const own = len / (dmax - dmin);
-  ctx.valueScale = { min: dmin, max: dmax, ptPerUnit: own, own };
+  ctx.valueScale = { min: dmin, max: dmax, ptPerUnit: own, own, ...(at ? { at } : {}) };
   const target = ctx.hints.ptPerUnit;
   if (!target || !(len > 0) || target >= own * (1 - 1e-9)) return { dmin, dmax, ticks };
   const span = len / target;
   if (dmax > 0 || dmin >= 0) dmax = dmin + span; else dmin = dmax - span;
-  ctx.valueScale = { min: dmin, max: dmax, ptPerUnit: target, own };
+  ctx.valueScale = { min: dmin, max: dmax, ptPerUnit: target, own, ...(at ? { at } : {}) };
   const eps = span * 1e-9;
   const next = ticks ? niceTicks(dmin, dmax, Math.max(3, ticks.length - 1)).filter((t) => t >= dmin - eps && t <= dmax + eps) : null;
   return { dmin, dmax, ticks: next };
 }
+
+/** options.axisMax when the chart type reads it. */
+const userAxisMax = (ctx: Ctx): number | undefined => {
+  const v = ctx.o.axisMax;
+  return typeof v === 'number' && Number.isFinite(v) && appliesTo('axisMax', ctx.spec.type) ? v : undefined;
+};
 
 /**
  * Width of a left value axis: its widest tick label plus padding. In a same-scale group the domain
@@ -422,8 +435,10 @@ export function axisWidth(ctx: Ctx, dmin: number, ticks: number[] | null, fmt: (
   if (!ticks) return 0;
   const widths = ticks.map((t) => ctx.m.width(fmt(t), ctx.fs));
   const target = ctx.hints.ptPerUnit;
-  if (target) {
-    const wide = niceTicks(dmin, dmin + ctx.frame.h / target, Math.max(3, ticks.length - 1));
+  const user = userAxisMax(ctx);
+  for (const top of [target ? dmin + ctx.frame.h / target : undefined, user !== undefined && user > dmin ? user : undefined]) {
+    if (top === undefined) continue;
+    const wide = niceTicks(dmin, top, Math.max(3, ticks.length - 1));
     const wfmt = axisFormatter(ctx, wide, percent);
     widths.push(...wide.map((t) => ctx.m.width(wfmt(t), ctx.fs)));
   }

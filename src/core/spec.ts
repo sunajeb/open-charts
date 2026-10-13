@@ -68,6 +68,7 @@ export const OPTIONS = {
   sizeLegend: { types: ['bubble'], value: 'boolean or caption' },
   labelContent: { types: ['pie', 'doughnut'], value: '`percent` `value` `both`' },
   scaleGroup: { types: ['stacked', 'clustered', 'waterfall', 'line', 'area', 'combo'], value: 'group name', auto: 'none (own scale)' },
+  axisMax: { types: ['stacked', 'clustered', 'waterfall', 'line', 'area', 'combo'], value: 'number: the value axis reaches at least this high', auto: 'fits the data' },
   shades: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   brackets: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   today: { types: ['gantt'], value: 'date', auto: 'none' },
@@ -395,6 +396,7 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
   if (o.today !== undefined && !isDate(o.today)) e.add(p('today'), `must be a date like "2026-03-15", got ${describe(o.today)}`);
   validateDecorations(e, o, type, nCat, series, index);
   if (o.sizeLegend !== undefined && typeof o.sizeLegend !== 'boolean' && typeof o.sizeLegend !== 'string') e.add(p('sizeLegend'), `must be true, false or a caption, got ${describe(o.sizeLegend)}`);
+  if (o.axisMax !== undefined && o.axisMax !== null && (typeof o.axisMax !== 'number' || !Number.isFinite(o.axisMax))) e.add(p('axisMax'), `must be a number, got ${describe(o.axisMax)}`);
   if (o.scaleGroup !== undefined && o.scaleGroup !== null && (typeof o.scaleGroup !== 'string' || !o.scaleGroup)) e.add(p('scaleGroup'), `must be a group name, got ${describe(o.scaleGroup)}`);
 }
 

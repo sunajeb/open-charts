@@ -83,7 +83,7 @@ export function layoutWaterfall(ctx: Ctx) {
   const pw = frame.w - axisW;
   const py = frame.y + legendH + labelH;
   const ph = frame.y + frame.h - catH - belowH - py;
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks, [px, py + ph, px, py]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;

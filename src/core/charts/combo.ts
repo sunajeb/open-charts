@@ -89,7 +89,7 @@ export function layoutCombo(ctx: Ctx) {
   const py = frame.y + legendH + aboveH;
   const below = dmin < 0 ? lh + pad * 0.3 : 0;
   const ph = frame.y + frame.h - catH - below - py;
-  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks));
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, ph, ticks, [px, py + ph, px, py]));
   if (ticks) axisFmt = axisFormatter(ctx, ticks);
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const yOf = (v: number) => py + ph - ((v - dmin) / (dmax - dmin)) * ph;
