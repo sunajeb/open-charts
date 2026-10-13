@@ -16,7 +16,7 @@ export function allCases(): Case[] {
   for (const f of readdirSync(`${root}examples`).filter((f) => f.endsWith('.json')).sort()) {
     const deck = JSON.parse(readFileSync(`${root}examples/${f}`, 'utf8'));
     const slides: { chart?: ChartSpec; charts?: { chart: ChartSpec }[] }[] = Array.isArray(deck.slides) ? deck.slides : [{ chart: deck }];
-    slides.forEach((s, i) => (s.charts?.map((c) => c.chart) ?? [s.chart!]).forEach((chart, k) =>
+    slides.forEach((s, i) => (s.charts?.map((c) => c.chart) ?? (s.chart ? [s.chart] : [])).forEach((chart, k) =>
       out.push({ name: `${f.replace('.json', '')}#${i + 1}${s.charts ? `.${k + 1}` : ''}:${chart.type}`, spec: chart })));
   }
   return out;
