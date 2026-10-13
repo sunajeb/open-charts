@@ -73,6 +73,7 @@ $pres = $ppt.Presentations.Add(-1)
 
 $runMember = [Reflection.BindingFlags]::InvokeMethod
 $ready = $false
+$qualified = $false
 function Macro([string]$proc, [string[]]$macroArgs = @()) {
   $before = (LogLines).Count
   for ($attempt = 1; ; $attempt++) {
@@ -80,8 +81,16 @@ function Macro([string]$proc, [string[]]$macroArgs = @()) {
       $r = [System.__ComObject].InvokeMember('Run', $runMember, $null, $ppt, [object[]](@("${prefix}_$proc") + $macroArgs))
       break
     } catch {
+      $first = $_
+      # The add-in-qualified name, in case this PowerPoint does not find add-in macros by plain name.
+      try {
+        $r = [System.__ComObject].InvokeMember('Run', $runMember, $null, $ppt, [object[]](@("open-charts.ppam!OpenCharts.${prefix}_$proc") + $macroArgs))
+        if (-not $script:qualified) { Log '  (macros run by their add-in-qualified name)' }
+        $script:qualified = $true
+        break
+      } catch { }
       # Right after loading, PowerPoint may still be compiling the add-in's VBA.
-      if ($script:ready -or $attempt -ge 8) { throw }
+      if ($script:ready -or $attempt -ge 8) { throw $first }
       Start-Sleep -Seconds 3
     }
   }
