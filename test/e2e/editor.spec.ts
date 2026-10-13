@@ -5,7 +5,8 @@ import { unzip } from './unzip.ts';
 import { CHART_TYPES } from '../../src/core/spec.ts';
 
 const BASE = () => process.env.E2E_BASE_URL!;
-const PREVIEW_BUDGET_MS = 200;
+// The product target is 200 ms on a user's machine; shared CI runners are slower and noisier.
+const PREVIEW_BUDGET_MS = process.env.CI ? 400 : 200;
 
 let errors: string[] = [];
 let expected400 = false; // set by tests that provoke an engine error on purpose

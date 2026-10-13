@@ -31,7 +31,6 @@
     <SummaryInformation Description="open-charts: consulting-quality charts for PowerPoint" />
     <MajorUpgrade DowngradeErrorMessage="A newer version of open-charts is already installed." />
     <MediaTemplate EmbedCab="yes" />
-    <Property Id="ARPNOMODIFY" Value="1" />
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/sunajeb/open-charts" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="Start PowerPoint (restart it if it is open): the open-charts tab is next to Home." />
     <WixVariable Id="WixUILicenseRtf" Value="$(var.LicenseRtf)" />
