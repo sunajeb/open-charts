@@ -203,6 +203,15 @@ launchctl asuser "$uid" sudo -u "$user" installer -pkg /path/open-charts-<versio
 
 A machine-wide Mac package is not built yet (task C6).
 
+## Beta releases for test users
+
+Push a tag with a pre-release suffix, for example `git tag v1.0.0-beta.1 && git push origin
+v1.0.0-beta.1`. The release workflow builds the same installers and publishes them at once as a
+GitHub **pre-release**, signed or not, with `docs/BETA.md` as its notes: a test-user disclaimer and
+the steps past macOS's and Windows' warnings for unsigned software. The update check never offers a
+pre-release. Share the release page link with testers; feedback comes back through issues and
+**Help › Report a problem**.
+
 ## Updates
 
 **Today (client side, off by default).**

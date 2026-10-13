@@ -6,7 +6,10 @@ name: release
 #   SHA256SUMS.txt
 # Signed when the signing secrets exist (docs/release.md, "Signing"), unsigned otherwise; an
 # unsigned release says so in its notes and must stay a draft: the update check (src/update.ts)
-# only ever sees published releases. workflow_dispatch builds the same files without a release.
+# only ever sees published releases. A beta tag (v1.2.3-beta.1: anything with a "-") is published
+# at once as a PRE-RELEASE for test users, signed or not, with docs/BETA.md as its notes (install
+# steps past the unsigned warnings); the update check never offers pre-releases.
+# workflow_dispatch builds the same files without a release.
 on:
   push:
     tags: ['v*']
@@ -124,11 +127,24 @@ jobs:
     env:
       SIGNED: ${{ secrets.APPLE_INSTALLER_ID != '' && secrets.AZURE_TRUSTED_SIGNING_ACCOUNT != '' }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: docs/BETA.md
+          sparse-checkout-cone-mode: false
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
+      - name: Beta pre-release (published, for test users)
+        if: contains(github.ref_name, '-')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd out
+          sha256sum * > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --prerelease --title "open-charts ${GITHUB_REF_NAME#v} (beta)" --notes-file ../docs/BETA.md *
       - name: Draft release
+        if: ${{ !contains(github.ref_name, '-') }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
