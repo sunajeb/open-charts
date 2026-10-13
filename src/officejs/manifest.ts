@@ -11,8 +11,21 @@ export const DEFAULT_BASE = 'https://localhost:4175';
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
+/**
+ * The add-in's base URL as the manifest uses it: absolute https (Office loads add-ins over https
+ * only), no query or fragment, ending in "/". A path is kept (https://example.org/open-charts/).
+ */
+export function normalizeBase(base: string): string {
+  let url: URL;
+  try { url = new URL(base); } catch { throw new Error(`--base ${base}: not a URL (expected e.g. https://example.org/open-charts/)`); }
+  if (url.protocol !== 'https:') throw new Error(`--base ${base}: must be https (Office loads add-ins over https only)`);
+  if (url.search || url.hash || url.username || url.password) throw new Error(`--base ${base}: no query, fragment or credentials`);
+  return url.href.endsWith('/') ? url.href : `${url.href}/`;
+}
+
 export function manifestXml(base = DEFAULT_BASE, version = `${ENGINE_VERSION}.0`): string {
-  const u = (p: string) => esc(`${base.replace(/\/$/, '')}/${p}`);
+  const root = normalizeBase(base);
+  const u = (p: string) => esc(root + p);
   const icons = '<bt:Image size="16" resid="Icon.16"/><bt:Image size="32" resid="Icon.32"/><bt:Image size="80" resid="Icon.80"/>';
   return `<?xml version="1.0" encoding="UTF-8"?>
 <OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
@@ -30,7 +43,7 @@ export function manifestXml(base = DEFAULT_BASE, version = `${ENGINE_VERSION}.0`
   <HighResolutionIconUrl DefaultValue="${u('assets/icon-64.png')}"/>
   <SupportUrl DefaultValue="${u('support.html')}"/>
   <AppDomains>
-    <AppDomain>${esc(base.replace(/\/$/, ''))}</AppDomain>
+    <AppDomain>${esc(new URL(root).origin)}</AppDomain>
   </AppDomains>
   <Hosts>
     <Host Name="Presentation"/>
