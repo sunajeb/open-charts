@@ -44,7 +44,7 @@ const TYPE_NAMES: Record<ChartSpec['type'], string> = {
 };
 
 export function altText(chart: ChartSpec): string {
-  return `${TYPE_NAMES[chart.type]} of ${chart.series.map((s) => s.name).join(', ')} across ${chart.categories.join(', ')}`;
+  return `${TYPE_NAMES[chart.type]} of ${chart.series.filter((s) => !s.hidden).map((s) => s.name).join(', ')} across ${chart.categories.join(', ')}`;
 }
 
 /** The charts of a slide with their frames: `chart` fills the chart area; `charts` without frames split it into equal columns. */

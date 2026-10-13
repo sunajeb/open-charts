@@ -15,7 +15,7 @@ const m = createMeasurer();
 const F = CHART_FRAME;
 const byRole = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.roles![i]));
 const textsOf = (s: Scene, re: RegExp) => byRole(s, re).filter((x): x is TextShape => x.kind === 'text').map((t) => t.text);
-const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|leader:s\d+:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+|legend:size|bracket:\d+|today)$/;
+const ROLE = /^(bar:s\d+:c\d+|label:value:s\d+:c\d+|label:total:c\d+|label:category:c\d+|label:series:s\d+|axis|axis:tick:\d+|gridline:\d+|arrow:(cagr|diff)|arrow:level:\d+|valueline:\d+|indicator|break:(axis|cat:\d+|s\d+:c\d+)|axis:secondary|axis:secondary:tick:\d+|connector:c\d+|legend:s\d+|marker:s\d+:c\d+|line:s\d+|area:s\d+|wedge:s\d+:c\d+|leader:c\d+|leader:s\d+:c\d+|legend:c\d+|ball:s\d+:c\d+|label:total|shade:\d+|legend:size|bracket:\d+|today)$/;
 
 const base = (type: ChartSpec['type'], options: ChartSpec['options'] = {}): ChartSpec => ({
   type, categories: ['2021', '2022', '2023', '2024'],
@@ -331,6 +331,8 @@ const SAMPLE_OPTION: Record<string, unknown> = {
   combo: 'clustered', mekko: 'unit', sort: 'reverse', axisTitles: { x: 'x' }, sizeLegend: true,
   labelContent: 'value', shades: [{ from: '2026-01-01', to: '2026-02-01' }],
   brackets: [{ from: '2026-01-01', to: '2026-02-01' }], today: '2026-01-15', scaleGroup: 'a',
+  levelArrows: [{ from: { category: 0, series: 0 }, to: { category: 1, series: 0 } }], valueLines: [{ value: 1 }],
+  percentIndicator: 'left', percentBase: [1, 1], categoryGaps: [0], categoryBreaks: [0], axisBreak: { from: 1, to: 2 }, secondaryAxis: [0],
 };
 
 test('options: every option on a type that does not read it is a path-addressed error', () => {

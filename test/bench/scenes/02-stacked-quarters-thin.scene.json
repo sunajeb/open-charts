@@ -91,7 +91,7 @@
     {"role":"label:series:s2","kind":"text","size":12,"color":"222222@tx1","align":"left","valign":"middle","lineHeight":13.8,"x":796.3,"y":153.9,"w":115.4,"h":13.8,"text":"Professional services","textRole":"series"},
     {"role":"label:series:s1","kind":"text","size":12,"color":"222222@tx1","align":"left","valign":"middle","lineHeight":13.8,"x":796.3,"y":193.7,"w":36.7,"h":13.8,"text":"Usage","textRole":"series"},
     {"role":"label:series:s0","kind":"text","size":12,"color":"222222@tx1","align":"left","valign":"middle","lineHeight":13.8,"x":796.3,"y":354.5,"w":68,"h":13.8,"text":"Subscription","textRole":"series"},
-    {"role":"arrow:diff","kind":"line","x1":95.5,"y1":234.3,"x2":95.5,"y2":106.7,"color":"7F7F7F","width":0.8},
+    {"role":"arrow:diff","kind":"line","x1":95.5,"y1":106.7,"x2":95.5,"y2":234.3,"color":"7F7F7F","width":0.8,"arrowEnd":true},
     {"role":"arrow:diff","kind":"line","x1":95.5,"y1":106.7,"x2":759.8,"y2":106.7,"color":"7F7F7F","width":0.8},
     {"role":"arrow:diff","kind":"line","x1":759.8,"y1":106.7,"x2":759.8,"y2":116.5,"color":"7F7F7F","width":0.8,"arrowEnd":true},
     {"role":"arrow:diff","kind":"text","size":12,"color":"222222@tx1","align":"center","valign":"middle","lineHeight":13.8,"x":402.3,"y":99.1,"w":50.6,"h":15.2,"text":"+33.9m","bold":true,"fill":"FFFFFF@bg1","stroke":"7F7F7F","rounded":true,"textRole":"decoration"},

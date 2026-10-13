@@ -9,7 +9,7 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [The datasheet](#the-datasheet)
 - [Chart types](#chart-types)
 - [Numbers: units, decimals, magnitudes, separators](#numbers-units-decimals-magnitudes-separators)
-- [Decorations: totals, CAGR and difference arrows](#decorations-totals-cagr-and-difference-arrows)
+- [Decorations: totals, arrows, value lines, gaps and breaks](#decorations-totals-arrows-value-lines-gaps-and-breaks)
 - [Colours and your deck's theme](#colours-and-your-decks-theme)
 - [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
 - [Resizing](#resizing)
@@ -90,7 +90,14 @@ The datasheet is the same in the add-in's **Edit data** window and in the standa
   cell they concern.
 - **+ Series / + Category** add a row or column; **− Series / − Category** delete the one of the
   selected cell. Right-click a cell for insert left/right/above/below, delete, copy and clear.
-- **Transpose** swaps rows and columns; **Reverse series** flips the row order.
+- **Hide a row** (optional rows): click the eye left of a series name, or right-click a cell and
+  pick *Hide series*. The row turns grey and striped, and the chart is drawn as if it were not
+  there — totals, shares, the axis and the legend only count visible rows — but its numbers stay in
+  the sheet and in the saved chart. Click the eye again to bring it back. The other rows keep their
+  colours. At least one row stays visible, and rows a chart reads by position (a Gantt chart's Start
+  and End, a Mekko XY chart's widths) always show. Pie and doughnut charts draw the first visible row.
+- **Transpose** swaps rows and columns (rows it creates start visible); **Reverse series** flips the
+  row order.
 - **Undo / redo** work for everything: typing, pasting, options, type changes.
 - **Chart type** is a gallery at the top of the options panel. Switching type keeps your data where
   the shapes match (numbers stay numbers). Switching between numbers, points (scatter/bubble) and
@@ -303,7 +310,7 @@ stay whole. Shares in 100%, Mekko and pie charts are rounded together so they al
 exactly 100%, and stacked segment labels add up exactly to their total. Negative numbers use a real
 minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail of format codes.
 
-## Decorations: totals, CAGR and difference arrows
+## Decorations: totals, arrows, value lines, gaps and breaks
 
 - **Totals**: the sum above each column. On by default for stacked, Mekko and Mekko XY charts;
   available on 100%, combination (stacked), stacked area and doughnut (in the hole).
@@ -312,7 +319,28 @@ minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail 
   `Jan 2024`, `2025E` all work), or, if the labels aren't dates, the number of columns between them.
   **Years** overrides that number (e.g. `2.5`); empty = automatic. Both totals must be positive;
   otherwise the arrow is left out and reported.
-- **Difference arrow** (stacked and 100%): the signed difference between two column totals.
+- **Difference arrow** (stacked and 100%): a bracket between two column totals. **Mode**: *Absolute*
+  (↔, the signed difference; the default), *Relative* (→, the change in percent) or *Reverse* (←, the
+  change in percent the other way).
+- **Level arrows** (stacked, clustered, 100%, line): **+ Level arrow** adds a row: the two ends (a
+  category and a series — the top of that segment, bar or point — or *Total* for the column total),
+  the mode (relative by default) and where it sits: *Beside* the later column or *Between* the two.
+  Dotted guides run from each level to the arrow; a short arrow gets its bubble beside it.
+- **Value lines** (stacked, clustered, line): **+ Value line** adds a dashed line at a value or at
+  *mean* (the average column total; a clustered chart's bars), labelled on the right or left, e.g.
+  `Ø 27.8`, or with your own label (`{value}` inserts the number).
+- **100% indicator** (100%): the "← 100%" marker beside the chart, on by default; right, left or none.
+- **100%=** (100%): tick **100%= row** to add it to the datasheet: the value each
+  column's shares are taken of. With **Values are %**, it is the absolute value behind 100%, and the
+  totals show it.
+- **Category gaps** and **Category breaks** (column, bar, waterfall, combination): tick the categories
+  after which an extra gap of one column slot, or a break symbol on the baseline, goes.
+- **Axis break** (stacked, clustered): compress the value range *from*–*to* so a few very tall columns
+  don't flatten the rest; *Straight* or *Wiggle*. No segment may end inside the range.
+- **Secondary axis** (combination): tick the lines read against a second value axis on the right.
+
+Decorations never cover a label: an arrow, value line label or indicator that finds no free room is
+left out and listed under hidden labels.
 - **Total columns** (waterfall): which categories stand on the baseline.
 
 ## Colours and your deck's theme

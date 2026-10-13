@@ -19,7 +19,7 @@ export const CHART_TYPES = [
   'combo', 'mekkoxy', 'scatter', 'bubble', 'table', 'gantt',
 ] as const;
 export const CHART_KEYS = ['$schema', 'specVersion', 'type', 'categories', 'series', 'options', 'style'] as const;
-export const SERIES_KEYS = ['name', 'values', 'color', 'as'] as const;
+export const SERIES_KEYS = ['name', 'values', 'color', 'as', 'hidden'] as const;
 export type ChartTypeName = typeof CHART_TYPES[number];
 const except = (...types: ChartTypeName[]) => CHART_TYPES.filter((t) => !types.includes(t));
 
@@ -56,7 +56,7 @@ export const OPTIONS = {
   seriesLabels: { types: except('harvey', 'table'), value: '`right` `legend` `none`', auto: 'chosen per type and data' },
   totals: { types: ['stacked', 'percent', 'mekko', 'area', 'doughnut', 'combo', 'mekkoxy'], value: 'boolean' },
   cagr: { types: ['stacked', 'percent'], value: '`{from, to, years?}` or `null`', auto: 'none' },
-  difference: { types: ['stacked', 'percent'], value: '`{from, to}` or `null`', auto: 'none' },
+  difference: { types: ['stacked', 'percent'], value: '`{from, to, mode?}` or `null`', auto: 'none' },
   totalsAt: { types: ['waterfall'], value: 'array of category indices', auto: 'the first category and the `"e"` cells, else first and last' },
   step: { types: ['line'], value: 'boolean' },
   percentData: { types: ['percent'], value: 'boolean' },
@@ -70,6 +70,14 @@ export const OPTIONS = {
   shades: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   brackets: { types: ['gantt'], value: 'array of `{from, to, label?}`', auto: 'none' },
   today: { types: ['gantt'], value: 'date', auto: 'none' },
+  levelArrows: { types: ['stacked', 'clustered', 'percent', 'line'], value: 'array of `{from, to, mode?, position?}`', auto: 'none' },
+  valueLines: { types: ['stacked', 'clustered', 'line'], value: 'array of `{value, label?, position?}`', auto: 'none' },
+  percentIndicator: { types: ['percent'], value: '`left` `right` `none`', auto: 'right; left when series names are on the right, none if a value axis is there too' },
+  percentBase: { types: ['percent'], value: 'array of numbers or `null`, one per category', auto: 'each column\'s sum' },
+  categoryGaps: { types: ['stacked', 'clustered', 'percent', 'waterfall', 'combo'], value: 'array of category indices', auto: 'none' },
+  categoryBreaks: { types: ['stacked', 'clustered', 'percent', 'waterfall', 'combo'], value: 'array of category indices', auto: 'none' },
+  axisBreak: { types: ['stacked', 'clustered'], value: '`{from, to, style?}` or `null`', auto: 'none' },
+  secondaryAxis: { types: ['combo'], value: 'array of series indices', auto: 'none' },
 } as const satisfies Record<keyof ChartOptions, OptionInfo>;
 export type OptionKey = keyof typeof OPTIONS;
 export const OPTION_KEYS = Object.keys(OPTIONS) as OptionKey[];
@@ -217,6 +225,7 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
         e.add(['series', i, 'values'], `has ${s.values.length} values but there are ${nCat} categories`);
       }
       if (s.as !== undefined && s.as !== 'column' && s.as !== 'line') e.add(['series', i, 'as'], `must be "column" or "line", got ${describe(s.as)}`);
+      if (s.hidden !== undefined && typeof s.hidden !== 'boolean') e.add(['series', i, 'hidden'], `must be true or false, got ${describe(s.hidden)}`);
       s.values.forEach((v, j) => {
         const at = ['series', i, 'values', j];
         if (v === null) return;
@@ -234,7 +243,7 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
 
   if (spec.options !== undefined) {
     if (!isObj(spec.options)) e.add(['options'], 'must be an object');
-    else validateOptions(e, spec.options, type as string, nCat);
+    else validateOptions(e, spec.options, type as string, nCat, Array.isArray(spec.series) ? spec.series : []);
   }
   if (spec.style !== undefined) validateStyle(e, spec.style);
   return e.list;
@@ -266,7 +275,7 @@ function validateStyle(e: Errors, st: unknown) {
     else {
       const sub = new Errors(`${e.base}/style`);
       // The same rules as the chart options of the same names (paths "/style/numbers/<key>").
-      validateOptions(sub, Object.fromEntries(Object.entries(st.numbers).filter(([k]) => (STYLE_NUMBER_KEYS as readonly string[]).includes(k))), '', -1, 'numbers');
+      validateOptions(sub, Object.fromEntries(Object.entries(st.numbers).filter(([k]) => (STYLE_NUMBER_KEYS as readonly string[]).includes(k))), '', -1, [], 'numbers');
       e.list.push(...sub.list);
       e.unknown(st.numbers, STYLE_NUMBER_KEYS, ['style', 'numbers']);
     }
@@ -274,7 +283,7 @@ function validateStyle(e: Errors, st: unknown) {
 }
 const THEME_SLOT_KEYS = ['accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6', 'dk1', 'lt1', 'dk2', 'lt2'] as const;
 
-function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nCat: number, at = 'options') {
+function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nCat: number, series: unknown[], at = 'options') {
   const p = (k: string, ...rest: (string | number)[]) => [at, k, ...rest];
   e.unknown(o, OPTION_KEYS, [at]);
   // One rule for every option: the chart type reads it, or it is an error (null = "none" is accepted).
@@ -303,7 +312,8 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
     const r = o[k];
     if (r === undefined || r === null) continue;
     if (!isObj(r)) { e.add(p(k), 'must be {from, to} or null'); continue; }
-    e.unknown(r, k === 'cagr' ? ['from', 'to', 'years'] : ['from', 'to'], p(k));
+    e.unknown(r, k === 'cagr' ? ['from', 'to', 'years'] : ['from', 'to', 'mode'], p(k));
+    if (k === 'difference' && r.mode !== undefined && !DIFF_MODES.includes(r.mode as never)) e.add(p(k, 'mode'), `must be one of ${DIFF_MODES.join(', ')}, got ${describe(r.mode)}`);
     const ok = index(r.from, p(k, 'from')) && index(r.to, p(k, 'to'));
     if (ok && r.from === r.to) e.add(p(k, 'to'), '"from" and "to" must be different categories');
     else if (ok && (r.from as number) > (r.to as number)) e.add(p(k, 'to'), '"to" must come after "from"');
@@ -364,8 +374,89 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
     });
   }
   if (o.today !== undefined && !isDate(o.today)) e.add(p('today'), `must be a date like "2026-03-15", got ${describe(o.today)}`);
+  validateDecorations(e, o, type, nCat, series, index);
   if (o.sizeLegend !== undefined && typeof o.sizeLegend !== 'boolean' && typeof o.sizeLegend !== 'string') e.add(p('sizeLegend'), `must be true, false or a caption, got ${describe(o.sizeLegend)}`);
   if (o.scaleGroup !== undefined && o.scaleGroup !== null && (typeof o.scaleGroup !== 'string' || !o.scaleGroup)) e.add(p('scaleGroup'), `must be a group name, got ${describe(o.scaleGroup)}`);
+}
+
+const DIFF_MODES = ['relative', 'absolute', 'reverse'] as const;
+
+/** levelArrows, valueLines, percentIndicator, percentBase, categoryGaps / Breaks, axisBreak, secondaryAxis. */
+function validateDecorations(e: Errors, o: Record<string, unknown>, type: string, nCat: number, series: unknown[], index: (v: unknown, path: (string | number)[]) => boolean) {
+  const p = (k: string, ...rest: (string | number)[]) => ['options', k, ...rest];
+  const nSer = series.length;
+  const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+  const nVl = Array.isArray(o.valueLines) ? o.valueLines.length : 0;
+  if (o.valueLines !== undefined) {
+    if (!Array.isArray(o.valueLines)) e.add(p('valueLines'), 'must be an array of {value, label, position}');
+    else o.valueLines.forEach((vl, i) => {
+      if (!isObj(vl)) { e.add(p('valueLines', i), 'must be {value, label, position}'); return; }
+      e.unknown(vl, ['value', 'label', 'position'], p('valueLines', i));
+      if (vl.value === 'mean') { if (type === 'line') e.add(p('valueLines', i, 'value'), 'line charts: give a number (the mean is of column totals)'); }
+      else if (!finite(vl.value)) e.add(p('valueLines', i, 'value'), `must be a number or "mean", got ${describe(vl.value)}`);
+      if (vl.label !== undefined && typeof vl.label !== 'string') e.add(p('valueLines', i, 'label'), 'must be a string');
+      if (vl.position !== undefined && vl.position !== 'left' && vl.position !== 'right') e.add(p('valueLines', i, 'position'), `must be "left" or "right", got ${describe(vl.position)}`);
+    });
+  }
+  if (o.levelArrows !== undefined) {
+    if (!Array.isArray(o.levelArrows)) e.add(p('levelArrows'), 'must be an array of {from, to, mode, position}');
+    else o.levelArrows.forEach((a, i) => {
+      const at = p('levelArrows', i);
+      if (!isObj(a)) { e.add(at, 'must be {from, to, mode, position}'); return; }
+      e.unknown(a, ['from', 'to', 'mode', 'position'], at);
+      const ends = (['from', 'to'] as const).map((k) => {
+        const end = a[k];
+        if (!isObj(end)) { e.add([...at, k], 'must be {category, series} or {valueLine}'); return null; }
+        if (end.valueLine !== undefined) {
+          e.unknown(end, ['valueLine'], [...at, k]);
+          if (!isInt(end.valueLine) || end.valueLine < 0 || end.valueLine >= nVl) e.add([...at, k, 'valueLine'], nVl ? `must be a value line index 0–${nVl - 1}, got ${describe(end.valueLine)}` : 'the chart has no value lines (options.valueLines)');
+          return 'vl';
+        }
+        e.unknown(end, ['category', 'series'], [...at, k]);
+        index(end.category, [...at, k, 'category']);
+        if (end.series === undefined) { if (type === 'clustered' || type === 'line') e.add([...at, k, 'series'], `${type} charts: say which series (a bar / point)`); }
+        else if (!isInt(end.series) || end.series < 0 || end.series >= nSer) e.add([...at, k, 'series'], `must be a series index 0–${nSer - 1}, got ${describe(end.series)}`);
+        return `${end.category}:${end.series}`;
+      });
+      if (ends[0] === 'vl' && ends[1] === 'vl') e.add(at, 'at least one end must be a segment or point');
+      else if (ends[0] && ends[0] !== 'vl' && ends[0] === ends[1]) e.add([...at, 'to'], '"from" and "to" must be different');
+      if (a.mode !== undefined && !DIFF_MODES.includes(a.mode as never)) e.add([...at, 'mode'], `must be one of ${DIFF_MODES.join(', ')}, got ${describe(a.mode)}`);
+      if (a.position !== undefined && a.position !== 'beside' && a.position !== 'between') e.add([...at, 'position'], `must be "beside" or "between", got ${describe(a.position)}`);
+    });
+  }
+  if (o.percentIndicator !== undefined && !['left', 'right', 'none'].includes(o.percentIndicator as string)) e.add(p('percentIndicator'), `must be one of left, right, none, got ${describe(o.percentIndicator)}`);
+  if (o.percentBase !== undefined) {
+    if (!Array.isArray(o.percentBase)) e.add(p('percentBase'), 'must be an array with one number (or null) per category');
+    else {
+      if (nCat >= 0 && o.percentBase.length !== nCat) e.add(p('percentBase'), `has ${o.percentBase.length} values but there are ${nCat} categories`);
+      o.percentBase.forEach((v, i) => { if (v !== null && !(finite(v) && v > 0)) e.add(p('percentBase', i), `must be a positive number or null, got ${describe(v)}`); });
+    }
+  }
+  for (const k of ['categoryGaps', 'categoryBreaks'] as const) {
+    const list = o[k];
+    if (list === undefined) continue;
+    if (!Array.isArray(list)) { e.add(p(k), 'must be an array of category indices'); continue; }
+    list.forEach((v, i) => {
+      if (index(v, p(k, i)) && nCat >= 0 && v === nCat - 1) e.add(p(k, i), `goes after a category, so ${nCat - 1} (the last) has nothing to separate`);
+    });
+  }
+  if (o.axisBreak !== undefined && o.axisBreak !== null) {
+    const b = o.axisBreak;
+    if (!isObj(b)) e.add(p('axisBreak'), 'must be {from, to, style} or null');
+    else {
+      e.unknown(b, ['from', 'to', 'style'], p('axisBreak'));
+      for (const k of ['from', 'to']) if (!finite(b[k])) e.add(p('axisBreak', k), `must be a number, got ${describe(b[k])}`);
+      if (finite(b.from) && finite(b.to) && b.to <= b.from) e.add(p('axisBreak', 'to'), '"to" must be greater than "from"');
+      if (b.style !== undefined && b.style !== 'straight' && b.style !== 'wiggle') e.add(p('axisBreak', 'style'), `must be "straight" or "wiggle", got ${describe(b.style)}`);
+    }
+  }
+  if (o.secondaryAxis !== undefined) {
+    if (!Array.isArray(o.secondaryAxis)) e.add(p('secondaryAxis'), 'must be an array of series indices');
+    else o.secondaryAxis.forEach((v, i) => {
+      if (!isInt(v) || v < 0 || v >= nSer) e.add(p('secondaryAxis', i), `must be a series index 0–${nSer - 1}, got ${describe(v)}`);
+      else if (!isObj(series[v]) || (series[v] as { as?: unknown }).as !== 'line') e.add(p('secondaryAxis', i), `series ${v} is drawn as columns; only a line ("as": "line") can use the secondary axis`);
+    });
+  }
 }
 
 const isDate = (v: unknown): v is string => typeof v === 'string' && parseCategoryDate(v) !== null;
@@ -381,6 +472,12 @@ function checkPoint(e: Errors, v: unknown, at: (string | number)[], n: number) {
 
 /** Rules on the series as a whole that depend on the chart type. */
 function checkTypeSeries(e: Errors, type: string, series: unknown[]) {
+  // Hidden rows: something must stay visible, and rows a chart type reads by position cannot hide.
+  const hidden = (s: unknown) => isObj(s) && s.hidden === true;
+  if (series.length && series.every(hidden)) e.add(['series'], 'every series is hidden; show at least one');
+  const fixed = type === 'gantt' ? ['Start', 'End'] : type === 'mekkoxy' ? ['width'] : [];
+  fixed.forEach((what, i) => { if (hidden(series[i])) e.add(['series', i, 'hidden'], `the ${what} series of a ${type === 'gantt' ? 'Gantt' : 'Mekko XY'} chart cannot be hidden`); });
+  if (type === 'mekkoxy' && series.length >= 2 && !hidden(series[0]) && series.slice(1).every(hidden)) e.add(['series'], 'Mekko XY needs at least one visible height series');
   if (type === 'mekkoxy' && series.length < 2) e.add(['series'], 'Mekko XY needs a width series (the first) and at least one height series');
   if (type === 'gantt') {
     if (series.length < 2) { e.add(['series'], 'Gantt needs a Start series (the first) and an End series (the second); further series are milestones'); return; }

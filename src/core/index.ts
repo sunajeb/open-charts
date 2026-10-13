@@ -5,6 +5,7 @@ export type { LayoutHints } from './common.ts';
 import { resolveColor, resolveStyle, themeOf } from './theme.ts';
 import { appliesTo, prepareSpec } from './spec.ts';
 import { resolveCollisions } from './resolve.ts';
+import { restoreRoles, visibleSeries } from './visible.ts';
 import { minimumSize, placeholder, TooSmall } from './minsize.ts';
 import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
@@ -80,18 +81,22 @@ const layouts: Record<ChartSpec['type'], Layout> = {
  * Lay out one chart. Below the chart type's minimum size (see `minimumSize`) the scene is a "too small"
  * placeholder (frame outline + message, role `placeholder`) and `hidden` says how large to make it.
  * Labels that still collide after the chart type has fitted them are hidden and reported (resolve.ts).
+ * Series marked `hidden` are left out of the layout (roles keep their index in the spec).
  * The spec is migrated to the current version and validated first; an invalid
  * spec throws InvalidSpecError whose message lists every "/path: problem" (also on `.errors`).
  */
 export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: Style = defaultStyle, hints: LayoutHints = {}): Scene {
   const prepared = prepareSpec(spec);
-  // The chart's own style wins over the one passed in; theme slots resolve once, here (theme.ts).
+  // The chart's own style wins over the one passed in; theme slots resolve once, here (theme.ts),
+  // before hidden series are left out, so the per-row palette mapping moves resolved colours.
   const merged: Style = prepared.style ? { ...style, ...prepared.style } : style;
-  style = resolveStyle(merged);
   const theme = themeOf(merged);
-  const s: ChartSpec = prepared.series.some((x) => x.color)
+  const resolved: ChartSpec = prepared.series.some((x) => x.color)
     ? { ...prepared, series: prepared.series.map((x) => (x.color ? { ...x, color: resolveColor(x.color, theme) } : x)) }
     : prepared;
+  // Hidden series (optional rows) are left out here; roles name the spec's series again at the end.
+  const { spec: s, style: st, index, notes } = visibleSeries(resolved, resolveStyle(merged));
+  style = st;
   const min = minimumSize(s);
   // Lay out at the frame, or — when it is too small — find the size to ask for: at least the type's
   // minimum, grown by what the content says it needs (a table's columns, a category axis).
@@ -109,7 +114,8 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     }
     if (size.w !== frame.w || size.h !== frame.h) break;
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
-    ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m));
+    ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
+    restoreRoles(ctx.roles, index);
     return { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}) };
   }
   return placeholder(s, frame, size, m, style, why);

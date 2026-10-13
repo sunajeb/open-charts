@@ -1,0 +1,130 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Revenue rose 19% in 2022; the base business added 2m in 2024",
+      "chart": {
+        "type": "stacked",
+        "categories": ["2021", "2022", "2023", "2024"],
+        "series": [
+          { "name": "Base", "values": [12, 18, 20, 22] },
+          { "name": "Upsell", "values": [5, 2, 4, 6] },
+          { "name": "New", "values": [4, 5, 6, 7] }
+        ],
+        "options": {
+          "unit": "m",
+          "categoryGaps": [1],
+          "valueLines": [{ "value": "mean" }],
+          "levelArrows": [
+            { "from": { "category": 0 }, "to": { "category": 1 } },
+            { "from": { "category": 2, "series": 0 }, "to": { "category": 3, "series": 0 }, "mode": "absolute" }
+          ]
+        }
+      }
+    },
+    {
+      "title": "A value axis break keeps the small 2013 segments readable",
+      "chart": {
+        "type": "stacked",
+        "categories": ["2013", "2014", "2015"],
+        "series": [
+          { "name": "Hardware", "values": [2, 6, 12] },
+          { "name": "Services", "values": [5, 7, 2] },
+          { "name": "Licences", "values": [4, 378, 351] }
+        ],
+        "options": { "valueAxis": true, "axisBreak": { "from": 40, "to": 330 } }
+      }
+    },
+    {
+      "title": "Two regions sell above the average of 12.25",
+      "chart": {
+        "type": "clustered",
+        "categories": ["North", "South", "East", "West", "Central", "Online"],
+        "series": [{ "name": "Sales", "values": [4.35, 2.7, 2.64, 6.68, 17.9, 39.2] }],
+        "options": { "decimals": 2, "seriesLabels": "none", "valueLines": [{ "value": "mean" }] }
+      }
+    },
+    {
+      "title": "Online reached half of a growing market (100%= row)",
+      "chart": {
+        "type": "percent",
+        "categories": ["2023", "2024", "2025"],
+        "series": [
+          { "name": "Online", "values": [40, 45, 50] },
+          { "name": "Stores", "values": [45, 40, 38] },
+          { "name": "Wholesale", "values": [15, 15, 12] }
+        ],
+        "options": { "percentData": true, "percentBase": [1200, 1350, 1500], "totals": true, "seriesLabels": "legend" }
+      }
+    },
+    {
+      "title": "Margin climbed with revenue, read on its own axis",
+      "chart": {
+        "type": "combo",
+        "categories": ["2021", "2022", "2023", "2024", "2025"],
+        "series": [
+          { "name": "Revenue ($m)", "values": [120, 150, 180, 210, 260] },
+          { "name": "Margin (%)", "values": [8.5, 10.2, 12.1, 13.4, 15], "as": "line" }
+        ],
+        "options": { "valueAxis": true, "secondaryAxis": [1] }
+      }
+    },
+    {
+      "title": "Costs took back 15m of the 27m volume and price gains",
+      "chart": {
+        "type": "waterfall",
+        "categories": ["2024", "Volume", "Price", "Mix", "Costs", "2025"],
+        "series": [{ "name": "EBITDA", "values": [100, 18, 9, -4, -15, "e"] }],
+        "options": { "unit": "m", "categoryGaps": [0, 4] }
+      }
+    },
+    {
+      "title": "Our lead over the market widened to 22 points, above the 45 target",
+      "chart": {
+        "type": "line",
+        "categories": ["2021", "2022", "2023", "2024", "2025"],
+        "series": [
+          { "name": "Us", "values": [40, 44, 47, 52, 58] },
+          { "name": "Market", "values": [30, 31, 33, 34, 36] }
+        ],
+        "options": {
+          "valueLines": [{ "value": 45, "label": "Target {value}" }],
+          "levelArrows": [{ "from": { "category": 4, "series": 1 }, "to": { "category": 4, "series": 0 }, "mode": "absolute" }]
+        }
+      }
+    },
+    {
+      "title": "Units grew 23% from 2013 to 2018 (with a category break)",
+      "chart": {
+        "type": "stacked",
+        "categories": ["2013", "2014", "2018"],
+        "series": [
+          { "name": "Core", "values": [13, 35, 22] },
+          { "name": "Add-ons", "values": [5, 0, 2] },
+          { "name": "New", "values": [4, 5, 3] }
+        ],
+        "options": {
+          "categoryGaps": [1],
+          "categoryBreaks": [1],
+          "difference": { "from": 0, "to": 2, "mode": "relative" }
+        }
+      }
+    },
+    {
+      "title": "Asia Pacific trails North America by 44%",
+      "chart": {
+        "type": "stacked",
+        "categories": ["North America", "Europe", "Asia Pacific"],
+        "series": [
+          { "name": "Enterprise", "values": [40, 30, 20] },
+          { "name": "SMB", "values": [10, 12, 8] }
+        ],
+        "options": {
+          "orientation": "horizontal",
+          "levelArrows": [{ "from": { "category": 0 }, "to": { "category": 2 } }],
+          "valueLines": [{ "value": "mean" }]
+        }
+      }
+    }
+  ]
+}
