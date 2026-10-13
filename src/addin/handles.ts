@@ -258,7 +258,28 @@ export function handlesController(deps: HandlesDeps) {
   }
 
   /** An event from the helper. */
+  let stateWaiter: ((m: Msg | undefined) => void) | undefined;
+
+  /** What is shown now, for tests and the live check (GET /api/addin/handles): handles, labels and the overlay's own state. */
+  async function state() {
+    const overlay = await new Promise<Msg | undefined>((resolve) => {
+      const t = setTimeout(() => { stateWaiter = undefined; resolve(undefined); }, 1500);
+      stateWaiter = (msg) => { clearTimeout(t); stateWaiter = undefined; resolve(msg); };
+      send({ cmd: 'handlesState' });
+    });
+    if (!cur) return { overlay };
+    const c = cur;
+    const labels = c.scene.shapes.flatMap((s, i) => {
+      const role = c.scene.roles?.[i] ?? '';
+      if (s.kind !== 'text' || !role.startsWith('label:')) return [];
+      const p = toScreen(c.view, s.x, s.y);
+      return [{ role, rect: [p.x, p.y, s.w * c.view.k, s.h * c.view.k] }];
+    });
+    return { id: c.id, view: c.view, roles: c.roles, options: c.chart.options ?? {}, overrides: c.chart.overrides ?? {}, handles: screenHandles(c.handles, c.view), labels, overlay };
+  }
+
   function event(m: Msg): void {
+    if (m.event === 'handlesState') { stateWaiter?.(m); return; }
     if (m.event === 'remeasure') {
       if (!deps.measure || drag || committing) return;
       void deps.measure().then((text) => (text ? select(parseRequest(text.replace(/^seq=.*\n/m, ''))) : hide()));
@@ -301,5 +322,5 @@ export function handlesController(deps: HandlesDeps) {
     }
   }
 
-  return { select, event, get current() { return cur; }, get dragging() { return !!drag; } };
+  return { select, event, state, get current() { return cur; }, get dragging() { return !!drag; } };
 }

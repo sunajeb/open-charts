@@ -375,7 +375,14 @@ export function serveAddin(port = ADDIN_PORT) {
   // The element mini toolbar (selection → toolbar panel → per-element overrides → Apply).
   const toolbar = toolbarRoutes({ base, helper: popup, apply: applyNow, log, onSelect: (r) => { void handles.select(r); } });
   return serve(port, {}, {
-    routes: async (req, res) => { idle(); return (await toolbar(req, res)) || routes(req, res); },
+    routes: async (req, res) => {
+      idle();
+      if (req.method === 'GET' && req.url === '/api/addin/handles') {
+        res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(await handles.state()));
+        return true;
+      }
+      return (await toolbar(req, res)) || routes(req, res);
+    },
     onSession: (s) => { if (s.state === 'applied') applyNow(s); },
     confirmsApply: true,
   });
