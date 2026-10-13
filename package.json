@@ -22,7 +22,8 @@
     "officejs:cert": "node --experimental-strip-types --no-warnings scripts/officejs-cert.ts",
     "officejs:serve": "node --experimental-strip-types --no-warnings src/officejs/server.ts",
     "officejs:sideload": "node --experimental-strip-types --no-warnings scripts/officejs-sideload.ts",
-    "officejs:live": "node --experimental-strip-types --no-warnings tools/officejs-live.ts"
+    "officejs:live": "node --experimental-strip-types --no-warnings tools/officejs-live.ts",
+    "build:popup": "node --experimental-strip-types --no-warnings scripts/build-popup.ts"
   },
   "engines": {
     "node": ">=22.6"

@@ -11,6 +11,8 @@ exact JSON behind a chart, see [DATA-FORMAT.md](DATA-FORMAT.md).
 - [Numbers: units, decimals, magnitudes, separators](#numbers-units-decimals-magnitudes-separators)
 - [Decorations: totals, arrows, value lines, gaps and breaks](#decorations-totals-arrows-value-lines-gaps-and-breaks)
 - [Colours and your deck's theme](#colours-and-your-decks-theme)
+- [A client's look: style files](#a-clients-look-style-files)
+- [Fill a template](#fill-a-template)
 - [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale)
 - [Resizing](#resizing)
 - [Hidden labels and why](#hidden-labels-and-why)
@@ -46,13 +48,14 @@ Edit data and Update chart are greyed out unless an open-charts chart is selecte
 1. **Insert.** Click a slide in Normal view, then **Insert chart** and pick a type. If the slide has
    an empty content placeholder, the chart takes its place and size; otherwise it goes in the
    standard chart area. The chart arrives with sample data.
-2. **Edit data.** With the chart selected, click **Edit data**. The datasheet opens in your browser
-   with the first data cell ready for typing. Type or paste your numbers; the preview updates as you
-   type.
-3. **Apply.** Click **Apply to slide** (or press ⌘↵). The chart on the slide is replaced in place,
-   keeping its position and stacking order; the editor says **Updated on slide** once PowerPoint has
-   done it (or why not, see [Troubleshooting](#troubleshooting)). The window stays open, so you can keep editing and apply
-   again. **Cancel** (or Esc twice) closes without changing the slide.
+2. **Edit data.** With the chart selected, click **Edit data**. A small datasheet window pops up
+   next to the chart, with the first data cell ready for typing (see [Editing data](#editing-data)).
+   Type or paste your numbers: the chart on the slide follows as you type.
+3. **Done.** Press ⌘↵ (or click **Done**, or close the window) to keep the changes; **Esc** (or
+   **Cancel**) puts the chart back as it was. The chart is redrawn in place, keeping its position and
+   stacking order. Without the pop-up helper (see below) the datasheet opens in your browser instead:
+   there you click **Apply to slide** (⌘↵) and the editor says **Updated on slide** once PowerPoint has
+   done it (or why not, see [Troubleshooting](#troubleshooting)); **Cancel** (or Esc twice) closes it.
 4. **Resize.** Drag the chart's corner handles like any shape. When you click elsewhere, open-charts
    lays the chart out again at the new size: text keeps its size, and the bars, labels and arrows are
    placed for the new space. Moving a chart only records its new position.
@@ -175,6 +178,47 @@ Home › open-charts; it previews but cannot insert.
 **Debugging on a Mac.** `defaults write com.microsoft.Powerpoint OfficeWebAddinDeveloperExtras -bool true`,
 restart PowerPoint, right-click the pane › *Inspect Element*. The dev server also keeps the pane's log
 at `https://localhost:4175/api/log` and in `~/Library/Application Support/open-charts/officejs.log`.
+
+### Editing data
+
+**Edit data** opens the datasheet in a small window that floats over PowerPoint, next to the chart
+(to its right, or left, below or above when there is no room; inside PowerPoint's window when
+PowerPoint cannot say where the chart is on screen). It opens in a fraction of a second: a small
+helper app (*open-charts pop-up*, no Dock icon) keeps the datasheet loaded in the background while
+PowerPoint runs.
+
+- **Live.** Every change reaches the slide on its own, about 0.4 s after you stop typing. The status
+  at the top says *Updating the slide…*, then *Updated on slide*. If you keep typing while PowerPoint
+  draws, your later edits go in one more update with the latest numbers: PowerPoint is never asked to
+  draw twice at once. A cell the chart cannot use (text in a number cell) is marked red and nothing
+  is sent until it is fixed.
+- **⌘↵ / Done / the window's close button** keep what is on the slide (sending your last edit first).
+- **Esc / Cancel** put the chart back exactly as it was when the window opened, and close it.
+- **Options** opens chart type and options over the datasheet. The slide itself is the preview, so
+  the window has none. Copy, paste, undo, Tab and arrow keys work as in the full editor.
+- The window stays with PowerPoint: it hides while another app is in front and comes back with
+  PowerPoint. Drag it by its title bar; resize it from its edges.
+
+**Selecting part of a chart.** Click a chart once to select it, then click a label or a bar inside
+it: a small toolbar appears above the selection with the formatting that piece takes (today fill
+colour, text size, bold, text colour and text direction, as each piece allows; more to come). A click there restyles
+just those elements and redraws the chart; the change is stored in the chart's data, so it survives
+Update chart, resizing and Edit data. The toolbar steps aside while you drag and hides when nothing
+in a chart is selected. Telling the toolbar about a selection costs PowerPoint one short call (about
+0.1 s) only when you select a different piece of an open-charts chart; other clicks cost nothing.
+
+**Where it comes from.** `addin install` builds the helper on your Mac (with `swiftc` from Apple's
+Command Line Tools: `xcode-select --install` if the install says it is missing) into
+`~/Library/Application Support/open-charts/OpenChartsPopup.app`, ad-hoc signed (`codesign -s -`).
+Because it is built on your Mac and never downloaded, macOS does not quarantine it and Gatekeeper does
+not ask about it (`spctl --assess` says *rejected*, which only matters for downloaded apps). If you copy
+a built helper to another Mac, the copy is quarantined and blocked: build it there instead
+(`npm run build:popup`, then `addin install`), or clear the flag with
+`xattr -dr com.apple.quarantine OpenChartsPopup.app`. If the helper is missing or does not start,
+Edit data opens the datasheet in your browser as before, and nothing else changes.
+
+**Windows.** Edit data opens the same pop-up as a borderless Microsoft Edge window (Edge ships with
+Windows 10 and 11) next to the chart; without Edge it opens your default browser.
 
 ## The datasheet
 
@@ -467,6 +511,80 @@ theme too; one you pick as a hex colour stays exactly that colour.
 Decks written by the command line come with the open-charts theme (navy to grey, near-black text).
 A `style` in the deck can change that theme, the palette, fonts and default number formats for every
 chart — see [DATA-FORMAT.md › Style](DATA-FORMAT.md#style).
+
+## A client's look: style files
+
+A **style file** is one JSON file that reproduces a client deck's look for every chart type: fonts and
+sizes, the series palette, text and axis colours, number defaults, and the formatting of kinds of
+elements, such as dotted gridlines, a darker axis, totals in the brand colour or decoration arrows in
+an accent. Give it to the command line with `--style`:
+
+```sh
+open-charts examples/deck.json --style examples/styles/ember.json -o out/deck
+open-charts fill template.pptx data.json --style brand.json -o out.pptx
+```
+
+A style changes how charts look, never what they say: the same data gives the same bars, labels and
+arrows in the same places, in other colours. Another font or font size can move labels, because
+text is measured in that font. A deck's own `style` and a chart's own formatting override the style
+file. `examples/styles/` has two styles: `ember.json` (Georgia, rust to sand) and `brand.json`
+(theme accents, so charts follow the client template). The keys are listed in
+[DATA-FORMAT.md › Style files](DATA-FORMAT.md#style-files).
+
+## Fill a template
+
+`open-charts fill` puts charts and text into **your own** PowerPoint template. It edits a copy of the
+file and does not touch the masters, layouts, pictures or any slide that has nothing to fill.
+
+**1. Mark the template in PowerPoint.**
+
+- **Charts.** Draw a rectangle (or use a content placeholder) where the chart goes. Open the
+  Selection Pane (Home › Arrange › Selection Pane) and rename the shape `chart:revenue`. Instead of
+  renaming it, you can type `{{chart:revenue}}` as its only text. The chart is laid out to fill
+  that shape's frame. A placeholder that you never resized takes its frame from the layout.
+- **Text.** Type `{{client}}`, `{{date}}` and so on anywhere: titles, text boxes, table cells and
+  speaker notes. A field keeps the formatting of the text it sits in, even when PowerPoint has
+  split it into several pieces internally.
+
+**2. Write the data:** values by name, plus an optional list of slides.
+
+```jsonc
+{
+  "values": {
+    "client": "Northwind Traders",
+    "date": "October 2026",
+    "revenue": { "type": "stacked", "categories": ["2024", "2025"], "series": [{ "name": "Sales", "values": [80, 95] }] }
+  },
+  "slides": [
+    { "slide": 1 },
+    { "slide": 3 },
+    { "slide": 5, "each": [ { "region": "EMEA", "sales": { "type": "clustered", "...": "..." } },
+                           { "region": "Americas", "sales": { "type": "clustered", "...": "..." } } ] }
+  ]
+}
+```
+
+Without `slides`, every template slide is filled once, in template order. With `slides` you choose
+the slides and their order. Slides you leave out are dropped, and `each` repeats a slide once per item
+(here, one regional slide per region). Sections follow their slides. If the new order would split a
+section, the sections are removed and you get a warning.
+
+**3. Check it, then fill it.**
+
+```sh
+open-charts fill template.pptx data.json --dry-run       # what would be filled, where, and what is missing
+open-charts fill template.pptx data.json -o out.pptx --strict
+open-charts fill template.pptx data.json --each clients.json -o "out/{client}.pptx"   # one deck per client
+```
+
+The report lists each output slide with its charts (frame and status) and its fields, followed by any
+value that no slot used. `--strict` exits with code 1 if a value is missing, a chart is invalid or a label
+had to be hidden.
+
+Charts take the template's theme. Series use Accent 1, 2, 3 … of the template's colour scheme, and the
+text uses its body font. You can edit each chart with the add-in like any other. Running `fill` again
+on a filled deck finds the charts by name and replaces them in place. A full worked example, with
+an 8-slide template, is in `examples/template/` (`template.pptx`, `data.json`, `clients.json`).
 
 ## Two charts on a slide, same scale
 

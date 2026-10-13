@@ -25,6 +25,8 @@ exported decks and PNGs). The images below are copied into `docs/acceptance/`.
 | 9 | Office.js add-in (P3): bundle parity, task pane contract, manifest | **Pass** in Chromium + WebKit against a recording mock of PowerPoint JS; **not yet run in live PowerPoint** (owner steps below) |
 | 10 | Windows: same add-in on PowerPoint for Windows | Built and tested without PowerPoint (see [Windows](#10-windows)); **live run pending on the owner's PC** |
 
+| 9 | Edit data pop-up: open < 300 ms, live updates, Esc reverts; element toolbar | See [§9](#9-edit-data-pop-up-and-element-toolbar) |
+
 Bugs fixed on this branch: 3 (see [Bugs](#bugs)). Open items: see [Open](#open-items).
 
 ## 1. Clean install
@@ -206,6 +208,46 @@ Not verified anywhere yet (needs real PowerPoint): adjustment units for Pie/Bloc
 (the planner uses the VBA convention: degrees, fractions), multi-line text boxes from `\n`, undo
 granularity (OJ-S3), tag size limits (OJ-S2), `insertSlidesFromBase64` layout mapping (OJ-S9),
 Windows and web.
+
+## 10. Edit data pop-up and element toolbar
+
+**What:** Edit data opens the datasheet in a floating panel next to the chart (Mac: the resident
+helper `OpenChartsPopup.app`, an NSPanel with a preloaded WKWebView; Windows: Edge app mode), edits
+reach the slide live (400 ms after the last keystroke, one apply in flight, later edits coalesced),
+Esc reverts to the chart the pop-up opened with, ⌘↵ keeps. Selecting elements of a chart shows the
+element mini toolbar (fill, text size, text direction → per-element overrides). Fallback: the
+browser, as before. Code: `src/addin/popup.ts`, `src/addin/toolbar.ts`, `addin/popup-mac/main.swift`,
+`src/web/editor.html` (`?popup=1`), `src/web/toolbar.html`.
+
+**Timings (helper, measured; `OPEN_CHARTS_POPUP_TEST=1 node … --test test/popup-helper.test.ts`,
+three opens per run, off screen):**
+
+| Step | Time | Target |
+|---|---|---|
+| Helper start + datasheet page preload (once per server, in the background) | 2.1–3.1 s | — (hidden) |
+| `show` → page has the session drawn → panel ordered front | 61 / 33 / 12 ms; 82 / 19 / 19 ms; 138 / 40 / 16 ms | < 300 ms |
+| `ocPopupOpen` in the preloaded page (Playwright, Chromium) | < 300 ms asserted; the next chart reuses the page | < 300 ms |
+| Edit → apply sent to the host | 400 ms after the last keystroke (E2E asserts ≥ 350, < 1500 ms) | ~400 ms |
+| Edit data click → pop-up visible in PowerPoint | AppleScriptTask + engine `edit` (0.36 s VBA, §7) then the show above, in parallel with VBA returning | — |
+
+Build: `npm run build:popup` 26 s first (`-O`), 5 s after; `addin install` copies the build from
+`dist/` or builds it into `~/Library/Application Support/open-charts/`. Signature: `codesign -dv` →
+`Signature=adhoc`, `codesign -vv` valid; `spctl -a` rejects (expected for an ad-hoc app), but a locally
+built app carries no quarantine flag, so Gatekeeper never assesses it (USER-GUIDE "Editing data").
+
+**Tests:** `test/popup.test.ts` (placement maths, screen-rect trust, request lines, Edge args,
+browser fallback, helper protocol against a stand-in), `test/toolbar.test.ts` (controls from the
+property table, overrides merge, toolbar placement, routes end to end), `test/e2e/popup.spec.ts`
+(compact layout, debounce, coalescing, Esc revert, ⌘↵, page reuse, invalid cell, toolbar page),
+`test/popup-helper.test.ts` (the real helper, opt-in).
+
+**Live in PowerPoint:** not run yet: PowerPoint was in use (`/private/tmp/open-charts-ppt.lock` held)
+for the whole session. To run it: `node --experimental-strip-types --no-warnings tools/e2e-popup-live.ts`
+(installs this build, inserts a chart, Edit data → times the pop-up from the macro call to the server's
+`POPUP shown` line → types 77 with System Events → checks the live `APPLY … done` → Escape → checks the
+revert; quits PowerPoint). Still to confirm live: PowerPoint for Mac's `PointsToScreenPixelsX/Y` (if it
+answers nothing useful the pop-up goes to the right edge of PowerPoint's window), typing into the
+non-activating panel while PowerPoint stays the active app, and the toolbar's selection events.
 
 ## Bugs
 

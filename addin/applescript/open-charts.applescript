@@ -38,6 +38,15 @@ on startServer(ignored)
 	end try
 end startServer
 
+-- The selected elements of an open-charts chart changed (the element mini toolbar): hands the
+-- request to the add-in server in the background and returns at once, so PowerPoint never waits.
+on elementSelection(request)
+	try
+		do shell script "printf '%s' " & quoted form of request & " | /usr/bin/curl -sf --connect-timeout 0.3 --max-time 3 --data-binary @- http://127.0.0.1:4174/api/addin/selection > /dev/null 2>&1 &"
+	end try
+	return ""
+end elementSelection
+
 -- Appends one line to addin.log (used by the automation entry points and for diagnostics).
 on logLine(lineText)
 	try

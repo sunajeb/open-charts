@@ -26,6 +26,8 @@ import type { Measurer } from '../core/index.ts';
 import { contextOf, handleRequest, layoutForApply, parseRequest, rememberContext, type Sessions } from './engine.ts';
 import { macroRunner, type MacroResult } from './runner.ts';
 import { openUrl, powershellRunner, selfCommand } from './win.ts';
+import { helperPath, openPopup, popupHelper, type ChartWhere } from './popup.ts';
+import { toolbarRoutes } from './toolbar.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
@@ -56,8 +58,12 @@ export async function ensureServer(base = BASE): Promise<boolean> {
   return false;
 }
 
-/** Edit sessions over HTTP (works from the server itself and from a one-off `addin run`). */
-export function httpSessions(base = BASE, open = (url: string) => openUrl(url)): Sessions {
+/**
+ * Edit sessions over HTTP (works from the server itself and from a one-off `addin run`). `open` shows
+ * the session: the default browser here; the add-in server passes the pop-up (src/addin/popup.ts).
+ */
+export type OpenEditor = (url: string, id: string, where?: ChartWhere) => void;
+export function httpSessions(base = BASE, open: OpenEditor = (url) => openUrl(url)): Sessions {
   return {
     async get(id) {
       try {
@@ -65,11 +71,11 @@ export function httpSessions(base = BASE, open = (url: string) => openUrl(url)):
         return r.ok ? ((await r.json()) as Session) : undefined;
       } catch { return undefined; }
     },
-    async open(id, chart, title) {
+    async open(id, chart, title, where) {
       if (!(await ensureServer(base))) throw new Error('The open-charts editor could not be started.');
       const r = await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart, title, state: 'open' }) });
       if (!r.ok) throw new Error(`The editor refused the chart: ${await r.text()}`);
-      open(`http://localhost:${ADDIN_PORT}/?session=${id}`);
+      open(`http://localhost:${ADDIN_PORT}/?session=${id}`, id, where);
     },
     async settle(id) {
       try {
@@ -335,10 +341,19 @@ export function serveAddin(port = ADDIN_PORT) {
     const t = Date.now();
     void helper.connect(10_000).then((r) => log(`HELPER ${'error' in r ? `not connected: ${r.error.message}` : r.out} (${Date.now() - t} ms)`));
   };
-  const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`), outlived, retire, connect);
+  // Edit data opens the pop-up next to the chart (Mac: the resident helper, page preloaded now;
+  // Windows: Edge app mode), or the default browser if that fails.
+  const base = `http://127.0.0.1:${port}`;
+  const popup = popupHelper(base, process.platform === 'darwin' ? helperPath() : undefined, log);
+  if (process.platform === 'darwin' && popup.warm()) log('POPUP helper started');
+  const showEditor: OpenEditor = (_url, id, where) => { void openPopup(base, id, where, { helper: popup, log }); };
+  const routes = addinRoutes(m, httpSessions(base, showEditor), outlived, retire, connect);
+  const applyNow = (s: Session) => { void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); };
+  // The element mini toolbar (selection → toolbar panel → per-element overrides → Apply).
+  const toolbar = toolbarRoutes({ base, helper: popup, apply: applyNow, log });
   return serve(port, {}, {
-    routes: (req, res) => { idle(); return routes(req, res); },
-    onSession: (s) => { if (s.state === 'applied') void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); },
+    routes: async (req, res) => { idle(); return (await toolbar(req, res)) || routes(req, res); },
+    onSession: (s) => { if (s.state === 'applied') applyNow(s); },
     confirmsApply: true,
   });
 }

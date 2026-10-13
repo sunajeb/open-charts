@@ -94,7 +94,8 @@
             "decimals": { "type": "integer", "minimum": 0, "maximum": 10 },
             "scale": { "enum": ["none", "auto", "k", "m", "bn"] }
           }
-        }
+        },
+        "elements": {"type": "object", "description": "Default element styles: role or selector to an element style, the overrides vocabulary. A chart's own overrides win, property by property; pin and detach are per element only.", "propertyNames": {"pattern": "^(label|legend|bar|wedge|area|ball|shade|marker|line|connector|leader|today|arrow|valueline|indicator|bracket|axis|gridline)(:([a-z]+|s[0-9]+|c[0-9]+|[0-9]+|\\*))*$"}, "additionalProperties": {"$ref": "#/$defs/elementStyle"}}
       }
     },
     "categoryIndex": { "type": "integer", "minimum": 0 },

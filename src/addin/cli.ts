@@ -1,6 +1,6 @@
 // `open-charts addin …`: build and install the PowerPoint add-in, and the engine end of its bridge.
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,8 @@ import { httpSessions, serveAddin, stopServer } from './server.ts';
 import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
+import { HELPER_APP } from './popup.ts';
+import { buildPopup, canBuildPopup } from './build-popup.ts';
 
 export { ADDIN_USAGE } from './usage.ts';
 import { ADDIN_USAGE } from './usage.ts';
@@ -91,6 +93,10 @@ function install(register: boolean) {
   execFileSync('osacompile', ['-o', join(SCRIPTS_DIR, 'open-charts.scpt'), sourceFile]);
   console.log(`Bridge script compiled to ${join(SCRIPTS_DIR, 'open-charts.scpt')}`);
 
+  // 3b. The Edit data pop-up helper (Mac app, built here with swiftc; without it Edit data opens
+  // the browser as before).
+  for (const line of installPopup(home)) console.log(line);
+
   // 4. The open-charts command (runs this folder, so a later `open-charts addin install` updates).
   for (const line of installLauncher(process.execPath, join(ROOT, 'src', 'cli.ts'), home)) console.log(line);
 
@@ -100,6 +106,26 @@ function install(register: boolean) {
     console.log('Registered and loaded in PowerPoint: look for the open-charts tab.');
   } else {
     console.log(`Load it in PowerPoint: Tools > PowerPoint Add-ins… > + > ${ppam}`);
+  }
+}
+
+/** Copies (or builds) OpenChartsPopup.app into the add-in's home. Returns the lines to print. */
+export function installPopup(home = addinHome()): string[] {
+  const dest = join(home, HELPER_APP), dist = join(ROOT, 'dist', HELPER_APP);
+  const newest = (...p: string[]) => Math.max(...p.map((f) => statSync(f).mtimeMs));
+  const src = join(ROOT, 'addin', 'popup-mac');
+  try {
+    if (existsSync(join(dist, 'Contents', 'MacOS')) && newest(join(dist, 'Contents', 'MacOS', 'open-charts-popup')) >= newest(join(src, 'main.swift'), join(src, 'Info.plist'))) {
+      rmSync(dest, { recursive: true, force: true });
+      cpSync(dist, dest, { recursive: true });
+      return [`Pop-up helper copied to ${dest}`];
+    }
+    if (!canBuildPopup()) return ['Pop-up helper not built (no swiftc: run `xcode-select --install`, then install again). Edit data opens in the browser.'];
+    console.log('Building the pop-up helper (swiftc, about 30 s)…');
+    buildPopup(dest);
+    return [`Pop-up helper built into ${dest}`];
+  } catch (err) {
+    return [`Pop-up helper not installed (${(err as Error).message.split('\n')[0]}). Edit data opens in the browser.`];
   }
 }
 
@@ -127,7 +153,7 @@ function uninstall() {
   try {
     osascript(unregisterScript(), 'pipe');
   } catch { /* PowerPoint not available: files are still removed */ }
-  for (const p of [join(SCRIPTS_DIR, 'open-charts.scpt'), PPAM_DIR, join(addinHome(), 'engine')]) {
+  for (const p of [join(SCRIPTS_DIR, 'open-charts.scpt'), PPAM_DIR, join(addinHome(), 'engine'), join(addinHome(), HELPER_APP)]) {
     if (existsSync(p)) rmSync(p, { recursive: true, force: true });
   }
   removeLauncher();

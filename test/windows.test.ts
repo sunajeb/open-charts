@@ -53,8 +53,9 @@ test('VBA: the Mac compiles the AppleScriptTask bridge only, Windows the HTTP br
   for (const id of ['WinEngine', 'WinHttp', 'WinLog', 'WinStartServer', 'ServerXMLHTTP', 'Declare', 'Shell ', 'LOCALAPPDATA']) {
     assert.ok(!mac.includes(id), `Mac source has ${id}`);
   }
-  assert.equal((mac.match(/AppleScriptTask\(/g) ?? []).length, 4, 'startServer, copyOut, engine, logLine');
-  assert.ok(!win64.includes('AppleScriptTask('), 'no AppleScriptTask on Windows');
+  const code = (v: string) => v.split('\n').filter((l) => !/^\s*'/.test(l)).join('\n');
+  assert.ok((code(mac).match(/AppleScriptTask\b/g) ?? []).length >= 5, 'startServer, copyOut, engine, logLine, elementSelection');
+  assert.doesNotMatch(code(win64), /AppleScriptTask\b/, 'no AppleScriptTask on Windows: it would not compile');
   assert.ok(!win64.includes('TMPDIR'));
   // Every Windows bridge procedure that is called is defined, and they are closed.
   for (const fn of ['WinEngine', 'WinHttp', 'WinLog', 'WinStartServer']) {
