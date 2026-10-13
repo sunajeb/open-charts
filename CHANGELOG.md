@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Any font
+
+- Text is measured in the font it is drawn in: a chart's `style.font`, an element's own font, or a
+  theme font (`+mn-lt` / `+mj-lt`) resolved to the deck's theme fonts (the add-in sends them;
+  new style key `themeFonts`). Fonts are found among the computer's and the user's fonts, PowerPoint's
+  own (Calibri, Aptos, …) and Office's downloaded cloud fonts, on Mac, Windows and Linux; TrueType,
+  OpenType/CFF, collections and variable fonts. A missing font uses a metric-compatible substitute
+  (Carlito for Calibri, …) or a wider stand-in, and is reported once (USER-GUIDE "Fonts").
+- `--font Georgia` sets the charts' font on the command line (`--font file.ttf` still works).
+- CLI decks draw a chart's own `style.font` (it was drawn in the deck's font).
+- Office.js pane: other fonts are measured exactly through `officejs:serve`, else on a canvas.
+- `npm run e2e:fonts`: live check of label widths in PowerPoint (owner-approved runs only).
+
 ### Drag handles (PowerPoint for Mac)
 
 - A selected chart shows handles you can drag: column gap width, the top of the value axis (new

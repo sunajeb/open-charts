@@ -19,13 +19,15 @@ Rules for this plan
 - [ ] A5 Remove developer-only leftovers from the product (test macros hidden from the ribbon, debug logs off by default)
 
 ## B. Any font
-- [ ] B1 Font resolver: theme fonts (+mn-lt/+mj-lt) → real family from the deck; family → font files on
+- [x] B1 Font resolver: theme fonts (+mn-lt/+mj-lt) → real family from the deck; family → font files on
       Mac and Windows, incl. per-user fonts and Office's downloaded cloud fonts (Aptos etc.)
-- [ ] B2 Measurer for TTF/OTF/TTC/variable fonts, regular/bold/italic, cached; safe fallback (+margin,
+- [x] B2 Measurer for TTF/OTF/TTC/variable fonts, regular/bold/italic, cached; safe fallback (+margin,
       reported) when the font is missing
-- [ ] B3 Add-in sends the deck/theme font; engine measures with it; Office.js measures with the browser
+- [x] B3 Add-in sends the deck/theme font; engine measures with it; Office.js measures with the browser
 - [ ] B4 Font test set (Arial, Calibri, Aptos, Georgia, Helvetica Neue, Segoe UI, Times + owner's corporate
       font): unit + goldens; one live scenario comparing PowerPoint's rendering
+      — offline done (test/fonts.test.ts, goldens fonts-*, e2e); live: `npm run e2e:fonts` pending an
+      approved window; owner's corporate font and Segoe UI (not on this Mac) still to add
 
 ## C. Install, sign, deploy, update
 - [ ] C1 Mac: bundled engine binary (no Node; arm64 + x64) + pop-up helper + .ppam in one per-user .pkg; uninstaller
