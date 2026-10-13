@@ -441,6 +441,8 @@ Public Sub OCPREFIX_SelectRole(ByVal n As String, ByVal role As String)
         If IsChart(shp) Then
             k = k + 1
             If k = CLng(Val(n)) Then
+                ' From no selection: selecting a piece of the group that is selected already selects nothing on a Mac.
+                ActiveWindow.Selection.Unselect
                 For i = 1 To shp.GroupItems.Count
                     If TagValue(shp.GroupItems(i), "OC_ROLE") = role Then shp.GroupItems(i).Select: Exit Sub
                 Next i
@@ -701,6 +703,8 @@ Private Function CommandApplies(ByVal id As String) As Boolean
             Next shp
             Exit Function
     End Select
+    ' The other commands work on one chart: not with several selected.
+    If SelectedCharts().Count > 1 Then Exit Function
     Set chart = FindSelectedChart()
     If chart Is Nothing Then Exit Function
     Select Case id

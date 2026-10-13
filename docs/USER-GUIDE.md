@@ -682,7 +682,11 @@ PowerPoint for Windows needs so a macro's changes are not merged into your last 
 undoes the action and nothing before it. That path has not been measured in PowerPoint for Windows
 yet.
 
-**Right-click menu.** PowERPOINT_MAC_CONTEXT_MENU
+**Right-click menu.** The add-in declares its right-click items the standard way for Office add-ins
+(`contextMenus` in its ribbon definition). PowerPoint for Mac does not show them: in our check it
+never even asked the add-in whether to show them (its right-click menu is PowerPoint's own and takes
+no add-in items). On a Mac, use the same commands on the ribbon: **Chart tools** and **Charts**.
+PowerPoint for Windows shows the items on charts and their pieces.
 
 ## Resizing
 
