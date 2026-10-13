@@ -171,6 +171,9 @@
   .period input.lbl { grid-column: 1 / 3; }
   .period button { padding: 0; }
   .chips { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+  .period select { min-width: 0; }
+  #sheet tr.base-row td.name { font-weight: 600; padding: 0 8px; white-space: nowrap; }
+  #sheet tr.base-row input { width: 100%; box-sizing: border-box; }
   .chips .check { font-size: 12px; }
   .type-btn { width: 100%; justify-content: flex-start; padding: 6px 10px; gap: 10px; }
   .type-btn .gal-ico { width: 40px; height: 28px; }
@@ -354,6 +357,19 @@
         <label class="check ctl" data-opt="totals" data-tip="Show the sum above each column (in the hole for a doughnut)"><input id="totals" type="checkbox"> Totals</label>
         <div class="range ctl" data-opt="cagr" data-tip="Compound annual growth arrow between two categories, from the column totals"><span>CAGR arrow</span><select id="cagrFrom" aria-label="CAGR from"></select><select id="cagrTo" aria-label="CAGR to"></select><label class="years" data-tip="Years the growth spans; empty = read from the category labels">Years<input id="cagrYears" type="number" min="0" step="any" placeholder="auto"></label></div>
         <div class="range ctl" data-opt="difference" data-tip="Arrow showing the difference between two column totals"><span>Difference arrow</span><select id="diffFrom" aria-label="Difference from"></select><select id="diffTo" aria-label="Difference to"></select></div>
+        <label class="field ctl" data-opt="difference" data-tip="Absolute: the signed difference (↔). Relative: the change in percent (→). Reverse: the change in percent the other way (←)">Difference mode
+          <select id="diffMode"><option value="">Absolute (↔)</option><option value="relative">Relative (→, %)</option><option value="reverse">Reverse (←, %)</option></select>
+        </label>
+        <div class="field ctl" data-opt="levelArrows" data-tip="Arrows between two levels: the top of a segment, bar or point, or a column total">Level arrows<div class="periods" id="levelArrows"></div></div>
+        <div class="field ctl" data-opt="valueLines" data-tip="Dashed reference lines at a value or at the mean of the column totals">Value lines<div class="periods" id="valueLines"></div></div>
+        <label class="field ctl" data-opt="percentIndicator" data-tip="The 100% marker beside the chart">100% indicator
+          <select id="percentIndicator"><option value="">Auto</option><option value="right">Right</option><option value="left">Left</option><option value="none">None</option></select>
+        </label>
+        <label class="check ctl" data-opt="percentBase" data-tip="Adds the 100%= row to the datasheet: the value each column's shares are taken of (empty = the column's sum)"><input id="percentBase" type="checkbox"> 100%= row</label>
+        <div class="field ctl" data-opt="categoryGaps" data-tip="An extra gap of one column slot after the ticked categories">Gap after<div class="chips" id="categoryGaps"></div></div>
+        <div class="field ctl" data-opt="categoryBreaks" data-tip="A break symbol on the category axis after the ticked categories">Category break after<div class="chips" id="categoryBreaks"></div></div>
+        <div class="range ctl" data-opt="axisBreak" data-tip="Compress the value range from–to so very tall columns do not flatten the rest; applied when both are set"><span>Axis break</span><input id="breakFrom" type="number" step="any" placeholder="from" aria-label="Axis break from"><input id="breakTo" type="number" step="any" placeholder="to" aria-label="Axis break to"><select id="breakStyle" aria-label="Axis break style"><option value="">Straight</option><option value="wiggle">Wiggle</option></select></div>
+        <div class="field ctl" data-opt="secondaryAxis" data-tip="Lines read against a second value axis on the right">Secondary axis<div class="chips" id="secondaryAxis"></div></div>
         <div class="field ctl" data-opt="totalsAt" data-tip="Columns drawn from the baseline as totals instead of steps">Total columns<div class="chips" id="totalsAt"></div></div>
         <label class="field ctl" data-opt="today" data-tip="A line through every row at this date, e.g. 2026-03-15; applied on Enter">Today line<input id="today" type="text" placeholder="e.g. 2026-03-15" autocomplete="off" spellcheck="false"></label>
         <div class="field ctl" data-opt="shades" data-tip="Periods shaded across every row (holidays, freezes), with an optional label">Shaded periods<div class="periods" id="shades"></div></div>
@@ -589,6 +605,22 @@ function remapCategories(map) {
     o.totalsAt = o.totalsAt.map(map).filter((i) => i >= 0);
     if (!o.totalsAt.length) delete o.totalsAt;
   }
+  for (const k of ['categoryGaps', 'categoryBreaks']) {
+    if (!o[k]) continue;
+    o[k] = o[k].map(map).filter((i) => i >= 0);
+    if (!o[k].length) delete o[k];
+  }
+  if (o.levelArrows) {
+    const re = (e) => ('category' in e ? { ...e, category: map(e.category) } : e);
+    o.levelArrows = o.levelArrows.map((a) => ({ ...a, from: re(a.from), to: re(a.to) }))
+      .filter((a) => [a.from, a.to].every((e) => !('category' in e) || e.category >= 0));
+    if (!o.levelArrows.length) delete o.levelArrows;
+  }
+  if (Array.isArray(o.percentBase)) {
+    const moved = [];
+    o.percentBase.forEach((v, i) => { const j = map(i); if (j >= 0) moved[j] = v; });
+    o.percentBase = chart().categories.map((_, j) => moved[j] ?? null);
+  }
 }
 
 // ---- Undo / redo: whole-deck snapshots; typing in one control within 1.5 s is one step. --------
@@ -661,6 +693,7 @@ function renderArrowSelects() {
   $('totalsAt').replaceChildren(...c.categories.map((cat, i) => check(cat || `#${i + 1}`, i, totals.includes(i), () => {
     setOpt('totalsAt', [...$('totalsAt').querySelectorAll('input:checked')].map((b) => +b.value));
   })));
+  renderDecorations();
   $('asLine').replaceChildren(...c.series.map((s, i) => check(s.name || `#${i + 1}`, i, s.as === 'line', (box) => {
     if (box.checked) s.as = 'line'; else delete s.as;
     changed(false, 'asLine');
@@ -791,6 +824,27 @@ function renderSheet() {
     tr.append(Object.assign(document.createElement('td'), { className: 'add-col' }));
     return tr;
   });
+  // The 100%= row (100% charts): the value each column's shares are taken of; empty = the column's sum.
+  const base = c.options?.percentBase;
+  if (c.type === 'percent' && Array.isArray(base)) {
+    const tr = document.createElement('tr');
+    tr.className = 'base-row';
+    tr.append(Object.assign(document.createElement('td'), { className: 'name', textContent: '100%=' }));
+    c.categories.forEach((cat, j) => {
+      const td = document.createElement('td');
+      const inp = Object.assign(document.createElement('input'), { value: base[j] ?? '', placeholder: 'sum', autocomplete: 'off', spellcheck: false, inputMode: 'decimal' });
+      inp.dataset.base = String(j);
+      inp.setAttribute('aria-label', `100%= of ${cat || `category ${j + 1}`}`);
+      inp.oninput = () => {
+        const v = parseCell(inp.value);
+        opts().percentBase[j] = typeof v === 'number' && v > 0 ? v : null;
+        changed(false, `base:${j}`);
+      };
+      td.append(inp); tr.append(td);
+    });
+    tr.append(Object.assign(document.createElement('td'), { className: 'add-col' }));
+    rows.push(tr);
+  }
   const addRow = document.createElement('tr');
   addRow.className = 'add-row';
   const addRowCell = document.createElement('td');
@@ -1251,6 +1305,7 @@ let escArmed = false;
 
 // ---- State changes ----------------------------------------------------------------------------
 function changed(rebuild, key) {
+  fixDecorations(chart());
   save();
   record(key);
   markDirty();
@@ -1317,8 +1372,10 @@ for (const [key, from, to] of [['cagr', 'cagrFrom', 'cagrTo'], ['difference', 'd
   const update = () => {
     const a = $(from).value, b = $(to).value;
     const years = key === 'cagr' ? opts().cagr?.years : undefined;
-    setOpt(key, a !== '' && b !== '' && a !== b ? { from: Math.min(+a, +b), to: Math.max(+a, +b), ...(years ? { years } : {}) } : undefined);
+    const mode = key === 'difference' ? opts().difference?.mode : undefined;
+    setOpt(key, a !== '' && b !== '' && a !== b ? { from: Math.min(+a, +b), to: Math.max(+a, +b), ...(years ? { years } : {}), ...(mode ? { mode } : {}) } : undefined);
     if (key === 'cagr') $('cagrYears').disabled = !opts().cagr;
+    else $('diffMode').disabled = !opts().difference;
   };
   $(from).onchange = update; $(to).onchange = update;
 }
@@ -1338,6 +1395,167 @@ $('sizeLegend').onchange = writeSizeLegend;
 $('sizeCaption').oninput = writeSizeLegend;
 $('today').onchange = (e) => { setOpt('today', e.target.value.trim() || undefined); };
 $('today').onkeydown = (e) => { if (e.key === 'Enter') e.target.dispatchEvent(new Event('change')); };
+
+// ---- Decorations: difference mode, level arrows, value lines, 100%, gaps, breaks, secondary axis ----
+const catOptions = (extra = []) => [...chart().categories.map((cat, i) => new Option(cat || `#${i + 1}`, String(i))), ...extra];
+function selectEl(label, options, value, onchange) {
+  const s = document.createElement('select');
+  s.setAttribute('aria-label', label);
+  s.append(...options);
+  s.value = value;
+  s.onchange = () => onchange(s.value);
+  return s;
+}
+function delBtn(label, onclick) {
+  const b = Object.assign(document.createElement('button'), { type: 'button', textContent: '×' });
+  b.setAttribute('aria-label', label);
+  b.onclick = onclick;
+  return b;
+}
+function addBtn(text, onclick) {
+  const b = Object.assign(document.createElement('button'), { type: 'button', textContent: text, className: 'add' });
+  b.onclick = onclick;
+  return b;
+}
+/** Level arrows: per row the two ends (category or value line, series or Total), the mode and the position. */
+function renderLevelArrows() {
+  const c = chart(), list = opts().levelArrows ?? [];
+  const write = () => { setOpt('levelArrows', list.length ? list : undefined, 'levelArrows'); renderLevelArrows(); };
+  const needSeries = c.type === 'clustered' || c.type === 'line';
+  const vls = (opts().valueLines ?? []).map((_, k) => new Option(`Value line ${k + 1}`, `vl${k}`));
+  const end = (a, k, i) => {
+    const e = a[k], isVl = 'valueLine' in e;
+    const where = selectEl(`Level arrow ${i + 1} ${k}`, catOptions(vls), isVl ? `vl${e.valueLine}` : String(e.category), (v) => {
+      a[k] = v.startsWith('vl') ? { valueLine: +v.slice(2) } : { category: +v, ...(isVl ? (needSeries ? { series: 0 } : {}) : e.series !== undefined ? { series: e.series } : {}) };
+      write();
+    });
+    const sers = [...(needSeries ? [] : [new Option('Total', '')]), ...c.series.map((s, j) => new Option(s.name || `#${j + 1}`, String(j)))];
+    const which = selectEl(`Level arrow ${i + 1} ${k} series`, sers, isVl ? '' : e.series === undefined ? '' : String(e.series), (v) => {
+      a[k] = v === '' ? { category: e.category } : { category: e.category, series: +v };
+      write();
+    });
+    which.disabled = isVl;
+    return [where, which];
+  };
+  const rows = list.map((a, i) => {
+    const row = Object.assign(document.createElement('div'), { className: 'period deco-row' });
+    const mode = selectEl(`Level arrow ${i + 1} mode`, [new Option('Relative (→, %)', ''), new Option('Absolute (↔)', 'absolute'), new Option('Reverse (←, %)', 'reverse')], a.mode ?? '', (v) => {
+      if (v) a.mode = v; else delete a.mode;
+      write();
+    });
+    const pos = selectEl(`Level arrow ${i + 1} position`, [new Option('Beside', ''), new Option('Between', 'between')], a.position ?? '', (v) => {
+      if (v) a.position = v; else delete a.position;
+      write();
+    });
+    row.append(...end(a, 'from', i), delBtn(`Remove level arrow ${i + 1}`, () => { list.splice(i, 1); write(); }),
+      ...end(a, 'to', i), document.createElement('span'), mode, pos);
+    return row;
+  });
+  $('levelArrows').replaceChildren(...rows, addBtn('+ Level arrow', () => {
+    // Default (manual): from the first category's top to the top of the next one.
+    const s = needSeries ? { series: 0 } : {};
+    list.push({ from: { category: 0, ...s }, to: { category: Math.min(1, c.categories.length - 1), ...s } });
+    write();
+  }));
+}
+/** Value lines: per row the value (a number, or "mean" where it applies), the side and an optional label. */
+function renderValueLines() {
+  const c = chart(), list = opts().valueLines ?? [];
+  const write = (re = true) => { setOpt('valueLines', list.length ? list : undefined, 'valueLines'); if (re) renderValueLines(); };
+  const rows = list.map((vl, i) => {
+    const row = Object.assign(document.createElement('div'), { className: 'period' });
+    const value = Object.assign(document.createElement('input'), { type: 'text', value: String(vl.value), placeholder: c.type === 'line' ? 'value' : 'value or mean', autocomplete: 'off', spellcheck: false });
+    value.setAttribute('aria-label', `Value line ${i + 1} value`);
+    value.onchange = () => {
+      const t = value.value.trim().toLowerCase(), n = parseCell(t);
+      if (t === 'mean' && c.type !== 'line') vl.value = 'mean';
+      else if (typeof n === 'number') vl.value = n;
+      else { value.value = String(vl.value); return; }
+      write(false);
+    };
+    value.onkeydown = (e) => { if (e.key === 'Enter') value.dispatchEvent(new Event('change')); };
+    const side = selectEl(`Value line ${i + 1} label side`, [new Option('Label right', ''), new Option('Label left', 'left')], vl.position ?? '', (v) => {
+      if (v) vl.position = v; else delete vl.position;
+      write();
+    });
+    const label = Object.assign(document.createElement('input'), { type: 'text', value: vl.label ?? '', placeholder: 'Label (optional, {value} = the value)', className: 'lbl', autocomplete: 'off', spellcheck: false });
+    label.setAttribute('aria-label', `Value line ${i + 1} label`);
+    label.onchange = () => { if (label.value.trim()) vl.label = label.value.trim(); else delete vl.label; write(false); };
+    label.onkeydown = (e) => { if (e.key === 'Enter') label.dispatchEvent(new Event('change')); };
+    row.append(value, side, delBtn(`Remove value line ${i + 1}`, () => { list.splice(i, 1); write(); }), label);
+    return row;
+  });
+  $('valueLines').replaceChildren(...rows, addBtn('+ Value line', () => { list.push({ value: c.type === 'line' ? 0 : 'mean' }); write(); }));
+}
+/** Tick boxes, one per category (the last has nothing after it) or per line series. */
+function renderChips(key, items) {
+  const on = new Set(opts()[key] ?? []);
+  $(key).replaceChildren(...items.map(([label, i]) => check(label, i, on.has(i), () => {
+    const v = [...$(key).querySelectorAll('input:checked')].map((b) => +b.value);
+    setOpt(key, v.length ? v : undefined, key);
+  })));
+}
+function renderDecorations() {
+  const c = chart(), o = opts();
+  $('diffMode').value = o.difference?.mode ?? '';
+  $('diffMode').disabled = !o.difference;
+  $('percentIndicator').value = o.percentIndicator ?? '';
+  $('percentBase').checked = Array.isArray(o.percentBase);
+  $('breakFrom').value = o.axisBreak?.from ?? '';
+  $('breakTo').value = o.axisBreak?.to ?? '';
+  $('breakStyle').value = o.axisBreak?.style ?? '';
+  const between = c.categories.slice(0, -1).map((cat, i) => [cat || `#${i + 1}`, i]);
+  renderChips('categoryGaps', between);
+  renderChips('categoryBreaks', between);
+  renderChips('secondaryAxis', c.series.flatMap((s, i) => (s.as === 'line' ? [[s.name || `#${i + 1}`, i]] : [])));
+  renderLevelArrows();
+  renderValueLines();
+}
+/** Keep decoration references valid after the data or the type changed (rows, columns, line series). */
+function fixDecorations(c) {
+  const o = c.options;
+  if (!o) return;
+  const nCat = c.categories.length, nSer = c.series.length;
+  const needSeries = c.type === 'clustered' || c.type === 'line';
+  if (Array.isArray(o.percentBase)) o.percentBase = c.categories.map((_, j) => o.percentBase[j] ?? null);
+  for (const k of ['categoryGaps', 'categoryBreaks']) {
+    if (!o[k]) continue;
+    o[k] = o[k].filter((i) => i < nCat - 1);
+    if (!o[k].length) delete o[k];
+  }
+  if (o.secondaryAxis) {
+    o.secondaryAxis = o.secondaryAxis.filter((i) => c.series[i]?.as === 'line');
+    if (!o.secondaryAxis.length) delete o.secondaryAxis;
+  }
+  if (o.valueLines && c.type === 'line') o.valueLines = o.valueLines.map((vl) => (vl.value === 'mean' ? { ...vl, value: 0 } : vl));
+  if (o.levelArrows) {
+    const nVl = o.valueLines?.length ?? 0;
+    const ok = (e) => ('valueLine' in e ? e.valueLine < nVl : e.category < nCat && (e.series === undefined || e.series < nSer));
+    o.levelArrows = o.levelArrows.filter((a) => ok(a.from) && ok(a.to)).map((a) => {
+      const fill = (e) => ('category' in e && needSeries && e.series === undefined ? { ...e, series: 0 } : e);
+      return { ...a, from: fill(a.from), to: fill(a.to) };
+    }).filter((a) => !('valueLine' in a.from && 'valueLine' in a.to) && JSON.stringify(a.from) !== JSON.stringify(a.to));
+    if (!o.levelArrows.length) delete o.levelArrows;
+  }
+}
+$('diffMode').onchange = (e) => {
+  const d = opts().difference;
+  if (!d) return;
+  const { mode, ...range } = d;
+  setOpt('difference', e.target.value ? { ...range, mode: e.target.value } : range, 'diffMode');
+};
+$('percentIndicator').onchange = (e) => { setOpt('percentIndicator', e.target.value || undefined); };
+$('percentBase').onchange = (e) => {
+  setOpt('percentBase', e.target.checked ? chart().categories.map(() => null) : undefined);
+  renderSheet();
+};
+const writeBreak = () => {
+  const from = $('breakFrom').value, to = $('breakTo').value, style = $('breakStyle').value;
+  setOpt('axisBreak', from !== '' && to !== '' && +to > +from ? { from: +from, to: +to, ...(style ? { style } : {}) } : undefined, 'axisBreak');
+};
+$('breakFrom').onchange = writeBreak;
+$('breakTo').onchange = writeBreak;
+$('breakStyle').onchange = writeBreak;
 
 /** Gantt shaded periods / brackets: one row per period (from, to, label), plus an Add button. */
 function renderPeriods(key) {

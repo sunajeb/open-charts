@@ -320,7 +320,7 @@ minus sign (−). See [DATA-FORMAT.md](DATA-FORMAT.md#numbers) for every detail 
   *mean* (the average column total; a clustered chart's bars), labelled on the right or left, e.g.
   `Ø 27.8`, or with your own label (`{value}` inserts the number).
 - **100% indicator** (100%): the "← 100%" marker beside the chart, on by default; right, left or none.
-- **100%=** (100%): the datasheet's optional **100%=** row (*Data layout ▸ 100%= row*): the value each
+- **100%=** (100%): tick **100%= row** to add it to the datasheet: the value each
   column's shares are taken of. With **Values are %**, it is the absolute value behind 100%, and the
   totals show it.
 - **Category gaps** and **Category breaks** (column, bar, waterfall, combination): tick the categories
