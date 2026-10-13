@@ -56,11 +56,16 @@ const navyPaths = (page: Page) => page.locator(`#preview svg path[fill="#${NAVY}
 const paths = (page: Page) => page.locator('#preview svg path').evaluateAll((ps) => ps.filter((p) => !p.closest('marker')).length);
 const visible = (page: Page, ids: string[]) => Promise.all(ids.map((id) => page.locator(`#${id}`).isVisible()));
 
-/** Pick a chart type from the gallery. */
+/** Pick a chart type from the gallery (its first tile, growing up). */
 async function setType(page: Page, type: string) {
   await page.click('#typeBtn');
-  await page.click(`#gallery .gal-item[data-type="${type}"]`);
+  await page.locator(`#gallery .gal-item[data-type="${type}"]`).first().click();
 }
+
+/** Width and height of every navy (first-series) bar in the preview. */
+const navyBars = (page: Page) => page.locator(`#preview svg rect[fill="#${NAVY}"]`).evaluateAll((rs) =>
+  rs.map((r) => ({ x: +r.getAttribute('x')!, y: +r.getAttribute('y')!, w: +r.getAttribute('width')!, h: +r.getAttribute('height')! }))
+    .filter((b) => !(Math.abs(b.w - b.h) < 0.01 && b.w < 12))); // not the legend's swatch
 
 async function paste(page: Page, r: number, c: number, text: string) {
   await cell(page, r, c).evaluate((el, t) => {
@@ -95,8 +100,8 @@ test('fast typing: the preview ends on the last keystroke', async ({ page }) => 
 });
 
 test('every chart type in the gallery renders a chart', async ({ page }) => {
-  const types = await page.locator('#gallery .gal-item').evaluateAll((bs) => bs.map((b) => (b as HTMLElement).dataset.type!));
-  expect(types.sort()).toEqual([...CHART_TYPES].sort());
+  const types = [...new Set(await page.locator('#gallery .gal-item').evaluateAll((bs) => bs.map((b) => (b as HTMLElement).dataset.type!)))];
+  expect([...types].sort()).toEqual([...CHART_TYPES].sort());
   for (const type of types) {
     const svg = await edit(page, () => setType(page, type));
     expect((await deck(page)).slides[0].chart.type).toBe(type);
@@ -786,21 +791,33 @@ test('gantt: dates in the datasheet drive bars, milestones and the calendar scal
 
 const MOD = 'ControlOrMeta';
 
-test('type gallery: grouped icons, current type pressed, keyboard pick, Escape returns focus', async ({ page }) => {
+test('type gallery: icon tiles 5 per row in the reference order, current tile pressed, keyboard pick, Escape returns focus', async ({ page }) => {
   await page.click('#typeBtn');
   await expect(page.locator('#gallery')).toBeVisible();
   await expect(page.locator('#typeBtn')).toHaveAttribute('aria-expanded', 'true');
-  expect(await page.locator('#gallery h3').allTextContents()).toEqual(['Column & bar', 'Line & area', 'Mekko', 'XY', 'Circular', 'Special']);
-  expect(await page.locator('#gallery .gal-item svg.gal-ico').count()).toBe(CHART_TYPES.length);
-  await expect(page.locator('#gallery .gal-item[aria-pressed="true"]')).toHaveAttribute('data-type', 'stacked');
-  await expect(page.locator('#gallery .gal-item[data-type="stacked"]')).toBeFocused();
+  const labels = await page.locator('#gallery .gal-item span').allTextContents();
+  expect(labels.slice(0, 16).map((l) => l.replace(/\s+/g, ' '))).toEqual(['Stacked Column/Bar', '100% Column/Bar', 'Clustered Column/Bar', 'Build-Up Waterfall', 'Build-Down Waterfall',
+    'Mekko (% Axis)', 'Combination', 'Line/Profile', 'Stacked Area', '100% Area', 'Mekko (Unit Axis)', 'Pie', 'Doughnut', 'Scatter', 'Bubble', 'Gantt/ Timeline']);
+  expect(await page.locator('#gallery .gal-item svg.gal-ico').count()).toBe(labels.length);
+  const tops = await page.locator('#gallery .tile').evaluateAll((ts) => ts.map((t) => Math.round(t.getBoundingClientRect().top)));
+  expect(tops.filter((t) => t === tops[0]).length, '5 tiles per row').toBe(5);
+  // Arrows only where the reference has them: four on columns, three on lines and areas, none on pies.
+  const arrows = (id: string) => page.locator(`#gallery .tile[data-tile="${id}"] .gal-dir`).evaluateAll((as) => as.map((a) => (a as HTMLElement).dataset.dir));
+  expect(await arrows('stacked')).toEqual(['up', 'down', 'left', 'right']);
+  expect(await arrows('line')).toEqual(['up', 'left', 'right']);
+  expect(await arrows('area100')).toEqual(['up', 'left', 'right']);
+  expect(await arrows('pie')).toEqual([]);
+  await expect(page.locator('#gallery .gal-item[aria-pressed="true"]')).toHaveAttribute('data-tile', 'stacked');
+  await expect(page.locator('#gallery .tile[data-tile="stacked"] .gal-dir[data-dir="up"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#gallery .gal-item[data-tile="stacked"]')).toBeFocused();
   await page.keyboard.press('ArrowRight');
-  await expect(page.locator('#gallery .gal-item[data-type="clustered"]')).toBeFocused();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.locator('#gallery .gal-item[data-tile="clustered"]')).toBeFocused();
   await edit(page, () => page.keyboard.press('Enter'));
   await expect(page.locator('#gallery')).toBeHidden();
   await expect(page.locator('#typeBtn')).toBeFocused();
   await expect(page.locator('#typeBtn')).toHaveAttribute('data-type', 'clustered');
-  await expect(page.locator('#typeBtn')).toContainText('Clustered');
+  await expect(page.locator('#typeBtn')).toContainText('Clustered Column/Bar');
   await page.click('#typeBtn');
   await page.keyboard.press('Escape');
   await expect(page.locator('#gallery')).toBeHidden();
@@ -942,15 +959,58 @@ test('numbers: prefix unit, magnitude, separators and an Excel format', async ({
   expect(await texts(page)).toContain('4.200,00');
 });
 
-test('horizontal bars: orientation toggle for column types only', async ({ page }) => {
-  await edit(page, () => page.check('#orientation'));
-  expect((await deck(page)).slides[0].chart.options.orientation).toBe('horizontal');
-  const bars = await page.locator(`#preview svg rect[fill="#${NAVY}"]`).evaluateAll((rs) => rs.map((r) => [+r.getAttribute('width')!, +r.getAttribute('height')!]));
-  const widest = bars.sort((a, b) => b[0] - a[0])[0];
-  expect(widest[0], 'the largest bar runs horizontally').toBeGreaterThan(widest[1] * 2);
-  await edit(page, () => setType(page, 'line'));
-  await expect(page.locator('#orientation')).toBeHidden();
-  expect((await deck(page)).slides[0].chart.options.orientation).toBeUndefined();
+test('gallery arrows: ◀ on Clustered draws bars growing left, ▼ on Stacked hangs the columns, ▶ on Line is a profile', async ({ page }) => {
+  // ◀: bars, all ending on one baseline at their right, the categories right of them.
+  await page.click('#typeBtn');
+  await edit(page, () => page.click('#gallery .tile[data-tile="clustered"] .gal-dir[data-dir="left"]'));
+  let c = (await deck(page)).slides[0].chart;
+  expect([c.type, c.options.direction]).toEqual(['clustered', 'left']);
+  let bars = await navyBars(page);
+  expect(bars.every((b) => b.w > b.h), 'bars run across').toBe(true);
+  const right = bars.map((b) => b.x + b.w);
+  expect(Math.max(...right) - Math.min(...right), 'they grow left from one baseline').toBeLessThan(0.5);
+  const cats = await page.locator('#preview svg text', { hasText: '2023' }).evaluateAll((ts) => ts.map((t) => t.getBoundingClientRect().left));
+  const barRight = await page.locator(`#preview svg rect[fill="#${NAVY}"]`).evaluateAll((rs) => Math.max(...rs.map((r) => r.getBoundingClientRect().right)));
+  expect(cats.some((x) => x >= barRight - 1), 'category labels right of the bars').toBe(true);
+  // ▼: columns hanging from a baseline at the top (equal tops, different bottoms).
+  await page.click('#typeBtn');
+  await edit(page, () => page.click('#gallery .tile[data-tile="stacked"] .gal-dir[data-dir="down"]'));
+  c = (await deck(page)).slides[0].chart;
+  expect([c.type, c.options.direction]).toEqual(['stacked', 'down']);
+  bars = await navyBars(page);
+  expect(bars.every((b) => Math.abs(b.y - bars[0].y) < 0.5), 'one baseline at the top').toBe(true);
+  expect(new Set(bars.map((b) => Math.round(b.h))).size, 'hanging to different depths').toBeGreaterThan(1);
+  // The current tile and direction show pressed; clicking the icon itself goes back up.
+  await page.click('#typeBtn');
+  await expect(page.locator('#gallery .tile[data-tile="stacked"] .gal-dir[data-dir="down"]')).toHaveAttribute('aria-pressed', 'true');
+  await edit(page, () => page.click('#gallery .gal-item[data-tile="stacked"]'));
+  expect((await deck(page)).slides[0].chart.options.direction).toBeUndefined();
+  // Keyboard: Shift+arrow on a focused tile picks that arrow. ▶ on Line/Profile: points run down the plot.
+  await page.click('#typeBtn');
+  await page.locator('#gallery .gal-item[data-tile="line"]').focus();
+  await edit(page, () => page.keyboard.press('Shift+ArrowRight'));
+  c = (await deck(page)).slides[0].chart;
+  expect([c.type, c.options.direction]).toEqual(['line', 'right']);
+  const ys = await page.locator('#preview svg line').evaluateAll((ls) => ls.filter((l) => +l.getAttribute('stroke-width')! === 2).map((l) => +l.getAttribute('y2')! - +l.getAttribute('y1')!));
+  const data = ys.filter((dy) => dy !== 0); // the legend's swatches are level
+  expect(data.length > 4 && data.every((dy) => dy > 0), 'every line segment runs downwards').toBe(true);
+});
+
+test('direction control: the Chart section turns the chart; only the type\'s directions are enabled; arrow keys move it', async ({ page }) => {
+  await expect(page.locator('#direction [data-dir="up"]')).toHaveAttribute('aria-checked', 'true');
+  await edit(page, () => page.click('#direction [data-dir="right"]'));
+  expect((await deck(page)).slides[0].chart.options.direction).toBe('right');
+  const bars = await navyBars(page);
+  expect(bars.every((b) => Math.abs(b.x - bars[0].x) < 0.5), 'bars grow right from one baseline').toBe(true);
+  await page.locator('#direction [data-dir="right"]').focus();
+  await edit(page, () => page.keyboard.press('ArrowLeft'));
+  expect((await deck(page)).slides[0].chart.options.direction).toBe('left');
+  await edit(page, () => setType(page, 'area'));
+  await expect(page.locator('#direction [data-dir="down"]')).toBeDisabled();
+  await expect(page.locator('#direction [data-dir="left"]')).toBeEnabled();
+  await edit(page, () => setType(page, 'pie'));
+  await expect(page.locator('#direction')).toBeHidden();
+  expect((await deck(page)).slides[0].chart.options?.direction).toBeUndefined();
 });
 
 test('options: sections hide when nothing applies; tooltips explain controls', async ({ page }) => {

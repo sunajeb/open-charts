@@ -4,6 +4,7 @@ import { createMeasurer } from './fonts.ts';
 import { buildDeck, type DeckSpec } from './deck.ts';
 import { editorSpec } from './core/spec.ts';
 import { DEFAULT_THEME, defaultStyle } from './core/index.ts';
+import { editorGallery } from './addin/registry.ts';
 
 const EDITOR = new URL('./web/editor.html', import.meta.url);
 
@@ -14,7 +15,8 @@ const EDITOR = new URL('./web/editor.html', import.meta.url);
 export function editorHtml(): string {
   const html = readFileSync(EDITOR, 'utf8');
   // The default palette (theme slots) and the colours the slots stand for, for the colour swatches.
-  const spec = { ...editorSpec(), palette: defaultStyle.palette, theme: DEFAULT_THEME };
+  // The chart gallery (tiles, icons, directions) comes from the add-in's registry: one catalogue for both.
+  const spec = { ...editorSpec(), palette: defaultStyle.palette, theme: DEFAULT_THEME, gallery: editorGallery() };
   const boot = `<script>window.OC_SPEC = ${JSON.stringify(spec).replace(/</g, '\\u003c')};</script>\n`;
   const at = html.indexOf('<script');
   return html.slice(0, at) + boot + html.slice(at);

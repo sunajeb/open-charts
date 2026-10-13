@@ -48,7 +48,7 @@ export const CATALOGUE: ChartTypeEntry[] = [
     id: 'waterfallDown', type: 'waterfall', label: 'Build-Down\nWaterfall', family: 'Waterfall', description: 'A total broken down into its components, step by step.',
     sample: waterfallSample(['Revenue', 'Cost of sales', 'Operating expenses', 'Depreciation', 'Interest', 'Tax', 'Net income'], [420, -180, -95, -30, -15, -25, 'e']),
   },
-  { id: 'mekko', type: 'mekko', label: 'Mekko\n(% Axis)', family: 'Mekko', description: 'Column width = category total, segments = share of the column.' },
+  { id: 'mekko', type: 'mekko', options: { mekko: 'percent' }, label: 'Mekko\n(% Axis)', family: 'Mekko', description: 'Column width = category total, segments = share of the column.' },
   { id: 'combo', type: 'combo', label: 'Combination', family: 'Column and bar', description: 'Stacked columns with a line series on top.' },
   { id: 'line', type: 'line', label: 'Line/Profile', family: 'Line and area', description: 'Values over time, one line per series; sideways it is a profile chart.' },
   { id: 'area', type: 'area', label: 'Stacked\nArea', family: 'Line and area', description: 'Stacked areas over time.' },

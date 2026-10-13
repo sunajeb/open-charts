@@ -137,6 +137,7 @@ export const editorSpec = () => ({
   options: Object.fromEntries(OPTION_KEYS.map((k) => [k, OPTIONS[k].types])),
   defaults: Object.fromEntries(CHART_TYPES.map((t) => [t, optionDefaults(t)])),
   limits: LIMITS,
+  directions: DIRECTIONS,
 });
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart', 'charts'] as const;
