@@ -121,8 +121,15 @@ test('direction: every directional sample is clean in every direction', () => {
     for (const d of dirs) {
       const s = lay(sample(t as keyof typeof samples), d);
       assert.deepEqual(checkScene(s, { measurer: m }), [], `${t} ${d}`);
-      // A mirrored layout must not draw shapes that point a way (an up-pointing triangle would flip).
+      // A mirrored layout draws nothing that points a way (a triangle would keep pointing up).
       if (d === 'down' || d === 'left') assert.ok(!s.shapes.some((x) => x.kind === 'rect' && x.geom === 'triangle'), `${t} ${d}`);
     }
   }
+});
+
+test('direction: a label pinned by hand stays where it was put in a mirrored chart', () => {
+  const spec = { ...sample('stacked'), options: { ...sample('stacked').options, direction: 'down' }, overrides: { 'label:total:c0': { pin: { x: 0.1, y: 0.2 } } } } as unknown as ChartSpec;
+  const s = layoutChart(spec, F, m);
+  const [t] = byRole<TextShape>(s, 'label:total:c0');
+  assert.ok(near(t.x + t.w / 2, F.x + 0.1 * F.w, 0.5) && near(t.y + t.h / 2, F.y + 0.2 * F.h, 0.5), 'at its pin, not mirrored');
 });

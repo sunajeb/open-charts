@@ -59,12 +59,14 @@ function mirror(s: Shape, axis: 'x' | 'y', sum: number) {
       s.commands = s.commands.map((c) => mirrorCmd(c, axis, sum));
       return;
     case 'text':
+      // A label placed by hand (an override's pin) stays where the user put it.
+      if (s.pinned) return;
       if (x) { s.x = sum - s.x - s.w; s.align = FLIP_ALIGN[s.align]; } else { s.y = sum - s.y - s.h; s.valign = FLIP_VALIGN[s.valign]; }
       return;
     case 'rect':
       if (x) s.x = sum - s.x - s.w; else s.y = sum - s.y - s.h;
-      // An up-pointing triangle would point the wrong way after a vertical mirror: no layout that can
-      // be mirrored draws one (checked by test/direction.test.ts).
+      // A triangle stays pointing up: in these charts it is only ever a marker symbol (an override),
+      // never something that points along the value axis.
       return;
   }
 }

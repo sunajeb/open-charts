@@ -88,3 +88,15 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - [x] Apply hang in a restarted PowerPoint session: stale warm server carried the old PowerPoint's identity → TCC wait; server now retires when PowerPoint restarts (live E2E twice + final run)
 - [ ] Apply end-to-end is now ~3.3 s (VBA ~1.7 s) vs ~1.9 s before the theme/same-scale work — profile and trim
 - Not in P1 scope here: Windows PowerPoint golden runner (needs Windows), blind consultant panel, 1.0 spec freeze (owner decision)
+
+## In flight (2026-10-13, after P1)
+Running: officejs (P3 task pane), gallery (icon grid + direction ▲▼◀▶, build-down waterfall), overrides (per-element formatting engine), windows (one .ppam for Mac + PC, exe engine, COM apply, install.ps1), popup (native floating datasheet, live updates).
+Paused (WIP committed, resume when a slot frees):
+- `worktree-agent-ae1e538056e5cb79e` template: style files done + tested (736b5f1); template fill written, untested (7b5c8c7) — left: CLI `fill`, test template, tests, live check, docs, goldens.
+- `worktree-agent-aa7bbb00335276f0b` agenda: engine + CLI deck agenda done (54742b4); add-in side WIP (0bde1f4) — left: engine hook, format, VBA ribbon/commands, tests, live test, docs.
+Owner questions pending: mini-toolbar implementation (8 questions), Windows laptop facts (PowerShell snippet + 7 questions).
+
+- [ ] Same scale from the ribbon: select 2+ charts → "Same scale" command (writes scaleGroup), kept automatically
+- [ ] Undo: one Cmd+Z per insert / data edit / format (check Mac VBA options; Windows: Application.StartNewUndoEntry)
+- [ ] Direct manipulation on Mac: transparent overlay + event monitor in the helper app for drag handles (gap width, label pin, axis bounds, arrow levels) and a native right-click menu — feasibility first (Accessibility permission)
+- [ ] Copy/paste a chart to another deck stays editable (tags) — add to acceptance

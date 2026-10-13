@@ -7,10 +7,29 @@ const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replac
 // A theme colour is drawn as the hex it was resolved to ("1F3A5F@accent1" → #1F3A5F).
 const c = (v?: string) => (v ? `#${colorHex(v)}` : 'none');
 const n = (v: number) => +v.toFixed(2);
+const dashAttr = (d?: boolean | 'dot') => (d ? ` stroke-dasharray="${d === 'dot' ? '1 2' : '4 3'}"` : '');
+/** An element's font: its own (an override; the theme fonts "+mj-lt" / "+mn-lt" preview as the chart's), else the chart's. */
+const faceOf = (f: string | undefined, chart: string) => (f && !f.startsWith('+') ? f : chart);
+
+/**
+ * A preview of an OOXML preset pattern (an override) as an SVG pattern in the fill colour on white:
+ * diagonal, vertical, horizontal and cross hatches by name, dots for the rest. Returns [defs, paint].
+ */
+function patternPaint(fillColor: string, prst: string): [string, string] {
+  const col = c(fillColor), id = `p-${prst}-${col.slice(1)}`;
+  const d = /diagCross|Check|plaid/.test(prst) ? 'M0,0 L6,6 M6,0 L0,6' : /[uU]pDiag|diagBrick|zigZag|wave/.test(prst) ? 'M0,6 L6,0' : /[dD]nDiag|shingle/.test(prst) ? 'M0,0 L6,6'
+    : /[vV]ert/.test(prst) ? 'M3,0 L3,6' : /[hH]orz|Brick/.test(prst) ? 'M0,3 L6,3' : /cross|Grid|weave|trellis/.test(prst) ? 'M3,0 L3,6 M0,3 L6,3' : '';
+  const body = d ? `<path d="${d}" stroke="${col}" stroke-width="${/^(dk|wd)/.test(prst) ? 2 : 1}"/>` : `<circle cx="3" cy="3" r="1" fill="${col}"/>`;
+  return [`<defs><pattern id="${id}" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#FFFFFF"/>${body}</pattern></defs>`, `url(#${id})`];
+}
 
 function shape(s: Shape, font: string): string {
+  if ((s.kind === 'rect' || s.kind === 'path') && s.pattern && s.fill) {
+    const [defs, paint] = patternPaint(s.fill, s.pattern);
+    return defs + shape({ ...s, pattern: undefined }, font).replace(`fill="${c(s.fill)}"`, `fill="${paint}"`);
+  }
   if (s.kind === 'rect') {
-    const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"` : '';
+    const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"${dashAttr(s.dash)}` : '';
     const g = rectGeom(s);
     if (g === 'diamond' || g === 'triangle') {
       const pts = g === 'diamond'
@@ -25,23 +44,26 @@ function shape(s: Shape, font: string): string {
   if (s.kind === 'path') {
     const d = flattenPath(s.commands).map(({ points, closed }) =>
       `M${points.map((p) => `${n(p.x)},${n(p.y)}`).join(' L')}${closed ? ' Z' : ''}`).join(' ');
-    const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"${s.dash ? ' stroke-dasharray="4 3"' : ''} stroke-linejoin="round"` : '';
+    const stroke = s.stroke ? ` stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"${dashAttr(s.dash)} stroke-linejoin="round"` : '';
     return `<path d="${d}" fill="${c(s.fill)}"${stroke}/>`;
   }
   if (s.kind === 'line') {
-    return `<line x1="${n(s.x1)}" y1="${n(s.y1)}" x2="${n(s.x2)}" y2="${n(s.y2)}" stroke="${c(s.color)}" stroke-width="${s.width}"${s.dash ? ' stroke-dasharray="4 3"' : ''}${s.arrowEnd ? ' marker-end="url(#arrow)"' : ''}/>`;
+    return `<line x1="${n(s.x1)}" y1="${n(s.y1)}" x2="${n(s.x2)}" y2="${n(s.y2)}" stroke="${c(s.color)}" stroke-width="${s.width}"${dashAttr(s.dash)}${s.arrowStart ? ' marker-start="url(#arrow)"' : ''}${s.arrowEnd ? ' marker-end="url(#arrow)"' : ''}/>`;
   }
   const lines = s.text.split('\n');
   const lh = s.lineHeight ?? s.size * 1.149;
   const block = lines.length * lh;
-  const top = s.valign === 'top' ? s.y : s.valign === 'bottom' ? s.y + s.h - block : s.y + (s.h - block) / 2;
-  const x = s.align === 'left' ? s.x : s.align === 'right' ? s.x + s.w : s.x + s.w / 2;
+  // Turned text (an override) is laid out in its unturned box, centred on the footprint, then rotated.
+  const b0 = s.rotate ? { x: s.x + s.w / 2 - s.h / 2, y: s.y + s.h / 2 - s.w / 2, w: s.h, h: s.w } : s;
+  const top = s.valign === 'top' ? b0.y : s.valign === 'bottom' ? b0.y + b0.h - block : b0.y + (b0.h - block) / 2;
+  const x = s.align === 'left' ? b0.x : s.align === 'right' ? b0.x + b0.w : b0.x + b0.w / 2;
   const anchor = { left: 'start', center: 'middle', right: 'end' }[s.align];
   const box = s.fill || s.stroke
-    ? `<rect x="${n(s.x)}" y="${n(s.y)}" width="${n(s.w)}" height="${n(s.h)}" rx="${s.rounded ? n(s.h / 2) : 0}" fill="${c(s.fill)}" stroke="${c(s.stroke)}" stroke-width="0.75"/>`
+    ? `<rect x="${n(s.x)}" y="${n(s.y)}" width="${n(s.w)}" height="${n(s.h)}" rx="${s.rounded ? n(s.h / 2) : 0}" fill="${c(s.fill)}" stroke="${c(s.stroke)}" stroke-width="${s.strokeWidth ?? 0.75}"/>`
     : '';
   const spans = lines.map((l, i) => `<tspan x="${n(x)}" y="${n(top + lh * i + lh / 2)}">${esc(l)}</tspan>`).join('');
-  return `${box}<text font-family="${esc(font)}, Helvetica, sans-serif" font-size="${s.size}"${s.bold ? ' font-weight="bold"' : ''} fill="${c(s.color)}" text-anchor="${anchor}" dominant-baseline="central">${spans}</text>`;
+  const rot = s.rotate ? ` transform="rotate(${s.rotate} ${n(s.x + s.w / 2)} ${n(s.y + s.h / 2)})"` : '';
+  return `${box}<text font-family="${esc(faceOf(s.font, font))}, Helvetica, sans-serif" font-size="${s.size}"${s.bold ? ' font-weight="bold"' : ''} fill="${c(s.color)}" text-anchor="${anchor}" dominant-baseline="central"${rot}>${spans}</text>`;
 }
 
 export function sceneToSvg(scenes: Scene[], size: { w: number; h: number }, title?: string, font = 'Arial'): string {
