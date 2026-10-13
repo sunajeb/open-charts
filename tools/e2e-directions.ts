@@ -75,15 +75,23 @@ let ribbon = '';
 try {
   ribbon = osa(`tell application "System Events" to tell process "Microsoft PowerPoint"
   set frontmost to true
-  set w to window 1
+  set rb to (first UI element of window 1 whose description is "ribbon")
+  click (first radio button of rb whose name is "open-charts")
+  delay 1
+  set grp to first UI element of (first scroll area of rb)
   set out to ""
-  repeat with e in (entire contents of w)
-    try
-      set d to description of e
-      set nm to name of e
-      if nm is in {"Insert chart", "Direction", "Up", "Down", "Left", "Right", "Edit data", "Update chart", "open-charts"} then set out to out & (role of e) & " " & nm & linefeed
-    end try
+  repeat with e in UI elements of grp
+    set out to out & (role of e) & " " & (name of e as text) & linefeed
   end repeat
+  click (first UI element of grp whose name is "Insert chart")
+  delay 1.5
+  set g to UI element 1 of UI element 1 of window "Insert chart"
+  repeat with c in UI elements of g
+    set p to position of c
+    set z to size of c
+    set out to out & "  tile " & (description of c) & " @" & (item 1 of p as integer) & "," & (item 2 of p as integer) & " " & (item 1 of z as integer) & "x" & (item 2 of z as integer) & linefeed
+  end repeat
+  key code 53
   return out
 end tell`, 120);
 } catch (e) { ribbon = `accessibility query failed: ${(e as Error).message.split('\n')[0]}`; }

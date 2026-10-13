@@ -273,7 +273,7 @@ test('ppam package: add-in content type, VBA and ribbon parts, one callback pref
     assert.deepEqual([...png.slice(1, 4)], [0x50, 0x4e, 0x47], `${target} is a PNG`);
   }
   assert.match(ct, /Extension="png" ContentType="image\/png"/);
-  assert.match(ui, /<gallery id="galCharts"[^>]* columns="5"[^>]* showItemLabel="true"/);
+  assert.match(ui, /<gallery id="galCharts"[^>]* columns="5" itemWidth="64" itemHeight="62" showItemLabel="false"/);
   for (const d of ['dirUp', 'dirDown', 'dirLeft', 'dirRight']) assert.match(ui, new RegExp(`<toggleButton id="${d}"[^>]* onAction="${built.prefix}_onDirection"`));
   assert.match(source, /^Private Const DIRECTIONS As String = "stacked:up,down,left,right;.*line:up,left,right/m);
   assert.deepEqual(buildAddin().ppam, built.ppam, 'reproducible build');

@@ -1,10 +1,11 @@
 // The gallery icons: one drawing (src/addin/icons.ts) behind the editor's inline SVG and the ribbon's
-// PNGs; the committed PNGs (addin/icons) are exactly what tools/icons.ts writes.
+// PNG tiles (icon over label); the committed PNGs (addin/icons) are exactly what tools/icons.ts writes.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
-import { ICONS, ICON_SIZES, iconFile, iconPng, iconSvg, rasterize } from '../src/addin/icons.ts';
-import { CATALOGUE, iconOf } from '../src/addin/registry.ts';
+import { ICONS, iconSvg, rasterize, TILE, tilePng, tileShapes } from '../src/addin/icons.ts';
+import { CATALOGUE, galleryItems, iconOf } from '../src/addin/registry.ts';
+import { ribbonImages } from '../src/addin/package.ts';
 
 const dir = new URL('../addin/icons/', import.meta.url);
 
@@ -14,12 +15,21 @@ test('icons: every catalogue tile and direction button has its own icon', () => 
   for (const d of ['dirUp', 'dirDown', 'dirLeft', 'dirRight']) assert.ok(ICONS[d], d);
 });
 
-test('icons: the committed PNGs are what tools/icons.ts writes (run it after changing an icon)', () => {
-  const want = Object.keys(ICONS).flatMap((n) => ICON_SIZES.map((px) => iconFile(n, px))).sort();
-  assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith('.png')).sort(), want);
-  for (const n of Object.keys(ICONS)) {
-    for (const px of ICON_SIZES) assert.ok(readFileSync(new URL(iconFile(n, px), dir)).equals(iconPng(n, px)), iconFile(n, px));
-  }
+test('icons: the committed PNGs are what tools/icons.ts writes (run it after changing an icon or the catalogue)', () => {
+  const images = ribbonImages(galleryItems());
+  assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith('.png')).sort(), images.map((i) => i.file).sort());
+  for (const i of images) assert.ok(readFileSync(new URL(i.file, dir)).equals(i.draw()), i.file);
+});
+
+test('icons: a ribbon tile is the icon over its label, at 2x', () => {
+  const shapes = tileShapes('stacked', 'Stacked\nColumn/Bar');
+  const glyphs = shapes.filter((s) => s.k === 'glyphs');
+  assert.equal(glyphs.length, 'StackedColumn/Bar'.length, 'one outline per character');
+  const iconBottom = Math.max(...shapes.filter((s) => s.k === 'rect').map((s) => (s as { y: number; h: number }).y + (s as { h: number }).h));
+  assert.ok(iconBottom <= TILE.icon + 0.01, 'the icon fits the top');
+  const png = tilePng('stacked', 'Stacked\nColumn/Bar');
+  assert.equal(png.readUInt32BE(16), TILE.w * 2);
+  assert.equal(png.readUInt32BE(20), TILE.h * 2);
 });
 
 test('icons: rasterised anti-aliased on a transparent background; SVG uses the same shapes', () => {

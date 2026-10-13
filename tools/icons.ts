@@ -1,13 +1,15 @@
-// Writes the ribbon's gallery icons (addin/icons/<icon>-32.png and -64.png) from src/addin/icons.ts.
-// Zero dependencies: the shapes are rasterised in-process. test/icons.test.ts fails when the
-// committed PNGs differ from what this writes, so run it after changing an icon:
+// Writes the ribbon's images (addin/icons/*.png) from src/addin/icons.ts: a tile per gallery item
+// (icon over label), the gallery button's icon and the direction arrows. Zero dependencies: shapes and
+// label glyphs are rasterised in-process. test/icons.test.ts fails when the committed PNGs differ
+// from what this writes, so run it after changing an icon, a label or the catalogue:
 //   node --experimental-strip-types --no-warnings tools/icons.ts
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { ICONS, ICON_SIZES, iconFile, iconPng } from '../src/addin/icons.ts';
+import { mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { ICON_DIR, ribbonImages } from '../src/addin/package.ts';
+import { galleryItems } from '../src/addin/registry.ts';
 
-const dir = new URL('../addin/icons/', import.meta.url);
-mkdirSync(dir, { recursive: true });
-for (const name of Object.keys(ICONS)) {
-  for (const px of ICON_SIZES) writeFileSync(new URL(iconFile(name, px), dir), iconPng(name, px));
-}
-console.log(`${Object.keys(ICONS).length * ICON_SIZES.length} icons written to addin/icons/`);
+mkdirSync(ICON_DIR, { recursive: true });
+const images = ribbonImages(galleryItems());
+const keep = new Set(images.map((i) => i.file));
+for (const f of readdirSync(ICON_DIR)) if (f.endsWith('.png') && !keep.has(f)) rmSync(new URL(f, ICON_DIR));
+for (const i of images) writeFileSync(new URL(i.file, ICON_DIR), i.draw());
+console.log(`${images.length} images written to addin/icons/`);

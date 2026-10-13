@@ -2,7 +2,9 @@
 // inline SVG for the editor's gallery and rasterised (anti-aliased, zero dependencies) to the PNGs the
 // PowerPoint ribbon shows (addin/icons/*.png, written by tools/icons.ts and checked by a test).
 // Flat bright blues on a light-blue baseline read on light and dark ribbons alike.
+import { readFileSync } from 'node:fs';
 import { deflateSync } from 'node:zlib';
+import { parse } from '../../vendor/opentype.module.js';
 
 export type IconShape =
   | { k: 'rect'; x: number; y: number; w: number; h: number; c: string }
@@ -11,7 +13,9 @@ export type IconShape =
   /** Ring sector (r0 = 0: a pie wedge); angles in degrees clockwise from 12 o'clock. */
   | { k: 'sector'; cx: number; cy: number; r0: number; r1: number; a0: number; a1: number; c: string }
   /** Stroked polyline with round joins and caps. */
-  | { k: 'line'; pts: number[]; w: number; c: string };
+  | { k: 'line'; pts: number[]; w: number; c: string }
+  /** Filled outlines (text glyphs), non-zero winding; each polygon is x0, y0, x1, y1, … */
+  | { k: 'glyphs'; polys: number[][]; c: string };
 
 /** The palette: three bright blues, a pale one, the light-blue baseline and the combination line's green. */
 export const ICON_COLORS = { c1: '1D5BD8', c2: '3B82F6', c3: '6FA8FF', c4: 'A9CCFF', axis: 'B7D3FF', green: '22B35E' } as const;
@@ -148,6 +152,7 @@ export function iconSvg(name: string, cls = 'gal-ico'): string {
       case 'circle': return `<circle cx="${n(s.cx)}" cy="${n(s.cy)}" r="${n(s.r)}" fill="#${s.c}"/>`;
       case 'sector': return `<path d="${sectorPath(s)}" fill="#${s.c}"/>`;
       case 'line': return `<polyline points="${s.pts.map(n).join(' ')}" fill="none" stroke="#${s.c}" stroke-width="${n(s.w)}" stroke-linejoin="round" stroke-linecap="round"/>`;
+      case 'glyphs': return `<path d="${s.polys.map((pl) => `M${pl.map(n).join(' ')}Z`).join('')}" fill="#${s.c}"/>`;
     }
   }).join('');
   return `<svg class="${cls}" viewBox="0 0 ${SIZE} ${SIZE}" aria-hidden="true">${body}</svg>`;
@@ -186,30 +191,60 @@ function inside(s: IconShape, x: number, y: number): boolean {
       for (let i = 0; i + 3 < s.pts.length; i += 2) if (segDist2(x, y, s.pts[i], s.pts[i + 1], s.pts[i + 2], s.pts[i + 3]) <= r2) return true;
       return false;
     }
+    case 'glyphs': {
+      let wind = 0;
+      for (const pl of s.polys) {
+        for (let i = 0, j = pl.length - 2; i < pl.length; j = i, i += 2) {
+          const [x0, y0, x1, y1] = [pl[j], pl[j + 1], pl[i], pl[i + 1]];
+          if (y0 <= y ? y1 > y && (x1 - x0) * (y - y0) - (x - x0) * (y1 - y0) > 0 : y1 <= y && (x1 - x0) * (y - y0) - (x - x0) * (y1 - y0) < 0) wind += y0 <= y ? 1 : -1;
+        }
+      }
+      return wind !== 0;
+    }
   }
 }
 
 /** RGBA pixels of an icon at `px` × `px`, transparent background, 4 × 4 supersampled. */
 export function rasterize(name: string, px: number): Uint8Array {
-  const shapes = ICONS[name] ?? [];
+  return rasterShapes(ICONS[name] ?? [], px, px, SIZE / px);
+}
+
+/** Bounding box [x0, y0, x1, y1] of a shape (a little generous). */
+function bounds(s: IconShape): [number, number, number, number] {
+  const of = (xs: number[], ys: number[], d = 0): [number, number, number, number] => [Math.min(...xs) - d, Math.min(...ys) - d, Math.max(...xs) + d, Math.max(...ys) + d];
+  const split = (pts: number[]) => [pts.filter((_, i) => !(i % 2)), pts.filter((_, i) => i % 2)];
+  switch (s.k) {
+    case 'rect': return [s.x, s.y, s.x + s.w, s.y + s.h];
+    case 'circle': return [s.cx - s.r, s.cy - s.r, s.cx + s.r, s.cy + s.r];
+    case 'sector': return [s.cx - s.r1, s.cy - s.r1, s.cx + s.r1, s.cy + s.r1];
+    case 'poly': { const [xs, ys] = split(s.pts); return of(xs, ys); }
+    case 'line': { const [xs, ys] = split(s.pts); return of(xs, ys, s.w); }
+    case 'glyphs': { const all = s.polys.flat(); const [xs, ys] = split(all); return xs.length ? of(xs, ys) : [0, 0, -1, -1]; }
+  }
+}
+
+/** RGBA pixels of shapes drawn on a `w` × `h` pixel canvas, `scale` icon units per pixel. */
+function rasterShapes(shapes: IconShape[], w: number, h: number, scale: number): Uint8Array {
   const rgb = shapes.map((s) => [parseInt(s.c.slice(0, 2), 16), parseInt(s.c.slice(2, 4), 16), parseInt(s.c.slice(4, 6), 16)]);
-  const out = new Uint8Array(px * px * 4);
-  const SS = 4, scale = SIZE / px;
-  for (let py = 0; py < px; py++) {
-    for (let qx = 0; qx < px; qx++) {
+  const box = shapes.map(bounds);
+  const out = new Uint8Array(w * h * 4);
+  const SS = 4;
+  for (let py = 0; py < h; py++) {
+    for (let qx = 0; qx < w; qx++) {
       let r = 0, g = 0, b = 0, a = 0;
       for (let sy = 0; sy < SS; sy++) {
         for (let sx = 0; sx < SS; sx++) {
           const x = (qx + (sx + 0.5) / SS) * scale, y = (py + (sy + 0.5) / SS) * scale;
           // The topmost shape covering the sample wins (shapes are opaque, drawn in order).
           for (let k = shapes.length - 1; k >= 0; k--) {
-            if (!inside(shapes[k], x, y)) continue;
+            const bb = box[k];
+            if (x < bb[0] || x > bb[2] || y < bb[1] || y > bb[3] || !inside(shapes[k], x, y)) continue;
             r += rgb[k][0]; g += rgb[k][1]; b += rgb[k][2]; a++;
             break;
           }
         }
       }
-      const o = (py * px + qx) * 4;
+      const o = (py * w + qx) * 4;
       if (a) { out[o] = Math.round(r / a); out[o + 1] = Math.round(g / a); out[o + 2] = Math.round(b / a); out[o + 3] = Math.round((255 * a) / (SS * SS)); }
     }
   }
@@ -230,16 +265,95 @@ function chunk(type: string, data: Uint8Array): Buffer {
   return Buffer.concat([head, data, crc]);
 }
 
-/** An icon as a PNG file (8-bit RGBA). Deterministic: the same icon gives the same bytes. */
-export function iconPng(name: string, px: number): Buffer {
-  const rgba = rasterize(name, px);
+function png(rgba: Uint8Array, w: number, h: number): Buffer {
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(px, 0); ihdr.writeUInt32BE(px, 4); ihdr[8] = 8; ihdr[9] = 6;
-  const raw = Buffer.alloc((px * 4 + 1) * px);
-  for (let y = 0; y < px; y++) Buffer.from(rgba.buffer, y * px * 4, px * 4).copy(raw, y * (px * 4 + 1) + 1);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 6;
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) Buffer.from(rgba.buffer, y * w * 4, w * 4).copy(raw, y * (w * 4 + 1) + 1);
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
 
-/** Names of the PNG files the ribbon uses: <icon>-<size>.png. */
-export const ICON_SIZES = [32, 64] as const;
+/** An icon as a PNG file (8-bit RGBA). Deterministic: the same icon gives the same bytes. */
+export function iconPng(name: string, px: number): Buffer {
+  return png(rasterize(name, px), px, px);
+}
+
+// ---- Gallery tiles for the ribbon: icon over its label, in one image ------------------------------
+// PowerPoint for Mac draws a gallery item's label beside its image, which makes uneven, wide rows;
+// a tile image with the label under the icon gives the reference's grid (the item keeps its label
+// for screen readers and its tooltip).
+
+/** Tile size in points: icon 40 pt on top, two label lines below. */
+export const TILE = { w: 64, h: 62, icon: 40, font: 9, line: 10.5 } as const;
+/** Label colour: a mid grey that reads on PowerPoint's light and dark ribbons. */
+export const TILE_LABEL = '7D8492';
+
+type Font = { getPath(text: string, x: number, y: number, size: number): { commands: { type: string; x?: number; y?: number; x1?: number; y1?: number; x2?: number; y2?: number }[] }; getAdvanceWidth(text: string, size: number): number };
+let font: Font | undefined;
+const labelFont = (): Font => {
+  if (!font) {
+    const bytes = readFileSync(new URL('../../vendor/fonts/LiberationSans-Regular.ttf', import.meta.url));
+    font = parse(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)) as unknown as Font;
+  }
+  return font;
+};
+
+/** Text as filled outlines, one shape per character, centred on `cx` with its baseline at `y`, in icon units. */
+function textShapes(text: string, cx: number, y: number, size: number, c: string): IconShape[] {
+  const f = labelFont();
+  let x = cx - f.getAdvanceWidth(text, size) / 2;
+  const out: IconShape[] = [];
+  for (const ch of text) {
+    out.push(glyphShape(f, ch, x, y, size, c));
+    x += f.getAdvanceWidth(ch, size);
+  }
+  return out;
+}
+
+/** One character's outline (curves flattened). */
+function glyphShape(f: Font, text: string, x: number, y: number, size: number, c: string): IconShape {
+  const polys: number[][] = [];
+  let cur: number[] = [], px = 0, py = 0;
+  for (const cmd of f.getPath(text, x, y, size).commands) {
+    if (cmd.type === 'M') { if (cur.length > 4) polys.push(cur); cur = [cmd.x!, cmd.y!]; }
+    else if (cmd.type === 'L') cur.push(cmd.x!, cmd.y!);
+    else if (cmd.type === 'Q' || cmd.type === 'C') {
+      for (let k = 1; k <= 8; k++) {
+        const t = k / 8, u = 1 - t;
+        if (cmd.type === 'Q') cur.push(u * u * px + 2 * u * t * cmd.x1! + t * t * cmd.x!, u * u * py + 2 * u * t * cmd.y1! + t * t * cmd.y!);
+        else cur.push(u ** 3 * px + 3 * u * u * t * cmd.x1! + 3 * u * t * t * cmd.x2! + t ** 3 * cmd.x!, u ** 3 * py + 3 * u * u * t * cmd.y1! + 3 * u * t * t * cmd.y2! + t ** 3 * cmd.y!);
+      }
+    } else if (cmd.type === 'Z') { if (cur.length > 4) polys.push(cur); cur = []; }
+    if (cmd.x !== undefined) { px = cmd.x; py = cmd.y!; }
+  }
+  if (cur.length > 4) polys.push(cur);
+  return { k: 'glyphs', polys, c };
+}
+
+/** A gallery tile's shapes: the icon (scaled into the top) and its label (lines split at "\n"). */
+export function tileShapes(icon: string, label: string): IconShape[] {
+  const k = TILE.icon / SIZE, dx = (TILE.w - TILE.icon) / 2;
+  const scaled = (ICONS[icon] ?? []).map((s): IconShape => {
+    const p = (pts: number[]) => pts.map((v, i) => (i % 2 ? v * k : v * k + dx));
+    switch (s.k) {
+      case 'rect': return { ...s, x: s.x * k + dx, y: s.y * k, w: s.w * k, h: s.h * k };
+      case 'circle': return { ...s, cx: s.cx * k + dx, cy: s.cy * k, r: s.r * k };
+      case 'sector': return { ...s, cx: s.cx * k + dx, cy: s.cy * k, r0: s.r0 * k, r1: s.r1 * k };
+      case 'poly': return { ...s, pts: p(s.pts) };
+      case 'line': return { ...s, pts: p(s.pts), w: s.w * k };
+      case 'glyphs': return { ...s, polys: s.polys.map(p) };
+    }
+  });
+  const lines = label.split('\n');
+  const text = lines.flatMap((l, i) => textShapes(l, TILE.w / 2, TILE.icon + 2 + TILE.line * (i + 1) - 2.5, TILE.font, TILE_LABEL));
+  return [...scaled, ...text];
+}
+
+/** A gallery tile as a PNG at `scale` pixels per point (2: Retina). */
+export function tilePng(icon: string, label: string, scale = 2): Buffer {
+  const w = TILE.w * scale, h = TILE.h * scale;
+  return png(rasterShapes(tileShapes(icon, label), w, h, 1 / scale), w, h);
+}
+
+/** File name of an icon PNG: <icon>-<size>.png. */
 export const iconFile = (name: string, px: number) => `${name}-${px}.png`;
