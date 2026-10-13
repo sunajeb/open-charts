@@ -169,10 +169,10 @@ test('CAGR and difference arrows', async ({ page }) => {
   await edit(page, () => page.selectOption('#cagrTo', '3'));
   expect((await deck(page)).slides[0].chart.options.cagr).toEqual({ from: 1, to: 3 });
   expect(await cagr()).toHaveLength(1);
-  // Difference: 2021 total 97 → 2024 total 181 = +84.
+  // Difference: 2021 total 97 → 2024 total 181 = +87% (relative, the default).
   await edit(page, () => page.selectOption('#diffFrom', '0'));
   await edit(page, () => page.selectOption('#diffTo', '3'));
-  expect((await texts(page)).some((t) => t.replace(/\s/g, '').includes('+84'))).toBe(true);
+  expect((await texts(page)).some((t) => t.replace(/\s/g, '').includes('+87%'))).toBe(true);
 });
 
 test('datasheet: edit a cell, rename category and series', async ({ page }) => {
