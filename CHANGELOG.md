@@ -12,6 +12,15 @@
   label; PowerPoint no longer starts again by itself after quitting with a chart selected; an engine
   answer that PowerPoint occasionally drops is asked for again.
 
+### Help
+
+- **Help › Report a problem** (and `open-charts addin report [--spec chart.json]`) saves a zip for
+  support: the add-in's log, settings, add-in info and version numbers, plus the selected chart's
+  data only if you agree. Never slide content or the server token. It is shown in Finder or Explorer.
+- First run: a short welcome (where the tab is, how to insert a chart, the user guide) with a sample
+  deck holding one chart of each type. Shown once (`"welcomed"` in settings.json); **Help ›
+  Welcome** shows it again.
+
 ### Live tests
 
 - `npm run live -- <scenario...>` (`tools/live/`) replaces the 10-minute `e2e:powerpoint` script and the

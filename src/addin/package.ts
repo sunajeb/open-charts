@@ -89,6 +89,7 @@ export function ribbonXml(prefix: string, items: ChartTypeEntry[]): string {
 </group>
 ${chartToolsGroup(cb)}
 ${agendaGroupXml(cb('onAction'))}
+${helpGroupXml(cb('onAction'))}
 </tab>
 </tabs></ribbon>
 ${contextMenusXml(cb)}
@@ -167,6 +168,18 @@ function agendaGroupXml(onAction: string): string {
 ${buttons}
 <menu id="menuAgenda" label="More" imageMso="SlideHide" screentip="More agenda commands">${menu}</menu>
 </group>`;
+}
+
+/** Help (src/addin/support.ts): [id, label, imageMso, tip]. */
+export const HELP_BUTTONS: [string, string, string, string][] = [
+  ['btnWelcome', 'Welcome', 'Help', 'What open-charts is, where to start, the user guide, and a sample deck with one chart of each type.'],
+  ['btnReport', 'Report a problem', 'FileSendAsAttachment', 'Save a zip with the add-in\'s log, settings and version numbers for a problem report, and show it. The selected chart\'s data goes in only if you agree; nothing else from your slides does.'],
+];
+
+function helpGroupXml(onAction: string): string {
+  const buttons = HELP_BUTTONS.map(([id, label, icon, tip]) =>
+    `<button id="${id}" label="${esc(label)}" imageMso="${icon}" size="large" screentip="${esc(label)}" supertip="${esc(tip)}" onAction="${onAction}"/>`).join('\n');
+  return `<group id="grpHelp" label="Help" imageMso="Help">\n${buttons}\n</group>`;
 }
 
 /** customUI/_rels/customUI14.xml.rels: one image relationship per icon. */
