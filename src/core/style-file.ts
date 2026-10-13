@@ -39,9 +39,13 @@ export function validateStyleFile(v: unknown): SpecError[] {
     const s = v[k];
     if (s !== undefined && (typeof s !== 'string' || s.length > (k === 'description' ? 2000 : STYLE_FILE_LIMITS.string))) errors.push({ path: `/${k}`, message: `must be a string of at most ${k === 'description' ? 2000 : STYLE_FILE_LIMITS.string} characters` });
   }
+  const fontLimits = (f: unknown, path: string) => {
+    if (typeof f === 'string' && f.length > STYLE_FILE_LIMITS.font) errors.push({ path, message: `must be at most ${STYLE_FILE_LIMITS.font} characters` });
+    if (typeof f === 'string' && /[\u0000-\u001f<>"&]/.test(f)) errors.push({ path, message: 'must be a plain font name' });
+  };
   const limits = (st: Record<string, unknown>, base: string) => {
-    if (typeof st.font === 'string' && st.font.length > STYLE_FILE_LIMITS.font) errors.push({ path: `${base}/font`, message: `must be at most ${STYLE_FILE_LIMITS.font} characters` });
-    if (typeof st.font === 'string' && /[\u0000-\u001f<>"&]/.test(st.font)) errors.push({ path: `${base}/font`, message: 'must be a plain font name' });
+    fontLimits(st.font, `${base}/font`);
+    if (isObj(st.themeFonts)) for (const k of ['major', 'minor']) fontLimits(st.themeFonts[k], `${base}/themeFonts/${k}`);
     if (Array.isArray(st.palette) && st.palette.length > STYLE_FILE_LIMITS.palette) errors.push({ path: `${base}/palette`, message: `must have at most ${STYLE_FILE_LIMITS.palette} colours` });
   };
   limits(own, '');
@@ -68,7 +72,7 @@ export function parseStyleFile(text: string, name = 'style file'): StyleFile {
   return v as StyleFile;
 }
 
-const NESTED = ['theme', 'numbers'] as const;
+const NESTED = ['theme', 'themeFonts', 'numbers'] as const;
 
 /**
  * Layers styles, later wins. `theme` and `numbers` merge one level deeper, and `elements` per key

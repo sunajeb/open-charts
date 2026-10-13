@@ -66,7 +66,16 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "font": { "type": "string", "minLength": 1 },
+        "font": { "description": "Font family, or +mj-lt / +mn-lt (the deck's theme heading / body font).", "type": "string", "minLength": 1 },
+        "themeFonts": {
+          "description": "The deck's theme fonts that +mj-lt / +mn-lt stand for when text is measured (default: font).",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "major": { "type": "string", "minLength": 1, "pattern": "^[^+]" },
+            "minor": { "type": "string", "minLength": 1, "pattern": "^[^+]" }
+          }
+        },
         "fontSize": { "type": "number", "minimum": 4, "maximum": 72 },
         "text": { "$ref": "#/$defs/color" },
         "muted": { "$ref": "#/$defs/color" },

@@ -9,6 +9,7 @@ import { resolveCollisions } from './resolve.ts';
 import { restoreRoles, visibleSeries } from './visible.ts';
 import { minimumSize, placeholder, TooSmall } from './minsize.ts';
 import { compileOverrides, unmatched, type OverrideCtx } from './overrides.ts';
+import { fontWarning, measurerFor, resolveFont } from './fonts.ts';
 import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
 import { layoutMekko } from './charts/mekko.ts';
@@ -24,7 +25,11 @@ import { layoutGantt } from './charts/gantt.ts';
 
 export * from './types.ts';
 export { measurerFromFonts, measurerFromMetrics, fontMetrics, lineHeightFactor, wrap } from './text.ts';
-export type { Measurer, FontMetrics } from './text.ts';
+export type { Measurer, FontMetrics, FontFallback } from './text.ts';
+export { resolveFont, isThemeFont, substitutesFor, measurerFor, fontSet, wideFallback, fontWarning, WIDE_FALLBACK } from './fonts.ts';
+export type { ThemeFonts } from './fonts.ts';
+export { readFaces, faceMetrics, faceOffsets, extractFace, bytesReader } from './sfnt.ts';
+export type { FaceInfo, ReadAt } from './sfnt.ts';
 export { checkScene } from './quality.ts';
 export {
   LABEL_FIELDS, ELEMENT_PROPERTIES, ELEMENT_STYLE_KEYS, ELEMENT_KINDS, ROLE_KINDS, kindOf, propertiesFor,
@@ -116,8 +121,19 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
   const seen = new Set<string>();
   const toSpec = (role: string) => (index.every((i, k) => i === k) ? role : role.replace(/(^|:)s(\d+)(?=:|$)/g, (_, pre, k) => `${pre}s${index[+k] ?? k}`));
   const any = (o?: object) => !!o && Object.keys(o).length > 0;
+  // Text is measured in the chart's font (theme fonts resolved to the deck's); an element with its
+  // own font (an override) in that one. A font that is not installed is reported once per scene.
+  const fontNotes = new Set<string>();
+  const fonts = m;
+  const measure = (font: string) => {
+    const fm = measurerFor(fonts, resolveFont(font, merged));
+    const w = fontWarning(fm);
+    if (w) fontNotes.add(w);
+    return fm;
+  };
+  m = measure(merged.font);
   const ov: OverrideCtx | undefined = any(prepared.overrides) || any(merged.elements)
-    ? { theme, get: (role) => { const r = toSpec(role); seen.add(r); return lookup(r); } }
+    ? { theme, get: (role) => { const r = toSpec(role); seen.add(r); return lookup(r); }, ...(fonts.forFont ? { measure } : {}) }
     : undefined;
   const min = minimumSize(s);
   // Lay out at the frame, or — when it is too small — find the size to ask for: at least the type's
@@ -146,7 +162,7 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     }
     ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
     restoreRoles(ctx.roles, index);
-    const warnings = any(prepared.overrides) ? unmatched(prepared.overrides, seen, prepared) : [];
+    const warnings = [...fontNotes, ...(any(prepared.overrides) ? unmatched(prepared.overrides, seen, prepared) : [])];
     return {
       frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}),
       ...(warnings.length ? { warnings } : {}),

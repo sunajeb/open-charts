@@ -1,5 +1,5 @@
 import type { ChartSpec, Frame, Scene, Style } from './core/index.ts';
-import { checkScene, defaultStyle, layoutGroup, fileStyle, mergeStyles, migrate, scaleGroupOf, styleFor, themeOf, type StyleFile } from './core/index.ts';
+import { checkScene, defaultStyle, layoutGroup, fileStyle, measurerFor, mergeStyles, migrate, resolveFont, scaleGroupOf, styleFor, themeOf, type StyleFile } from './core/index.ts';
 import type { Measurer } from './core/text.ts';
 import { SLIDE, writePptx, type SceneContent } from './render/pptx.ts';
 import { chartTags, chunkedTags } from './render/tags.ts';
@@ -137,8 +137,9 @@ export function buildDeck(deck: DeckSpec, m: Measurer, styleFile?: StyleFile): {
     const issues = [
       ...migrated.map((w) => `warning: ${w}`),
       ...scenes.flatMap((scene, k) => [
-        ...checkScene(scene, { measurer: m }).map((i) => `${i.kind}: ${at(k)}${i.detail}`),
+        ...checkScene(scene, { measurer: measurerFor(m, resolveFont(charts[k].chart.style?.font ?? style.font, { ...style, ...charts[k].chart.style })) }).map((i) => `${i.kind}: ${at(k)}${i.detail}`),
         ...scene.hidden.map((h) => `hidden: ${at(k)}${h}`),
+        ...(scene.warnings ?? []).filter((w) => w.startsWith('font "')).map((w) => `warning: ${at(k)}${w}`),
       ]),
     ];
     const font = (k: number) => charts[k].chart.style?.font ?? style.font;
@@ -149,7 +150,7 @@ export function buildDeck(deck: DeckSpec, m: Measurer, styleFile?: StyleFile): {
       extra: { title: s.title, tags: agenda[i]?.tags } as { title?: string; tags?: Tags; hidden?: boolean },
     };
   });
-  const pptx = writePptx(built.map((b) => ({ ...b.extra, scenes: b.content })), style.font, themeOf(style));
+  const pptx = writePptx(built.map((b) => ({ ...b.extra, scenes: b.content })), style.font, themeOf(style), style.themeFonts);
   return { pptx, slides: built.map((b) => b.slide) };
 }
 

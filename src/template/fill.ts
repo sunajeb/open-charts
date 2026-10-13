@@ -12,7 +12,7 @@
 //   - every part we do not edit is written back byte-identical.
 import type { ChartSpec, Frame, Scene, Style } from '../core/types.ts';
 import type { Measurer } from '../core/text.ts';
-import { checkScene, defaultStyle, layoutGroup, migrate } from '../core/index.ts';
+import { checkScene, defaultStyle, layoutGroup, measurerFor, migrate, resolveFont } from '../core/index.ts';
 import { THEME_SLOTS, themeOf, type ThemeColors } from '../core/theme.ts';
 import { fileStyle, mergeStyles, styleFor, type StyleFile } from '../core/style-file.ts';
 import { InvalidStyleFileError } from '../core/style-file.ts';
@@ -66,7 +66,7 @@ export function fillTemplate(template: Uint8Array, data: FillData, opts: FillOpt
   const tplSlides = sldIds.map((s) => ({ id: Number(s.attrs.id), rid: s.attrs['r:id'], part: presRels.get(s.attrs['r:id'])?.target ?? '' }));
   if (!tplSlides.length) throw new Error('The template has no slides');
 
-  const { theme, font: themeFont } = templateTheme(pkg);
+  const { theme, font: themeFont, major: themeMajor } = templateTheme(pkg);
   const warnings: string[] = [];
   const used = new Set<string>();
   const globals = data.values ?? {};
@@ -93,7 +93,7 @@ export function fillTemplate(template: Uint8Array, data: FillData, opts: FillOpt
     return { ...p, part, id: ++nextId, rid };
   });
 
-  const slides: SlideReport[] = out.map((o, i) => fillSlide(pkg, o.part, o.values, { index: i + 1, source: o.src + 1 }, opts, theme, themeFont, data.style, used, warnings));
+  const slides: SlideReport[] = out.map((o, i) => fillSlide(pkg, o.part, o.values, { index: i + 1, source: o.src + 1 }, opts, theme, themeFont, themeMajor, data.style, used, warnings));
 
   // presentation.xml: the new slide list (and sections), only when it changed.
   const sameList = out.length === tplSlides.length && out.every((o, i) => o.id === tplSlides[i].id);
@@ -128,7 +128,7 @@ export function fillTemplate(template: Uint8Array, data: FillData, opts: FillOpt
 
 interface Edit { start: number; end: number; text: string }
 
-function fillSlide(pkg: Pkg, part: string, values: FillValues, where: { index: number; source: number }, opts: FillOptions, theme: Partial<ThemeColors>, themeFont: string | undefined, dataStyle: Partial<Style> | undefined, used: Set<string>, warnings: string[]): SlideReport {
+function fillSlide(pkg: Pkg, part: string, values: FillValues, where: { index: number; source: number }, opts: FillOptions, theme: Partial<ThemeColors>, themeFont: string | undefined, themeMajor: string | undefined, dataStyle: Partial<Style> | undefined, used: Set<string>, warnings: string[]): SlideReport {
   const xml = pkg.text(part);
   const root = parseXml(xml);
   const tree = findAll(root, 'p:spTree')[0];
@@ -160,7 +160,9 @@ function fillSlide(pkg: Pkg, part: string, values: FillValues, where: { index: n
     const chart = migrate(v);
     // Style: file (for this type) < data style < chart style; the template's theme always wins, so
     // contrast is computed on the colours PowerPoint will draw.
-    const style = mergeStyles(themeFont ? { font: themeFont } : undefined, styleFor(opts.style, chart.type), dataStyle, chart.style, { theme });
+    // The template's body font, and its theme fonts for +mj-lt / +mn-lt.
+    const fonts = themeFont || themeMajor ? { themeFonts: { ...(themeMajor ? { major: themeMajor } : {}), ...(themeFont ? { minor: themeFont } : {}) } } : undefined;
+    const style = mergeStyles(themeFont ? { font: themeFont } : undefined, fonts, styleFor(opts.style, chart.type), dataStyle, chart.style, { theme });
     items.push({ slot, spec: { ...chart, style }, frame: slot.frame });
   }
 
@@ -175,7 +177,11 @@ function fillSlide(pkg: Pkg, part: string, values: FillValues, where: { index: n
     items.forEach((it, k) => {
       const scene = scenes[k];
       const font = it.spec.style?.font ?? defaultStyle.font;
-      const issues = [...checkScene(scene, { measurer: opts.measurer }).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`)];
+      const measurer = measurerFor(opts.measurer, resolveFont(font, it.spec.style));
+      const issues = [
+        ...checkScene(scene, { measurer }).map((i) => `${i.kind}: ${i.detail}`), ...scene.hidden.map((h) => `hidden: ${h}`),
+        ...(scene.warnings ?? []).filter((w) => w.startsWith('font "')).map((w) => `warning: ${w}`),
+      ];
       at.set(report.charts.push({ name: it.slot.name, frame: it.frame, status: 'filled', issues }) - 1, it.slot.shape.start);
       if (opts.dryRun) return;
       const content = chartContent(it.spec, scene, font, undefined, `chart:${it.slot.name}`);
@@ -207,8 +213,9 @@ function fillSlide(pkg: Pkg, part: string, values: FillValues, where: { index: n
     const ne = fieldEdits(nx, parseXml(nx), values, report, used, () => false);
     if (ne.length && !opts.dryRun) pkg.set(notes.target, splice(nx, ne));
   }
-  if (report.charts.some((c) => c.status === 'filled') && opts.measurer && themeFont && !/^(Arial|Liberation Sans|Arimo|Helvetica)$/i.test(themeFont) && !opts.style?.font && !dataStyle?.font) {
-    const w = `charts use the template's font "${themeFont}", measured with Arial metrics unless you pass --font`;
+  // One font file measures every font (--font <file>): say so when the template's font is another.
+  if (report.charts.some((c) => c.status === 'filled') && opts.measurer && !opts.measurer.forFont && themeFont && !/^(Arial|Liberation Sans|Arimo|Helvetica)$/i.test(themeFont) && !opts.style?.font && !dataStyle?.font) {
+    const w = `charts use the template's font "${themeFont}", measured with the font file passed to --font`;
     if (!warnings.includes(w)) warnings.push(w);
   }
   return report;
@@ -341,7 +348,7 @@ function findPlaceholder(root: XmlNode, type: string, idx: string | undefined, b
 // ---- Theme -------------------------------------------------------------------------------------
 
 /** Colours and body font of the template's (first master's) theme. */
-export function templateTheme(pkg: Pkg): { theme: Partial<ThemeColors>; font?: string } {
+export function templateTheme(pkg: Pkg): { theme: Partial<ThemeColors>; font?: string; major?: string } {
   const master = [...pkg.rels(PRES).values()].find((r) => r.type.endsWith('/slideMaster'));
   const t = master && [...pkg.rels(master.target).values()].find((r) => r.type.endsWith('/theme'));
   const theme: Partial<ThemeColors> = {};
@@ -353,9 +360,13 @@ export function templateTheme(pkg: Pkg): { theme: Partial<ThemeColors>; font?: s
     const c = slot && (child(slot, 'a:srgbClr')?.attrs.val ?? child(slot, 'a:sysClr')?.attrs.lastClr);
     if (c && /^[0-9A-Fa-f]{6}$/.test(c)) theme[k] = c.toUpperCase();
   }
-  const minor = findAll(root, 'a:minorFont')[0];
-  const font = minor && child(minor, 'a:latin')?.attrs.typeface;
-  return { theme, font: font ? decodeEntities(font) : undefined };
+  const face = (tag: string) => {
+    const el = findAll(root, tag)[0];
+    const f = el && child(el, 'a:latin')?.attrs.typeface;
+    return f ? decodeEntities(f) : undefined;
+  };
+  const font = face('a:minorFont'), major = face('a:majorFont');
+  return { theme, font, ...(major ? { major } : {}) };
 }
 
 // ---- Sections ----------------------------------------------------------------------------------

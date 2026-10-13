@@ -10,6 +10,7 @@
     "name": { "type": "string", "maxLength": 200 },
     "description": { "type": "string", "maxLength": 2000 },
     "font": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/font" },
+    "themeFonts": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/themeFonts" },
     "fontSize": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/fontSize" },
     "text": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/text" },
     "muted": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/muted" },

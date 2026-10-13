@@ -148,7 +148,7 @@ export const SLIDE_KEYS = ['title', 'chart', 'charts', 'chapter', 'level', 'toc'
 export const DECK_AGENDA_KEYS = [...AGENDA_OPTION_KEYS, 'title'] as const;
 /** Keys of one entry of a slide's `charts` (several charts on one slide). */
 export const SLIDE_CHART_KEYS = ['frame', 'chart'] as const;
-export const STYLE_KEYS = ['font', 'fontSize', 'text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers', 'elements'] as const;
+export const STYLE_KEYS = ['font', 'themeFonts', 'fontSize','text', 'muted', 'axis', 'background', 'palette', 'positive', 'negative', 'theme', 'numbers', 'elements'] as const;
 /** Keys of `style.numbers`: number defaults for every chart. */
 export const STYLE_NUMBER_KEYS = ['locale', 'decimals', 'scale'] as const;
 
@@ -307,7 +307,17 @@ export function validateSpec(spec: unknown, base = ''): SpecError[] {
 function checkStyle(e: Errors, st: unknown) {
   if (!isObj(st)) { e.add(['style'], 'must be an object'); return; }
   e.unknown(st, STYLE_KEYS, ['style']);
-  if (st.font !== undefined && (typeof st.font !== 'string' || !st.font)) e.add(['style', 'font'], 'must be a font name');
+  if (st.font !== undefined && (typeof st.font !== 'string' || !st.font)) e.add(['style', 'font'], 'must be a font name, or +mj-lt / +mn-lt');
+  if (st.themeFonts !== undefined) {
+    if (!isObj(st.themeFonts)) e.add(['style', 'themeFonts'], 'must be an object, e.g. {"major": "Aptos Display", "minor": "Aptos"}');
+    else {
+      e.unknown(st.themeFonts, ['major', 'minor'], ['style', 'themeFonts']);
+      for (const k of ['major', 'minor']) {
+        const v = st.themeFonts[k];
+        if (v !== undefined && (typeof v !== 'string' || !v || v.startsWith('+'))) e.add(['style', 'themeFonts', k], 'must be a font name');
+      }
+    }
+  }
   if (st.fontSize !== undefined && (typeof st.fontSize !== 'number' || !(st.fontSize >= 4 && st.fontSize <= 72))) e.add(['style', 'fontSize'], 'must be a number of points 4–72');
   for (const k of ['text', 'muted', 'axis', 'background', 'positive', 'negative']) if (st[k] !== undefined) checkColor(e, st[k], ['style', k]);
   if (st.palette !== undefined) {
