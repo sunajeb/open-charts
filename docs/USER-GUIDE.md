@@ -94,9 +94,10 @@ control "Microsoft PowerPoint"*; click **Allow**.
 
 Select the chart (click it once) and click **Edit data**. This works on any open-charts chart,
 including ones written by the command line or the web editor, and on decks you received from
-someone else: the data travels inside the file. Don't ungroup the chart or edit its shapes by hand
-if you want to keep editing its data: the next Update chart or Apply redraws the chart from its data
-and replaces those changes.
+someone else: the data travels inside the file. Formatting you change with PowerPoint's own tools
+(colours, fonts, sizes, line styles) is kept when the chart is updated. Two things are not: don't
+ungroup the chart (it can't be edited as a chart afterwards), and keep your own notes and shapes
+outside the chart's group, because Update chart and Apply redraw everything inside it from the data.
 
 ### Dragging handles
 

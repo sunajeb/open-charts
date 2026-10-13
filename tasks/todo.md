@@ -58,7 +58,12 @@ Rules for this plan
 - [ ] D4 Office.js live self-test (Mac) + Windows + PowerPoint on the web
 - [ ] D5 Test matrix: older PowerPoint 16.x, Intel Mac, non-English Office, two monitors / scaling,
       a 100-slide deck with 50 charts
-- [ ] D6 Robustness: decks from older versions, charts edited by hand without the add-in, copy/paste across decks
+      (done: big deck offline perf + live `big-deck` PASS 2026-10-13: opens clean, Update 0.3-0.5 s,
+      50/50 charts keep their data. Needs other hardware/Office: older 16.x, Intel, non-English, monitors)
+- [x] D6 Robustness: decks from older versions, charts edited by hand without the add-in, copy/paste across decks
+      (test/robustness.test.ts, all 19 types; fixes: invalid native edits no longer break Update, damaged
+      or newer charts say so plainly, v0 charts upgrade on any command, one damaged chart no longer stops
+      a deck import)
 
 ## E. Supportability and first-run experience
 - [x] E1 "Report a problem": zips add-in log, versions and the chart spec (no slide content unless the user agrees)
