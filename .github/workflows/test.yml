@@ -121,6 +121,9 @@ jobs:
           $http.setProxy(1)
           $http.open('POST', 'http://127.0.0.1:4174/api/addin/run', $false)
           $http.setRequestHeader('Content-Type', 'text/plain; charset=utf-8')
+          # As the VBA does (WinToken): the install's token file holds the header line "X-OC-Token: <hex>".
+          $tokenLine = (Get-Content -Raw (Join-Path $engine 'token')).Trim()
+          $http.setRequestHeader('X-OC-Token', $tokenLine.Substring($tokenLine.IndexOf(':') + 1).Trim())
           $http.send("update`n`n48,96,864,408`n48,96,864,408`n$spec")
           $answer = [string]$http.responseText
           if ($http.status -ne 200 -or -not $answer.StartsWith("OC`t") -or -not $answer.Contains($label)) { throw "engine answer: $($answer.Substring(0, [Math]::Min(300, $answer.Length)))" }

@@ -8,6 +8,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
+import { tokenHeaders } from '../src/addin/token.ts';
 
 const exe = resolve(process.argv[2] ?? 'dist/win/open-charts.exe');
 const port = Number(process.env.OPEN_CHARTS_PORT) || 4199;
@@ -49,11 +50,13 @@ try {
       up = await fetch(`${base}/api/addin/ping`).then((r) => r.ok, () => false);
     }
     step(`addin serve answers /api/addin/ping after ${Date.now() - t} ms`, () => check(up, 'no answer within 15 s'));
-    const insert = await fetch(`${base}/api/addin/run`, { method: 'POST', body: 'insert\nwaterfall\n48,96,864,408\n\n' }).then((r) => r.text());
+    // The server creates the install's token in its home on start; requests must carry it.
+    const auth = tokenHeaders(env.OPEN_CHARTS_HOME);
+    const insert = await fetch(`${base}/api/addin/run`, { method: 'POST', headers: auth, body: 'insert\nwaterfall\n48,96,864,408\n\n' }).then((r) => r.text());
     step('POST /api/addin/run insert waterfall', () => check(insert.startsWith('OC\t') && /\nS\t/.test(insert), insert.slice(0, 200)));
     const page = await fetch(`${base}/`).then((r) => r.text());
     step('editor page', () => check(page.includes('window.OC_SPEC'), 'no editor page'));
-    await fetch(`${base}/api/addin/quit`, { method: 'POST' }).catch(() => undefined);
+    await fetch(`${base}/api/addin/quit`, { method: 'POST', headers: auth }).catch(() => undefined);
     const gone = await new Promise<boolean>((r) => { server.once('exit', () => r(true)); setTimeout(() => r(false), 5000); });
     step('POST /api/addin/quit stops it', () => check(gone, 'still running'));
   } finally {
