@@ -39,8 +39,8 @@ test('line breaking: spaces, hyphens, slashes and CJK', () => {
   assert.deepEqual(breakPieces('Mid-market/SMB').map((p) => p.s), ['Mid-', 'market/', 'SMB']);
   assert.deepEqual(breakPieces('東京都').map((p) => p.s), ['東', '京', '都']);
   assert.deepEqual(breakPieces('Q1 (est.)').map((p) => p.s), ['Q1', '(est.)']);
-  const lines = wrap('東京都港区六本木', 30, 12, m);
-  assert.ok(lines.length > 1 && fits(lines, 30, 12, m), lines.join('|'));
+  const lines = wrap('東京都港区六本木', 40, 12, m); // ideographs are one em wide: three per line
+  assert.ok(lines.length > 1 && fits(lines, 40, 12, m), lines.join('|'));
   assert.deepEqual(wrap('Mid-market', m.width('Mid-', 12) + 1, 12, m), ['Mid-', 'market']);
   assert.equal(fits(wrap('Supercalifragilistic', 30, 12, m), 30, 12, m), false);
 });
@@ -64,8 +64,10 @@ test('metrics measurer matches opentype.js to the bit for Latin text, and cached
   const mm = measurerFromMetrics(fresh);
   const letters = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,%$€()-–'];
   const strings = letters.flatMap((a) => letters.map((b) => a + b));
-  strings.push('office ffi', 'Raw materials', 'Asia Pacific (excluding Japan)', 'Ünïcödé façade', '中国市场', '−12.5%', '');
+  strings.push('office ffi', 'Raw materials', 'Asia Pacific (excluding Japan)', 'Ünïcödé façade', '−12.5%', '');
   for (const t of strings) assert.equal(mm.width(t, 12), font.getAdvanceWidth(t, 12, { kerning: false }), JSON.stringify(t));
+  // Ideographs the font lacks are drawn by PowerPoint in an East Asian fallback font: one em, not .notdef.
+  assert.equal(mm.width('中国市场', 12), 48);
   assert.equal(mm.width('ab\nabcd', 10), mm.width('abcd', 10));
 });
 

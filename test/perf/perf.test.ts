@@ -3,10 +3,10 @@
 // above what a laptop measures (`npm run bench`), so they catch regressions, not noise.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { layoutChart, type ChartSpec, type Frame } from '../src/core/index.ts';
-import { samples } from '../src/core/samples.ts';
-import { createMeasurer } from '../src/fonts.ts';
-import { buildDeck } from '../src/deck.ts';
+import { layoutChart, type ChartSpec, type Frame } from '../../src/core/index.ts';
+import { samples } from '../../src/core/samples.ts';
+import { createMeasurer } from '../../src/fonts.ts';
+import { buildDeck } from '../../src/deck.ts';
 
 const m = createMeasurer();
 const FRAMES: Frame[] = [{ x: 48, y: 96, w: 864, h: 408 }, { x: 0, y: 0, w: 360, h: 200 }, { x: 0, y: 0, w: 900, h: 120 }, { x: 0, y: 0, w: 240, h: 500 }];

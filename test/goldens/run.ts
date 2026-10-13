@@ -1,4 +1,4 @@
-// Golden rendering: examples/*.json → .pptx (CLI) → PDF (LibreOffice) → PNG (pdftoppm) → diff against
+// Golden rendering: examples/*.json and test/bench/*.json → .pptx (CLI) → PDF (LibreOffice) → PNG (pdftoppm) → diff against
 // committed baselines in test/goldens/<platform>/. Font rendering differs per OS, so each platform keeps
 // its own baselines.
 //
@@ -38,13 +38,15 @@ rmSync(out, { recursive: true, force: true });
 mkdirSync(actualDir, { recursive: true });
 mkdirSync(diffDir, { recursive: true });
 
-// 1. Build every example deck with the CLI.
-const examples = readdirSync(join(root, 'examples')).filter((f) => f.endsWith('.json')).sort();
+// 1. Build every example deck and every bench deck (test/bench/NN-*.json, pages "bench-NN-…") with the CLI.
+const decks = [
+  ...readdirSync(join(root, 'examples')).filter((f) => f.endsWith('.json')).sort().map((f) => ({ path: `examples/${f}`, name: basename(f, '.json') })),
+  ...readdirSync(join(root, 'test/bench')).filter((f) => /^\d+-.*\.json$/.test(f)).sort().map((f) => ({ path: `test/bench/${f}`, name: `bench-${basename(f, '.json')}` })),
+];
 const expectedPages = new Map<string, number>();
-for (const f of examples) {
-  const name = basename(f, '.json');
-  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', `examples/${f}`, '-o', join(out, name)], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
-  const spec = JSON.parse(readFileSync(join(root, 'examples', f), 'utf8'));
+for (const { path, name } of decks) {
+  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', path, '-o', join(out, name)], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+  const spec = JSON.parse(readFileSync(join(root, path), 'utf8'));
   expectedPages.set(name, Array.isArray(spec.slides) ? spec.slides.length : 1);
 }
 

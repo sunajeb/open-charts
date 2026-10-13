@@ -1,0 +1,20 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Market map: we lead Enterprise but are sub-scale everywhere else",
+      "chart": {
+        "specVersion": 1,
+        "type": "mekko",
+        "categories": ["Enterprise","Upper mid-market","Lower mid-market","SMB","Public sector","Education"],
+        "series": [
+          {"name":"Us","values":[410,120,60,25,40,8]},
+          {"name":"Competitor A","values":[290,210,140,90,70,22]},
+          {"name":"Competitor B","values":[160,180,150,60,30,14]},
+          {"name":"Competitor C","values":[80,60,90,140,25,6]},
+          {"name":"Other","values":[120,130,240,310,130,30]}
+        ]
+      }
+    }
+  ]
+}

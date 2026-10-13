@@ -25,7 +25,10 @@ export function layoutLine(ctx: Ctx) {
   // Value lines at fixed values (manual: Value lines) widen the axis to show them.
   const vls = (o.valueLines ?? []).map((vl, k) => ({ k, v: vl.value as number, side: vl.position ?? 'right', label: valueLineText(ctx, vl, vl.value as number) }));
   const vlv = vls.map((v) => v.v);
-  const [vmin, vmax] = zero ? [Math.min(0, lo, ...vlv), Math.max(0, hi, ...vlv)] : [Math.min(lo, ...vlv), Math.max(hi, ...vlv)];
+  // A floating axis keeps air below the lowest point: on the bottom line its marker and label would sit
+  // on the axis and in the category row.
+  const flo = Math.min(lo - (hi - lo) * 0.1, ...vlv);
+  const [vmin, vmax] = zero ? [Math.min(0, lo, ...vlv), Math.max(0, hi, ...vlv)] : [flo, Math.max(hi, ...vlv)];
   const ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
   let [dmin, dmax] = ticks ? [ticks[0], ticks[ticks.length - 1]] : [vmin, vmax];
   if (dmax === dmin) dmax = dmin + 1;

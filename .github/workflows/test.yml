@@ -19,6 +19,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
       - run: npm test
+      - run: npm run quality -- --quick
 
   e2e:
     if: github.event_name != 'schedule'

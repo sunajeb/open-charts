@@ -1,0 +1,15 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "アジア太平洋の売上: 中国と日本で全体の3分の2",
+      "chart": {
+        "specVersion": 1,
+        "type": "stacked",
+        "categories": ["中国","日本","韩国","台湾","香港","新加坡"],
+        "series": [{"name":"製品","values":[120,96,41,28,19,15]},{"name":"サービス","values":[44,51,18,12,9,11]}],
+        "options": {"unit":{"text":"億円","space":false}}
+      }
+    }
+  ]
+}

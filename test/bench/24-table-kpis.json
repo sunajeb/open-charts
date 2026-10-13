@@ -1,0 +1,21 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Five-year plan: margin expands by 7 points",
+      "chart": {
+        "specVersion": 1,
+        "type": "table",
+        "categories": ["2025A","2026E","2027E","2028E","2029E","2030E"],
+        "series": [
+          {"name":"Revenue ($m)","values":[216,248,284,322,361,402]},
+          {"name":"Growth","values":["19%","15%","15%","13%","12%","11%"]},
+          {"name":"EBITDA ($m)","values":[44,55,67,80,94,110]},
+          {"name":"EBITDA margin","values":["20.4%","22.2%","23.6%","24.8%","26.0%","27.4%"]},
+          {"name":"Capex ($m)","values":[-18,-22,-25,-27,-29,-31]},
+          {"name":"Headcount","values":[1180,1290,1405,1510,1620,1730]}
+        ]
+      }
+    }
+  ]
+}

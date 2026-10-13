@@ -1,0 +1,30 @@
+{
+  "fonts": "sha1:8c286838fd35 lh=13.80",
+  "frame": {"x":48,"y":96,"w":864,"h":408},
+  "hidden": [],
+  "shapes": [
+    {"role":"wedge:s0:c0","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":-90,"sweep":193.2},{"op":"Z"}],"fill":"1F3A5F","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c1","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":103.2,"sweep":112.5},{"op":"Z"}],"fill":"3E6A9E","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c2","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":215.7,"sweep":23},{"op":"Z"}],"fill":"7FA3CC","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c3","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":238.7,"sweep":18.1},{"op":"Z"}],"fill":"B9CDE5","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c4","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":256.8,"sweep":8.3},{"op":"Z"}],"fill":"A6A6A6","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c5","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":265.1,"sweep":3.4},{"op":"Z"}],"fill":"D9D9D9","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"wedge:s0:c6","kind":"path","commands":[{"op":"M","x":480,"y":322.4},{"op":"A","cx":480,"cy":322.4,"r":137.2,"start":268.5,"sweep":1.5},{"op":"Z"}],"fill":"8493A7","stroke":"FFFFFF","strokeWidth":1},
+    {"role":"label:value:s0:c0","kind":"text","size":12,"color":"FFFFFF","align":"center","valign":"middle","lineHeight":13.8,"x":586.3,"y":329.3,"w":26,"h":13.8,"text":"54%","textRole":"value"},
+    {"role":"label:value:s0:c1","kind":"text","size":12,"color":"FFFFFF","align":"center","valign":"middle","lineHeight":13.8,"x":354.6,"y":357.6,"w":26,"h":13.8,"text":"31%","textRole":"value"},
+    {"role":"label:value:s0:c2","kind":"text","size":12,"color":"222222","align":"center","valign":"middle","lineHeight":13.8,"x":386.8,"y":225.3,"w":19.3,"h":13.8,"text":"6%","textRole":"value"},
+    {"role":"label:value:s0:c3","kind":"text","size":12,"color":"222222","align":"center","valign":"middle","lineHeight":13.8,"x":423.8,"y":201.7,"w":19.3,"h":13.8,"text":"5%","textRole":"value"},
+    {"role":"leader:c6","kind":"line","x1":478.2,"y1":185.2,"x2":411.8,"y2":147.3,"color":"595959","width":0.5},
+    {"role":"leader:c5","kind":"line","x1":472.3,"y1":185.4,"x2":411.8,"y2":161.1,"color":"595959","width":0.5},
+    {"role":"leader:c4","kind":"line","x1":458.4,"y1":186.9,"x2":411.8,"y2":174.9,"color":"595959","width":0.5},
+    {"role":"leader:c3","kind":"line","x1":428,"y1":195.4,"x2":411.8,"y2":188.7,"color":"595959","width":0.5},
+    {"role":"leader:c2","kind":"line","x1":386.7,"y1":221.7,"x2":375.9,"y2":216.5,"color":"595959","width":0.5},
+    {"role":"label:category:c0","kind":"text","size":12,"color":"222222","align":"left","valign":"middle","lineHeight":13.8,"x":624.1,"y":332.1,"w":74.7,"h":13.8,"text":"Core platform","textRole":"category"},
+    {"role":"label:category:c6","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":296.1,"y":140.4,"w":114.7,"h":13.8,"text":"Legacy hardware 1%","textRole":"category"},
+    {"role":"label:category:c5","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":322.8,"y":154.2,"w":88,"h":13.8,"text":"Marketplace 1%","textRole":"category"},
+    {"role":"label:category:c4","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":331.4,"y":168,"w":79.4,"h":13.8,"text":"Consulting 2%","textRole":"category"},
+    {"role":"label:category:c3","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":373.4,"y":181.8,"w":37.3,"h":13.8,"text":"Mobile","textRole":"category"},
+    {"role":"label:category:c2","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":310.2,"y":209.6,"w":64.7,"h":13.8,"text":"Integrations","textRole":"category"},
+    {"role":"label:category:c1","kind":"text","size":12,"color":"222222","align":"right","valign":"middle","lineHeight":13.8,"x":292.4,"y":366.2,"w":50,"h":13.8,"text":"Analytics","textRole":"category"}
+  ]
+}

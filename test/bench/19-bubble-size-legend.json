@@ -1,0 +1,18 @@
+{
+  "specVersion": 1,
+  "slides": [
+    {
+      "title": "Portfolio: payments and cards are large, growing and strong",
+      "chart": {
+        "specVersion": 1,
+        "type": "bubble",
+        "categories": ["Payments","Lending","Wealth","Insurance","Cards","FX","Custody","Leasing"],
+        "series": [
+          {"name":"Core","values":[[8.5,2.1,420],[3.2,1.4,260],[6.1,0.6,180],null,[11.4,1.8,310],null,null,null]},
+          {"name":"Non-core","values":[null,null,null,[1.8,0.4,90],null,[4.6,0.9,60],[2.7,0.3,40],[-1.2,0.7,75]]}
+        ],
+        "options": {"sizeLegend":"Revenue ($m)","axisTitles":{"x":"Market growth (%)","y":"Relative market share (x)"}}
+      }
+    }
+  ]
+}
