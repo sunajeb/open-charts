@@ -12,7 +12,9 @@ Rules for this plan
 ## A. Hygiene and safety (no PowerPoint needed)
 - [x] A1 Remove analysis notes about the reference product from the repo; keep only public-convention
       and public-manual wording
-- [ ] A2 Git history still contains the removed notes — decide: rewrite history + force-push (owner decision, Q1)
+- [x] A2 Git history still contains the removed notes — decide: rewrite history + force-push (owner decision, Q1)
+      (rewritten 2026-10-13: every line naming the notes or decompilation removed from all 396 commits,
+      two note files dropped; HEAD tree unchanged; force-pushed; local backup ~/open-charts-backup-2026-10-13.git)
 - [x] A3 Commit the click-handling fix (user click during background selection work runs at once)
 - [x] A4 Security: local engine server accepts only requests carrying a per-install secret token and a
       loopback Host/Origin; editor/pop-up/toolbar/VBA/Office.js pass the token; tests for rejection
@@ -79,7 +81,7 @@ Rules for this plan
       owner's call: name kept, lawyer review later. Left: legal review (Q2))
 
 ## Owner questions (open)
-- Q1 Rewrite git history to remove the old analysis docs (force-push; anyone who cloned keeps old copies)?
+- Q1 (answered 2026-10-13: rewrite + force-push; done)
 - Q2 Get a lawyer's view before public/commercial distribution?
 - Q3 (answered 2026-10-13: later; the pilot ships unsigned) Apple Developer and Azure Trusted Signing
 - Q4 Which fonts do target decks use? Share one typical client template if possible.
