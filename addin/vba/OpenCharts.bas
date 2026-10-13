@@ -526,6 +526,31 @@ Public Sub OCPREFIX_Probe(ByVal n As String)
     Report "VISIBLECALLS " & gVisibleCalls
 End Sub
 
+' Logs every text of the n-th chart as PowerPoint draws it, one line each: "TEXT role|font|bound width|
+' box width|bound height|box height" (pt), so a scripted test can compare
+' PowerPoint's text with what the engine measured (tools/e2e-fonts-live.ts).
+Public Sub OCPREFIX_TextBounds(ByVal n As String)
+    Dim shp As Object, s As Object, tr As Object, k As Long, i As Long
+    On Error Resume Next
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then
+                For i = 1 To shp.GroupItems.Count
+                    Set s = shp.GroupItems(i)
+                    If s.HasTextFrame Then
+                        If s.TextFrame2.HasText Then
+                            Set tr = s.TextFrame2.TextRange
+                            Report "TEXT " & TagValue(s, "OC_ROLE") & "|" & tr.Font.Name & "|" & Fmt(tr.BoundWidth) & "|" & _
+                                Fmt(s.Width) & "|" & Fmt(tr.BoundHeight) & "|" & Fmt(s.Height)
+                        End If
+                    End If
+                Next i
+            End If
+        End If
+    Next shp
+End Sub
+
 ' Resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.
 Public Sub OCPREFIX_ResizeChart(ByVal n As String, ByVal factor As String)
     Dim shp As Object, k As Long
@@ -1809,9 +1834,14 @@ Private Function ThemeIndex(ByVal v As String) As Long
     End Select
 End Function
 
+' Request lines with the slide's theme: its colours and its fonts.
+Private Function ThemeLine(ByVal sld As Object) As String
+    ThemeLine = ThemeColorsLine(sld) & ThemeFontsLine(sld)
+End Function
+
 ' Request line with the slide's theme colours (ThemeColorScheme order), so the engine decides
 ' label contrast on the colours PowerPoint will show. "" if PowerPoint cannot say.
-Private Function ThemeLine(ByVal sld As Object) As String
+Private Function ThemeColorsLine(ByVal sld As Object) As String
     Dim scheme As Object, i As Long, c As Long, out As String
     On Error GoTo Done
     Set scheme = sld.ThemeColorScheme
@@ -1819,7 +1849,23 @@ Private Function ThemeLine(ByVal sld As Object) As String
         c = scheme.Colors(i).RGB
         out = out & IIf(i > 1, ",", "") & Right$("0" & Hex$(c And 255), 2) & Right$("0" & Hex$((c \ 256) And 255), 2) & Right$("0" & Hex$((c \ 65536) And 255), 2)
     Next i
-    ThemeLine = "theme=" & out & vbLf
+    ThemeColorsLine = "theme=" & out & vbLf
+Done:
+End Function
+
+' Request lines with the deck's theme fonts (headings, body: what +mj-lt / +mn-lt stand for), so the
+' engine measures text in the fonts PowerPoint will draw. "" if PowerPoint cannot say.
+Private Function ThemeFontsLine(ByVal sld As Object) As String
+    Dim fs As Object, major As String, minor As String
+    On Error Resume Next
+    Set fs = sld.Design.SlideMaster.Theme.ThemeFontScheme
+    If fs Is Nothing Then Set fs = ActivePresentation.SlideMaster.Theme.ThemeFontScheme
+    On Error GoTo Done
+    If fs Is Nothing Then Exit Function
+    major = fs.MajorFont.Item(1).Name ' msoThemeLatin
+    minor = fs.MinorFont.Item(1).Name
+    If major <> "" Then ThemeFontsLine = "majorfont=" & major & vbLf
+    If minor <> "" Then ThemeFontsLine = ThemeFontsLine & "minorfont=" & minor & vbLf
 Done:
 End Function
 

@@ -1,13 +1,13 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { parseArgs } from 'node:util';
 import type { DeckSpec } from './deck.ts';
 import { ADDIN_USAGE } from './addin/usage.ts';
 // Each command loads only the modules it needs (dynamic imports): every TypeScript file costs start-up time.
 
-const USAGE = `Usage: open-charts <deck.json> [-o out/deck] [--font Arial.ttf --bold-font "Arial Bold.ttf"] [--svg] [--strict] [--report report.json]
-       open-charts fill <template.pptx> <data.json> [-o out.pptx] [--dry-run] [--strict] [--style style.json] [--each items.json] [--report report.json]
+const USAGE = `Usage: open-charts <deck.json> [-o out/deck] [--font Georgia] [--svg] [--strict] [--report report.json]
+       open-charts fill <template.pptx> <data.json> [-o out.pptx] [--dry-run] [--strict] [--style style.json] [--font Georgia] [--each items.json] [--report report.json]
        open-charts inspect <deck.pptx> [--json]
        open-charts import <deck.pptx> [-o deck.json]
        open-charts serve [--port 4173]
@@ -18,6 +18,9 @@ Writes <out>.pptx with one native, editable chart per slide.
 --strict exits with code 1 if any slide has a layout issue (the deck is still written).
 --report writes the issues per slide as JSON.
 --style applies a style file (fonts, colours, number defaults, element styles; see docs/DATA-FORMAT.md).
+--font sets the charts' font family (charts with their own font keep it). Text is measured in each
+  chart's font, found among the fonts installed here (docs/USER-GUIDE.md "Fonts"). --font <file.ttf>
+  [--bold-font <file.ttf>] instead measures every font with that one file.
 fill replaces shapes named chart:<name> with charts and {{name}} in text with values, in your own
   template; untouched parts stay byte-identical. --dry-run reports what it would do, writes nothing.
   --each writes one deck per item of a JSON array (put a {field} in -o). --strict exits 1 on any
@@ -60,9 +63,11 @@ if (values.help) {
   if (positionals.length !== 3) fail(USAGE);
   try {
     const [{ fillMain }, { createMeasurer }] = await Promise.all([import('./template/cli.ts'), import('./fonts.ts')]);
+    const fonts = fontArgs(createMeasurer);
+    const style = await loadStyle();
     const code = fillMain(positionals[1], positionals[2], {
       out: values.out, dryRun: values['dry-run']!, strict: values.strict!, each: values.each, report: values.report,
-      style: await loadStyle(), measurer: createMeasurer(values.font, values['bold-font']),
+      style: fonts.family ? { ...style, font: fonts.family } : style, measurer: fonts.measurer,
     });
     process.exitCode = code;
   } catch (err) {
@@ -70,7 +75,7 @@ if (values.help) {
   }
 } else if (command === 'serve') {
   const { serve } = await import('./server.ts');
-  serve(Number(values.port), { font: values.font, bold: values['bold-font'] });
+  serve(Number(values.port), isFontFile(values.font) ? { font: values.font, bold: values['bold-font'] } : {});
 } else if (command === 'inspect' || command === 'import') {
   if (positionals.length !== 2) fail(USAGE);
   const file = positionals[1];
@@ -112,6 +117,16 @@ async function loadStyle() {
   }
 }
 
+/** `--font`: a font file (measures every font, as before font lookup), else a family name. */
+function isFontFile(f?: string): boolean {
+  return !!f && (/\.(ttf|otf|ttc|otc)$/i.test(f) || existsSync(f));
+}
+
+function fontArgs(createMeasurer: (file?: string, bold?: string) => import('./core/text.ts').Measurer) {
+  const f = values.font;
+  return isFontFile(f) ? { measurer: createMeasurer(f, values['bold-font']) } : { measurer: createMeasurer(), family: f };
+}
+
 function fail(msg: string): never {
   console.error(msg);
   process.exit(1);
@@ -126,7 +141,8 @@ async function run() {
   const out = values.out ?? positionals[0].replace(/\.json$/, '');
   mkdirSync(dirname(out), { recursive: true });
 
-  const { pptx, slides } = buildDeck(deck, createMeasurer(values.font, values['bold-font']), await loadStyle());
+  const fonts = fontArgs(createMeasurer);
+  const { pptx, slides } = buildDeck(fonts.family ? { ...deck, style: { ...deck.style, font: fonts.family } } : deck, fonts.measurer, await loadStyle());
   writeFileSync(`${out}.pptx`, pptx);
   console.log(`Wrote ${out}.pptx (${slides.length} slide${slides.length === 1 ? '' : 's'})`);
 

@@ -4,7 +4,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFil
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createMeasurer } from '../fonts.ts';
+import { createMeasurer, reportOnce } from '../fonts.ts';
 import { handleRequest, parseRequest } from './engine.ts';
 import { httpSessions, serveAddin, stopServer } from './server.ts';
 import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
@@ -29,7 +29,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
       // Always answers in the line format and exits 0: the VBA side shows E records to the user.
       let request = '';
       try { request = readFileSync(!arg || arg === '-' ? 0 : arg, 'utf8'); } catch { request = ''; }
-      return handleRequest(parseRequest(request), createMeasurer(), httpSessions())
+      return handleRequest(parseRequest(request), createMeasurer(), httpSessions(), reportOnce)
         .catch((err: Error) => `OC\t1\nE\t${err.message.replace(/[\t\n\r]/g, ' ')}\n`)
         .then((out) => { process.stdout.write(out); });
     }
