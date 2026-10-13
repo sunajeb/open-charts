@@ -79,8 +79,11 @@ Add every chart type into PowerPoint, tested end to end: every editor button in 
 - **Not built (planned, by owner decision for the first build):** AI (P2 AI), data inputs / template fill / SDKs (P2), Office.js and native Windows add-ins (P3/P4), Excel links, agenda (P5), user label dragging. Gantt and tables are built at first-build depth.
 - **Known minor:** a few labels render 1–3 px differently between add-in and CLI decks in PowerPoint; at very small frames some labels are hidden (and reported) rather than overflowing.
 
-## P1 completion — unmerged branches (state at usage limit, 2026-10-13)
-- `worktree-agent-a7009d645a2127149` (bench): 28 bench fixtures + snapshots, gallery 63 pages, `npm run quality` (gate passes), 3 engine fixes. Ready to merge after full `npm test`/`e2e`/goldens. Behaviour-spec and optional-rows sub-work may be missing (check for WIP commits).
-- `worktree-agent-aaf1bf041b0c27de5` (theme, WIP 8556bfd): theme slots + schemeClr, style.theme/numbers, scaleGroup, multi-chart slides, add-in format v2. Left: docs (2 failing doc tests), editor swatches for slots, examples/goldens, e2e-powerpoint theme comparison, live run.
-- `worktree-agent-a4e3bbc3ce7f9e418` (decorations, WIP cbb3f94, NOT merge-ready): level/difference arrows (3 modes), value lines, 100% indicator + percentBase, category gaps/breaks, value axis break. Left: waterfall/combo gaps, combo secondary axis drawing, schema/docs, engine.test roles/options, resolve/quality roles, unit tests, editor controls, example deck, full suites + goldens.
-- Merge order suggestion: bench → theme → decorations; reinstall the add-in from the main repo after theme.
+## P1 completion (2026-10-13) — merged
+- [x] Bench: 28 fixtures + scene snapshots, 76-page golden gallery, `npm run quality` gate (0 overlaps/out-of-frame, exact sums)
+- [x] Decorations: difference arrows (3 modes), level arrows, value lines, 100% indicator + 100%= row, category gaps/breaks, axis breaks, combo secondary axis
+- [x] Theme: theme slots + schemeClr (charts follow the deck's theme in PowerPoint), style.theme/numbers, scaleGroup, several charts per slide
+- [x] Behaviour spec: 214 rules → code → source → test (docs/behaviour-spec.md, self-checking test)
+- [x] Optional rows (Series.hidden, eye toggle)
+- [ ] Apply hangs ≥ 20 s in a restarted PowerPoint session (investigating)
+- Not in P1 scope here: Windows PowerPoint golden runner (needs Windows), blind consultant panel, 1.0 spec freeze (owner decision)
