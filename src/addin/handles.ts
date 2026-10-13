@@ -130,7 +130,10 @@ export interface HandlesDeps {
   apply: (s: Session) => Promise<void> | void;
   /** The selection request as NotifySelection builds it, now (the SelectionInfo macro): re-measuring. */
   measure?: () => Promise<string | undefined>;
+  /** Steps and timings (the add-in server: verbose logging only). */
   log?: (line: string) => void;
+  /** Failures (default: `log`; the add-in server: always logged). */
+  warn?: (line: string) => void;
   /** Clock for the drag timing in the log (tests). */
   now?: () => number;
 }
@@ -156,6 +159,7 @@ type Msg = Record<string, unknown> & { event?: string };
 export function handlesController(deps: HandlesDeps) {
   const { helper } = deps;
   const log = deps.log ?? (() => {});
+  const warn = deps.warn ?? log;
   const now = deps.now ?? (() => performance.now());
   let cur: Current | undefined;
   let drag: Drag | undefined;
@@ -203,7 +207,7 @@ export function handlesController(deps: HandlesDeps) {
       if (!getSession(id)) setSession(id, { chart, title: 'chart', state: 'open' } as never);
       rememberContext(id, req.context, req.spec);
     } catch (err) {
-      log(`HANDLES layout failed: ${(err as Error).message}`);
+      warn(`HANDLES layout failed: ${(err as Error).message}`);
       hide();
       return;
     }
@@ -249,7 +253,7 @@ export function handlesController(deps: HandlesDeps) {
         const { scene, relayout } = sceneFor(spec, c.context, deps.measurer());
         Object.assign(c, { scene, relayout, handles: dragHandles(spec, scene, c.roles) });
       } else {
-        log(`HANDLES apply did not draw: ${after?.state ?? 'no session'} ${after?.message ?? ''}`);
+        warn(`HANDLES apply did not draw: ${after?.state ?? 'no session'} ${after?.message ?? ''}`);
       }
     } finally {
       committing = false;

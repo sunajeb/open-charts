@@ -370,6 +370,7 @@ export function serveAddin(port = ADDIN_PORT) {
     apply: (s) => applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())),
     measure: () => selectionNow(outlived),
     log: debug,
+    warn: log,
   });
   popup.onEvent?.((msg) => handles.event(msg));
   // The element mini toolbar (selection → toolbar panel → per-element overrides → Apply).
