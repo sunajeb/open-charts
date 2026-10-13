@@ -105,6 +105,9 @@ jobs:
           if ((Get-ItemProperty (Join-Path $office 'Security\Trusted Locations\open-charts')).Path -ne "$addins\") { throw 'no trusted location' }
           if ((Get-Content (Join-Path $engine 'addin.json') -Raw | ConvertFrom-Json).prefix -notmatch '^OC[0-9A-F]{24}$') { throw 'addin.json prefix' }
           # The engine as the VBA starts it (hidden) and calls it (ServerXMLHTTP, UTF-8 both ways).
+          # A real install's engine home is %LOCALAPPDATA%\open-charts (= the install folder); this test installs
+          # into a temporary folder, so point the engine at it (token, settings and log live there).
+          $env:OPEN_CHARTS_HOME = $engine
           Start-Process -FilePath $exe -ArgumentList 'addin', 'serve' -WindowStyle Hidden
           $up = $false
           for ($i = 0; $i -lt 150 -and -not $up; $i++) {
