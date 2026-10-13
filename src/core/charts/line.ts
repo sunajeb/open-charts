@@ -6,19 +6,17 @@ import { niceTicks } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
 import type { LineShape } from '../types.ts';
 import { diffLabel, drawLevelArrow, drawValueLine, valueLineLabelW, valueLineText } from '../decorations.ts';
-import { arrowBubble } from '../common.ts';
+import { arrowBubble, barCategories, barCategoryLabels, bottomAxisHeight, bottomValueAxis } from '../common.ts';
+import { sideways } from '../direction.ts';
 
-/**
- * Line chart: one point per category, markers, value labels placed above or below without collisions.
- * `options.step` draws an ortho (step) line: horizontal to the next category, then vertical.
- */
-export function layoutLine(ctx: Ctx) {
-  const { spec, style, frame, o, fs, lh, pad, m } = ctx;
+/** Values, value lines and the value domain, shared by line and profile charts; null without values. */
+function lineModel(ctx: Ctx) {
+  const { spec, o } = ctx;
   const nCat = spec.categories.length;
   const sers = spec.series.map((_, i) => i);
   const val = (s: number, c: number) => num(spec.series[s].values[c]);
   const all = spec.series.flatMap((s) => s.values.map(num)).filter((v): v is number => v != null);
-  if (!all.length) { ctx.hidden.push('line chart has no values'); return; }
+  if (!all.length) { ctx.hidden.push('line chart has no values'); return null; }
 
   // Include zero unless the data sits in a narrow band far from it (e.g. retention 95–120%).
   const lo = Math.min(...all), hi = Math.max(...all);
@@ -31,10 +29,25 @@ export function layoutLine(ctx: Ctx) {
   // on the axis and in the category row.
   const flo = Math.min(lo - (hi - lo) * 0.1, ...vlv);
   const [vmin, vmax] = zero ? [Math.min(0, lo, ...vlv), Math.max(0, hi, ...vlv)] : [flo, Math.max(hi, ...vlv)];
-  let ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
+  const ticks = !o.valueAxis ? null : niceTicks(vmin, vmax, valueTicks(ctx));
   let [dmin, dmax] = ticks ? [ticks[0], ticks[ticks.length - 1]] : [vmin, vmax];
   if (dmax === dmin) dmax = dmin + 1;
-  let axisFmt = axisFormatter(ctx, ticks);
+  const axisFmt = axisFormatter(ctx, ticks);
+  return { nCat, sers, val, vls, ticks, dmin, dmax, axisFmt };
+}
+type LineModel = NonNullable<ReturnType<typeof lineModel>>;
+
+/**
+ * Line chart: one point per category, markers, value labels placed above or below without collisions.
+ * `options.step` draws an ortho (step) line: horizontal to the next category, then vertical.
+ */
+export function layoutLine(ctx: Ctx) {
+  const md = lineModel(ctx);
+  if (!md) return;
+  if (sideways(ctx.o)) { layoutProfile(ctx, md); return; }
+  const { spec, style, frame, o, fs, lh, pad, m } = ctx;
+  const { nCat, sers, val, vls } = md;
+  let { ticks, dmin, dmax, axisFmt } = md;
   const axisW = axisWidth(ctx, dmin, ticks, axisFmt);
 
   // Label every point when the chart is sparse enough to stay readable, otherwise only the last one.
@@ -181,6 +194,106 @@ export function layoutLine(ctx: Ctx) {
     drawLevelArrow(ctx, {
       horizontal: false, us: between ? [base] : [base, base + pad * 0.5, base + pad], guides, mode: l.mode,
       wa: yOf(l.va), wb: yOf(l.vb), label: l.label, role: `arrow:level:${l.k}`, bounds: area, reason: `level arrow ${l.k + 1}`,
+    });
+  }
+}
+
+/**
+ * Profile chart (a line chart turned sideways, direction right; left is this mirrored): categories
+ * down the left, values along the bottom, each series a line running down through its points. Value
+ * labels sit beside their point (right, then left), then above or below it; value lines run down the
+ * plot. Level arrows are drawn in the up direction only.
+ */
+function layoutProfile(ctx: Ctx, md: LineModel) {
+  const { spec, style, frame, o, fs, lh, pad, m } = ctx;
+  const { nCat, sers, val, vls } = md;
+  let { ticks, dmin, dmax, axisFmt } = md;
+  if (o.levelArrows?.length) ctx.hidden.push('level arrows: drawn in the up direction only');
+  const legendH = legend(ctx, 'line');
+  const axisH = bottomAxisHeight(ctx, ticks);
+  const { catW, fit } = barCategories(ctx);
+  const r = Math.max(3, fs * 0.3);
+  const labelAll = nCat * sers.length <= 24;
+  const labelW = Math.max(0, ...sers.flatMap((s) => [...Array(nCat).keys()].map((c) => {
+    const v = val(s, c);
+    return v == null || (!labelAll && c !== nCat - 1) ? 0 : m.width(ctx.fmt(v), fs) + 2;
+  })));
+  // Value line labels go below the plot ("right") or above it ("left"), as on bars.
+  const vlH = (side: 'left' | 'right') => (vls.some((v) => v.side === side) ? lh + fs * 0.6 + pad * 0.6 : 0);
+  const px = frame.x + catW + pad + r;
+  const pw = frame.x + frame.w - px - Math.max(r, labelW + r + pad * 0.6);
+  const py = frame.y + legendH + vlH('left');
+  const yA = frame.y + frame.h - axisH - vlH('right');
+  const ph = yA - py;
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks, [px, yA, px + pw, yA]));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks);
+  if (pw < lh * 2 || ph < lh * nCat * 0.5) ctx.hidden.push('chart frame too small');
+  const xOf = (v: number) => px + ((v - dmin) / (dmax - dmin)) * pw;
+  const cy = (c: number) => py + (ph / nCat) * (c + 0.5);
+
+  if (ticks) bottomValueAxis(ctx, ticks, xOf, yA, axisFmt);
+  const left = xOf(dmin);
+  ctx.add('axis', { kind: 'line', x1: left, y1: py, x2: left, y2: yA, color: style.axis, width: 0.75 });
+  if (dmin < 0 && dmax > 0) ctx.add('axis', { kind: 'line', x1: xOf(0), y1: py, x2: xOf(0), y2: yA, color: style.axis, width: 0.5, dash: true });
+  barCategoryLabels(ctx, fit, catW, cy);
+
+  // Lines, broken at missing values; a step line holds a value down to the next category, then moves across.
+  for (const s of sers) {
+    for (let c = 1; c < nCat; c++) {
+      const a = val(s, c - 1), b = val(s, c);
+      if (a == null || b == null) continue;
+      const seg = (x1: number, y1: number, x2: number, y2: number) =>
+        ctx.add(`line:s${s}`, { kind: 'line', x1, y1, x2, y2, color: ctx.color(s), width: 2 });
+      if (o.step) {
+        seg(xOf(a), cy(c - 1), xOf(a), cy(c));
+        if (a !== b) seg(xOf(a), cy(c), xOf(b), cy(c));
+      } else seg(xOf(a), cy(c - 1), xOf(b), cy(c));
+    }
+  }
+  const markers: Box[] = [];
+  for (const s of sers) {
+    for (let c = 0; c < nCat; c++) {
+      const v = val(s, c);
+      if (v == null) continue;
+      const box = { x: xOf(v) - r, y: cy(c) - r, w: r * 2, h: r * 2 };
+      markers.push(box);
+      ctx.add(`marker:s${s}:c${c}`, { kind: 'rect', ...box, fill: ctx.color(s), stroke: style.background, strokeWidth: 0.75, ellipse: true });
+    }
+  }
+
+  // Value labels: beside the point (the rightmost series to the right, the leftmost to the left), then above or below.
+  const placed: Box[] = [];
+  const segments = ctx.shapes.filter((sh, i): sh is LineShape => sh.kind === 'line' && ctx.roles[i].startsWith('line:'));
+  const free = (b: Box) =>
+    b.y >= py && b.y + b.h <= yA && b.x >= frame.x + catW + pad * 0.5 && b.x + b.w <= frame.x + frame.w &&
+    !placed.some((p) => overlaps(p, b)) && !markers.some((p) => overlaps(p, b, 0)) &&
+    !segments.some((l) => segmentHitsBox(l.x1, l.y1, l.x2, l.y2, b));
+  for (let c = 0; c < nCat; c++) {
+    if (!labelAll && c !== nCat - 1) continue;
+    const pts = sers.filter((s) => val(s, c) != null).sort((a, b) => val(b, c)! - val(a, c)!);
+    pts.forEach((s, rank) => {
+      const v = val(s, c)!;
+      const label = ctx.fmt(v);
+      const w = m.width(label, fs) + 2;
+      const xc = xOf(v), yc = cy(c);
+      // Level with the point, then raised or lowered half a line (clear of a line leaving the point).
+      const side = (dir: 1 | -1, dy: number) => ({ x: dir > 0 ? xc + r + pad * 0.3 : xc - r - pad * 0.3 - w, y: yc - lh / 2 + dy, w, h: lh, dir });
+      const vert = (dir: 1 | -1) => ({ x: xc - w / 2, y: dir < 0 ? yc - r - pad * 0.2 - lh : yc + r + pad * 0.2, w, h: lh, dir: 0 });
+      const first = rank === pts.length - 1 && pts.length > 1 ? -1 : 1;
+      const cands = [first, -first].flatMap((d) => [side(d as 1 | -1, 0), side(d as 1 | -1, -lh / 2 - r * 0.5), side(d as 1 | -1, lh / 2 + r * 0.5)]);
+      const spot = [...cands.slice(0, 3), vert(-1), vert(1), ...cands.slice(3)].find(free);
+      if (!spot) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: no room for label`); return; }
+      const { dir, ...box } = spot;
+      placed.push(box);
+      text(ctx, `label:value:s${s}:c${c}`, { ...box, text: label, color: style.text, role: 'value', align: dir > 0 ? 'left' : dir < 0 ? 'right' : 'center' });
+    });
+  }
+
+  const area = { x: frame.x, y: frame.y + legendH, w: frame.w, h: frame.h - legendH };
+  for (const vl of vls) {
+    drawValueLine(ctx, {
+      horizontal: true, w: xOf(vl.v), side: vl.side, label: vl.label, role: `valueline:${vl.k}`, bounds: area,
+      u1: py, u2: vl.side === 'right' ? yA + axisH : yA, reason: `value line ${vl.k + 1}`,
     });
   }
 }

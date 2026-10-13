@@ -1,6 +1,6 @@
 import type { Ctx } from '../common.ts';
 import {
-  arrowBubble, arrowRowHeight, axisFormatter, bracketArrow, bracketArrowH, cagrLabel, categoryHeight, categoryLabels, fitCategories, legend, num, reportFit, seriesLabelWidth, seriesLabelsRight, text, valueAxis, type ArrowKind, type Heads, valueTicks, axisWidth, sharedScale,
+  arrowBubble, arrowRowHeight, barCategories, barCategoryLabels, bottomAxisHeight, bottomValueAxis, axisFormatter, bracketArrow, bracketArrowH, cagrLabel, categoryHeight, categoryLabels, fitCategories, legend, num, reportFit, seriesLabelWidth, seriesLabelsRight, text, valueAxis, type ArrowKind, type Heads, valueTicks, axisWidth, sharedScale,
 } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { cagrYears } from '../dates.ts';
@@ -12,6 +12,7 @@ import {
   indicatorSize, resolveBreak, slotLayout, slotUnits, spacedTicks, valueLineLabelW, valueLineText, type Break,
 } from '../decorations.ts';
 import { arrowBubble as bubbleSize, labelSpec } from '../common.ts';
+import { sideways } from '../direction.ts';
 
 /** Numbers shared by both orientations: stacks, shares, rounded labels and the value domain. */
 function model(ctx: Ctx) {
@@ -126,7 +127,7 @@ function indicatorSide(ctx: Ctx, md: Model): 'left' | 'right' | null {
   if (opt === 'none') return null;
   if (opt) return opt;
   // A value axis already reads 100% on its side (bars: along the bottom).
-  if (ctx.o.orientation === 'horizontal') return md.ticks ? null : 'right';
+  if (sideways(ctx.o)) return md.ticks ? null : 'right';
   if (ctx.o.seriesLabels !== 'right') return 'right';
   return md.ticks ? null : 'left';
 }
@@ -142,9 +143,9 @@ function arrowLabel(ctx: Ctx, md: Model, kind: ArrowKind, ref: { from: number; t
   return label;
 }
 
-/** Stacked, 100% and clustered column (or, with orientation "horizontal", bar) charts. */
+/** Stacked, 100% and clustered column (or, with direction "left" / "right", bar) charts. */
 export function layoutColumns(ctx: Ctx) {
-  if (ctx.o.orientation === 'horizontal') { layoutBars(ctx, model(ctx)); return; }
+  if (sideways(ctx.o)) { layoutBars(ctx, model(ctx)); return; }
   if (layoutVertical(ctx, model(ctx)) !== 'labels-too-wide' || ctx.o.valueAxis) return;
   // Clustered bars too narrow for their value labels even at the smallest size: a value axis carries the
   // numbers instead (a row of labels with gaps reads as missing data).
@@ -372,11 +373,8 @@ function layoutBars(ctx: Ctx, md: Model) {
   if (o.seriesLabels === 'right') ctx.o.seriesLabels = 'legend';
 
   const legendH = legend(ctx);
-  const axisH = ticks ? lh + pad * 0.6 : 0;
-  // Category column: as wide as the longest label, at most 30% of the frame; labels wrap inside it.
-  const catW = Math.min(frame.w * 0.3, Math.max(...spec.categories.map((c) => m.width(c, fs))) + 2);
-  const fit = fitCategories(ctx, catW);
-  reportFit(ctx, fit);
+  const axisH = bottomAxisHeight(ctx, ticks);
+  const { catW, fit } = barCategories(ctx);
   const totalLabels = cats.map(md.totalText);
   const totalsW = showTotals ? Math.max(...totalLabels.map((t) => m.width(t, fs, true))) + pad * 0.8 : 0;
   const valueLabels = clustered ? cats.flatMap((c) => sers.map((s) => raw(s, c)).filter((v): v is number => v != null).map((v) => ({ v, w: m.width(ctx.fmt(v), fs) }))) : [];
@@ -417,14 +415,7 @@ function layoutBars(ctx: Ctx, md: Model) {
   // Value axis along the bottom.
   if (ticks) {
     const tickW = Math.max(...ticks.map((t) => m.width(axisFmt(t), fs))) + pad;
-    const shownTicks = brk ? spacedTicks(ticks, xOf, tickW) : ticks;
-    ctx.add('axis', { kind: 'line', x1: xOf(ticks[0]), y1: yA, x2: xOf(ticks[ticks.length - 1]), y2: yA, color: style.axis, width: 0.75 });
-    shownTicks.forEach((t, k) => {
-      const label = axisFmt(t);
-      const w = m.width(label, fs) + 2;
-      ctx.add(`axis:tick:${k}`, { kind: 'line', x1: xOf(t), y1: yA, x2: xOf(t), y2: yA + 3, color: style.axis, width: 0.75 });
-      text(ctx, `axis:tick:${k}`, { x: xOf(t) - w / 2, y: yA + pad * 0.5, w, h: lh, text: label, color: style.muted, role: 'axis' });
-    });
+    bottomValueAxis(ctx, ticks, xOf, yA, axisFmt, brk ? spacedTicks(ticks, xOf, tickW) : ticks);
   }
 
   const wc = brk ? (xOf(brk.to) + xOf(brk.from)) / 2 : 0;
@@ -503,12 +494,7 @@ function layoutBars(ctx: Ctx, md: Model) {
   for (const i of new Set(o.categoryBreaks ?? [])) {
     if (i >= 0 && i < nCat - 1) categoryBreakSymbol(ctx, `break:cat:${i}`, true, (cy(i) + cy(i + 1)) / 2, xBase);
   }
-  for (const c of cats) {
-    if (fit.hidden.has(c)) continue;
-    const lines = fit.lines[c];
-    const h = lines.length * fit.lh;
-    text(ctx, `label:category:c${c}`, { x: frame.x, y: cy(c) - h / 2, w: catW, h, text: lines.join('\n'), align: 'right', size: fit.size, role: 'category' });
-  }
+  barCategoryLabels(ctx, fit, catW, cy);
 
   // Arrows in columns to the right, innermost first.
   let xCol = frame.x + frame.w - arrowsW + pad;

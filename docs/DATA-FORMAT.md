@@ -282,7 +282,7 @@ same values). This table is generated from `src/core/spec.ts` (`OPTIONS`, `optio
 | [`format`](#format) | Excel number format | all except harvey, gantt | none |
 | [`locale`](#locale) | `en-US` `en-GB` `en-IN` `de-DE` `fr-FR` | all except harvey | `en-US` |
 | [`scale`](#scale) | `none` `auto` `k` `m` `bn` | all except harvey, gantt | `none` |
-| [`orientation`](#orientation) | `vertical` `horizontal` | stacked, clustered, percent | `vertical` |
+| [`direction`](#direction) | `up` `down` `left` `right` | stacked, clustered, percent, waterfall, mekko, line, area, area100, combo | `up` |
 | [`valueAxis`](#valueaxis) | boolean | stacked, clustered, percent, waterfall, mekko, line, area, area100, combo, mekkoxy | on for line; off otherwise |
 | [`zeroBased`](#zerobased) | boolean | line, scatter, bubble | on, unless the data sits in a narrow band far from zero |
 | [`gap`](#gap) | number 0–10 | stacked, clustered, percent, waterfall, combo | `0.5` |
@@ -396,10 +396,21 @@ Labels read `$1.25m` and `$1.73m`.
 
 ### Layout and axes
 
-#### `orientation`
+#### `direction`
 
-`"horizontal"` draws stacked, clustered and 100% charts as bars from the left, with categories down
-the side. Other types reject it. Horizontal charts name their series in a legend.
+Which way the chart grows — the four insert arrows of the chart gallery (▲ ▼ ◀ ▶):
+
+| Value | Draws | Types |
+|---|---|---|
+| `up` (default) | columns growing up from a baseline at the bottom | all directional types |
+| `down` | columns hanging down from a baseline at the top; labels, totals and arrows mirrored | stacked, clustered, percent, waterfall, mekko, combo |
+| `right` | bars growing right, categories down the left; a line chart becomes a **profile** chart | stacked, clustered, percent, waterfall, mekko, line, area, area100, combo |
+| `left` | bars growing left, categories down the right | the same as `right` |
+
+Line and area charts are never hung upside down (`down` is rejected for them). Bars name their
+series in a legend. A Mekko chart turned sideways draws one row per category, as tall as its share of
+the total. Specs written before directions existed used `"orientation": "horizontal"`; it is read as
+`"direction": "right"` (with a warning).
 
 #### `valueAxis`
 

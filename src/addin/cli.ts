@@ -34,7 +34,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
         .then((out) => { process.stdout.write(out); });
     }
     case 'serve':
-      serveAddin();
+      serveAddin(Number(process.env.OPEN_CHARTS_PORT) || undefined); // another port: tests only (the add-in uses 4174)
       return;
     case 'types':
       for (const g of galleryItems()) {
@@ -61,6 +61,7 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
 }
 
 function install(register: boolean) {
+  if (process.platform === 'win32') throw new Error('On Windows, run install.ps1 from the open-charts-win folder (README, Install on Windows).');
   if (process.platform !== 'darwin') throw new Error('addin install is for PowerPoint for Mac.');
   const home = addinHome();
   // 1. Engine copy outside ~/Downloads & co., which macOS privacy protection guards from the bridge.

@@ -1,10 +1,11 @@
 import type { Ctx } from '../common.ts';
 import {
-  axisFormatter, categoryHeight, categoryLabels, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks, axisWidth, sharedScale,
+  axisFormatter, barCategories, barCategoryLabels, bottomAxisHeight, bottomValueAxis, categoryHeight, categoryLabels, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks, axisWidth, sharedScale,
 } from '../common.ts';
 import { categoryBreakSymbol, slotLayout, slotUnits } from '../decorations.ts';
 import { formatValue, inferDecimals, niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, segmentHitsBox, type Box } from '../place.ts';
+import { sideways } from '../direction.ts';
 
 /**
  * Combination chart: stacked (default) or clustered columns, plus every series marked `as: 'line'`
@@ -21,56 +22,15 @@ import { overlaps, segmentHitsBox, type Box } from '../place.ts';
  *   no spot is hidden and reported.
  */
 export function layoutCombo(ctx: Ctx) {
+  const md = comboModel(ctx);
+  if (sideways(ctx.o)) { layoutComboBars(ctx, md); return; }
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
-  const clustered = (o.combo ?? 'stacked') === 'clustered';
-  // Lines on a secondary axis (manual: Secondary axes) are read against a second value axis on the right,
-  // where series names would go: the series are then named in a legend.
-  const sec = new Set((o.secondaryAxis ?? []).filter((s) => spec.series[s]?.as === 'line'));
-  if (spec.options?.seriesLabels === undefined || (sec.size && ctx.o.seriesLabels === 'right')) ctx.o.seriesLabels = clustered || sec.size ? 'legend' : 'right';
-  const nCat = spec.categories.length;
-  const cats = [...Array(nCat).keys()];
-  const isLine = (s: number) => spec.series[s].as === 'line';
-  const colS = spec.series.map((_, i) => i).filter((s) => !isLine(s));
-  const lineS = spec.series.map((_, i) => i).filter(isLine);
-  const raw = (s: number, c: number) => num(spec.series[s].values[c]);
-  const val = (s: number, c: number) => raw(s, c) ?? 0;
-
-  const pos = cats.map((c) => colS.reduce((a, s) => a + Math.max(0, val(s, c)), 0));
-  const neg = cats.map((c) => colS.reduce((a, s) => a + Math.min(0, val(s, c)), 0));
-  // Secondary values have their own scale: their labels and ticks are formatted from them alone, without
-  // the chart's unit (which describes the primary axis); the primary labels infer decimals without them.
-  if (sec.size) {
-    const prim = spec.series.flatMap((x, i) => (sec.has(i) ? [] : x.values.map(num))).filter((v): v is number => v != null);
-    const d = o.decimals ?? inferDecimals(prim.map((v) => v / ctx.scale.div));
-    const fmt0 = ctx.fmt;
-    ctx.decimals = d;
-    ctx.fmt = (v, opts = {}) => fmt0(v, { decimals: d, ...opts });
-  }
-  const lineVals = lineS.filter((s) => !sec.has(s)).flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
-  const secVals = [...sec].flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
-  let [smin, smax] = [Math.min(0, ...secVals), Math.max(0, ...secVals)];
-  if (smax === smin) smax = smin + 1;
-  const ticks2 = sec.size ? niceTicks(smin, smax, valueTicks(ctx)) : null;
-  if (ticks2) [smin, smax] = [ticks2[0], ticks2[ticks2.length - 1]];
-  const secDec = o.decimals ?? inferDecimals(secVals);
-  const fmtS = (s: number, v: number) => (sec.has(s) ? formatValue(v, { locale: o.locale, decimals: secDec }) : ctx.fmt(v));
-  const d2 = ticks2 ? inferDecimals(ticks2) : 0;
-  const axisFmt2 = (v: number) => formatValue(v, { locale: o.locale, decimals: d2 });
-  const axis2W = ticks2 ? Math.max(...ticks2.map((t) => m.width(axisFmt2(t), fs))) + pad * 1.5 : 0;
-  const colVals = colS.flatMap((s) => cats.map((c) => val(s, c)));
-  let dmin = clustered ? Math.min(0, ...colVals, ...lineVals) : Math.min(0, ...neg, ...lineVals);
-  let dmax = clustered ? Math.max(0, ...colVals, ...lineVals) : Math.max(0, ...pos, ...lineVals);
-  if (dmax === dmin) dmax = dmin + 1;
-  let ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
-  if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
-  let axisFmt = axisFormatter(ctx, ticks);
+  const { clustered, sec, nCat, cats, isLine, colS, lineS, raw, val, pos, neg, ticks2, smin, smax, fmtS, axisFmt2, axis2W, showTotals, color } = md;
+  let { dmin, dmax, ticks, axisFmt } = md;
   const axisW = axisWidth(ctx, dmin, ticks, axisFmt);
-  const showTotals = !clustered && !!o.totals && colS.length > 0;
 
   // Reserve space: legend, then room above the tallest mark for totals, bar labels and line labels.
   // Lines default to dark greys so they read over any column colour; a white halo separates them from the bars.
-  const lineColors = [style.text, style.muted, style.axis];
-  const color = (s: number) => (!isLine(s) || spec.series[s].color ? ctx.color(s) : lineColors[lineS.indexOf(s) % lineColors.length]);
   const legendH = legend(ctx, (s) => (isLine(s) ? 'line' : 'box'), color);
   // A line point inside a stack labels above the stack, under the total: room for both.
   const inStack = !clustered && lineS.some((s) => !sec.has(s) && cats.some((c) => { const v = raw(s, c); return v != null && v > 0 && v < pos[c]; }));
@@ -290,4 +250,225 @@ export function layoutCombo(ctx: Ctx) {
   }
 }
 
+
+/** Series roles, the primary and secondary value domains, formats and colours, shared by columns and bars. */
+function comboModel(ctx: Ctx) {
+  const { spec, style, o, fs, pad, m } = ctx;
+  const clustered = (o.combo ?? 'stacked') === 'clustered';
+  // Lines on a secondary axis (manual: Secondary axes) are read against a second value axis on the right,
+  // where series names would go: the series are then named in a legend.
+  const sec = new Set((o.secondaryAxis ?? []).filter((s) => spec.series[s]?.as === 'line'));
+  if (spec.options?.seriesLabels === undefined || (sec.size && ctx.o.seriesLabels === 'right')) ctx.o.seriesLabels = clustered || sec.size ? 'legend' : 'right';
+  const nCat = spec.categories.length;
+  const cats = [...Array(nCat).keys()];
+  const isLine = (s: number) => spec.series[s].as === 'line';
+  const colS = spec.series.map((_, i) => i).filter((s) => !isLine(s));
+  const lineS = spec.series.map((_, i) => i).filter(isLine);
+  const raw = (s: number, c: number) => num(spec.series[s].values[c]);
+  const val = (s: number, c: number) => raw(s, c) ?? 0;
+
+  const pos = cats.map((c) => colS.reduce((a, s) => a + Math.max(0, val(s, c)), 0));
+  const neg = cats.map((c) => colS.reduce((a, s) => a + Math.min(0, val(s, c)), 0));
+  // Secondary values have their own scale: their labels and ticks are formatted from them alone, without
+  // the chart's unit (which describes the primary axis); the primary labels infer decimals without them.
+  if (sec.size) {
+    const prim = spec.series.flatMap((x, i) => (sec.has(i) ? [] : x.values.map(num))).filter((v): v is number => v != null);
+    const d = o.decimals ?? inferDecimals(prim.map((v) => v / ctx.scale.div));
+    const fmt0 = ctx.fmt;
+    ctx.decimals = d;
+    ctx.fmt = (v, opts = {}) => fmt0(v, { decimals: d, ...opts });
+  }
+  const lineVals = lineS.filter((s) => !sec.has(s)).flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
+  const secVals = [...sec].flatMap((s) => cats.map((c) => raw(s, c))).filter((v): v is number => v != null);
+  let [smin, smax] = [Math.min(0, ...secVals), Math.max(0, ...secVals)];
+  if (smax === smin) smax = smin + 1;
+  const ticks2 = sec.size ? niceTicks(smin, smax, valueTicks(ctx)) : null;
+  if (ticks2) [smin, smax] = [ticks2[0], ticks2[ticks2.length - 1]];
+  const secDec = o.decimals ?? inferDecimals(secVals);
+  const fmtS = (s: number, v: number) => (sec.has(s) ? formatValue(v, { locale: o.locale, decimals: secDec }) : ctx.fmt(v));
+  const d2 = ticks2 ? inferDecimals(ticks2) : 0;
+  const axisFmt2 = (v: number) => formatValue(v, { locale: o.locale, decimals: d2 });
+  const axis2W = ticks2 ? Math.max(...ticks2.map((t) => m.width(axisFmt2(t), fs))) + pad * 1.5 : 0;
+  const colVals = colS.flatMap((s) => cats.map((c) => val(s, c)));
+  let dmin = clustered ? Math.min(0, ...colVals, ...lineVals) : Math.min(0, ...neg, ...lineVals);
+  let dmax = clustered ? Math.max(0, ...colVals, ...lineVals) : Math.max(0, ...pos, ...lineVals);
+  if (dmax === dmin) dmax = dmin + 1;
+  let ticks = o.valueAxis ? niceTicks(dmin, dmax, valueTicks(ctx)) : null;
+  if (ticks) [dmin, dmax] = [ticks[0], ticks[ticks.length - 1]];
+  let axisFmt = axisFormatter(ctx, ticks);
+  const showTotals = !clustered && !!o.totals && colS.length > 0;
+  // Lines default to dark greys so they read over any column colour; a white halo separates them from the bars.
+  const lineColors = [style.text, style.muted, style.axis];
+  const color = (s: number) => (!isLine(s) || spec.series[s].color ? ctx.color(s) : lineColors[lineS.indexOf(s) % lineColors.length]);
+  return { clustered, sec, nCat, cats, isLine, colS, lineS, raw, val, pos, neg, ticks2, smin, smax, fmtS, axisFmt2, axis2W, dmin, dmax, ticks, axisFmt, showTotals, color };
+}
+type ComboModel = ReturnType<typeof comboModel>;
+
 const grow = (b: Box, d: number): Box => ({ x: b.x - d, y: b.y - d, w: b.w + 2 * d, h: b.h + 2 * d });
+
+/**
+ * Combination bars (direction right; left is this mirrored): stacked or clustered bars growing to
+ * the right with the line series running down through their points (a profile over the bars).
+ * Categories sit left of the bars, the value axis along the bottom and a secondary axis along the
+ * top. Segment labels stay inside their segment; totals and bar labels sit beyond the bar's end; a
+ * line label sits beside its point, off the bars where it can, else wholly inside one segment.
+ */
+function layoutComboBars(ctx: Ctx, md: ComboModel) {
+  const { spec, style, frame, o, fs, lh, pad, m } = ctx;
+  const { clustered, sec, nCat, cats, isLine, colS, lineS, raw, val, pos, neg, ticks2, smin, smax, fmtS, axisFmt2, showTotals, color } = md;
+  let { dmin, dmax, ticks, axisFmt } = md;
+  if (ctx.o.seriesLabels === 'right') ctx.o.seriesLabels = 'legend';
+  const legendH = legend(ctx, (s) => (isLine(s) ? 'line' : 'box'), color);
+  const axisH = bottomAxisHeight(ctx, ticks);
+  const axis2H = bottomAxisHeight(ctx, ticks2);
+  const { catW, fit } = barCategories(ctx);
+  const r = Math.max(3, fs * 0.3);
+  // Room beyond the bars' ends: totals (stacked) or bar labels (clustered), and a line label beside its point.
+  const totalW = showTotals ? Math.max(0, ...cats.map((c) => m.width(ctx.fmt(pos[c] + neg[c]), fs, true))) + pad * 0.6 : 0;
+  const barLabel = (v: number) => m.width(ctx.fmt(v), fs) + 2 + pad * 0.4;
+  const barLabelR = clustered ? Math.max(0, ...colS.flatMap((s) => cats.map((c) => { const v = raw(s, c); return v != null && v >= 0 ? barLabel(v) : 0; }))) : 0;
+  const barLabelL = clustered ? Math.max(0, ...colS.flatMap((s) => cats.map((c) => { const v = raw(s, c); return v != null && v < 0 ? barLabel(v) : 0; }))) : 0;
+  const lineLabelW = Math.max(0, ...lineS.flatMap((s) => cats.map((c) => { const v = raw(s, c); return v == null ? 0 : m.width(fmtS(s, v), fs) + 2 + r + pad * 0.4; })));
+  const px = frame.x + catW + pad + barLabelL;
+  const pw = frame.x + frame.w - px - Math.max(totalW, barLabelR, lineLabelW, r);
+  const py = frame.y + legendH + axis2H;
+  const yA = frame.y + frame.h - axisH;
+  const ph = yA - py;
+  ({ dmin, dmax, ticks } = sharedScale(ctx, dmin, dmax, pw, ticks, [px, yA, px + pw, yA]));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks);
+  if (pw < lh * 2 || ph < lh * nCat * 0.5) ctx.hidden.push('chart frame too small');
+  const xOf = (v: number) => px + ((v - dmin) / (dmax - dmin)) * pw;
+  const xOf2 = (v: number) => px + ((v - smin) / (smax - smin)) * pw;
+  const xs = (s: number, v: number) => (sec.has(s) ? xOf2(v) : xOf(v));
+  const slot = ph / slotUnits(nCat, o.categoryGaps);
+  const barT = slot / (1 + o.gap);
+  const cy = slotLayout(nCat, o.categoryGaps, py, ph).centre;
+
+  if (ticks) bottomValueAxis(ctx, ticks, xOf, yA, axisFmt);
+  if (ticks2) {
+    // Secondary axis along the top: line, ticks and centred labels above it.
+    ctx.add('axis:secondary', { kind: 'line', x1: xOf2(ticks2[0]), y1: py, x2: xOf2(ticks2[ticks2.length - 1]), y2: py, color: style.axis, width: 0.75 });
+    ticks2.forEach((t, k) => {
+      const label = axisFmt2(t);
+      const w = m.width(label, fs) + 2;
+      ctx.add(`axis:secondary:tick:${k}`, { kind: 'line', x1: xOf2(t), y1: py - 3, x2: xOf2(t), y2: py, color: style.axis, width: 0.75 });
+      text(ctx, `axis:secondary:tick:${k}`, { x: xOf2(t) - w / 2, y: py - axis2H + pad * 0.1, w, h: lh, text: label, color: style.muted, role: 'axis' });
+    });
+  }
+
+  // Line geometry first, so bar labels can keep clear of it.
+  const segs: { s: number; x1: number; y1: number; x2: number; y2: number }[] = [];
+  const markers: (Box & { s: number; c: number })[] = [];
+  for (const s of lineS) {
+    for (let c = 0; c < nCat; c++) {
+      const v = raw(s, c);
+      if (v == null) continue;
+      markers.push({ s, c, x: xs(s, v) - r, y: cy(c) - r, w: 2 * r, h: 2 * r });
+      const b = raw(s, c + 1);
+      if (c + 1 < nCat && b != null) segs.push({ s, x1: xs(s, v), y1: cy(c), x2: xs(s, b), y2: cy(c + 1) });
+    }
+  }
+  const lineHits = (b: Box) => { const g = grow(b, 1); return segs.some((l) => segmentHitsBox(l.x1, l.y1, l.x2, l.y2, g)) || markers.some((mk) => overlaps(mk, g, 0)); };
+  const placed: Box[] = [];
+  const clear = (b: Box) => !placed.some((p) => overlaps(grow(p, pad * 0.25), b, 0));
+
+  const bars: (Box & { fill: string })[] = [];
+  const ends = cats.map(() => xOf(0));
+  const rounded = cats.map((c) => (!clustered && !o.format ? roundToTotal(colS.map((s) => val(s, c) / ctx.scale.div), ctx.decimals) : null));
+  for (const c of cats) {
+    if (clustered) {
+      const barH = barT / Math.max(1, colS.length);
+      colS.forEach((s, k) => {
+        const v = raw(s, c);
+        if (v == null) return;
+        const y = cy(c) - barT / 2 + k * barH;
+        const x1 = xOf(Math.min(0, v)), x2 = xOf(Math.max(0, v));
+        const box = { x: x1, y, w: Math.max(0.01, x2 - x1), h: barH };
+        bars.push({ ...box, fill: ctx.color(s) });
+        ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', ...box, fill: ctx.color(s), stroke: style.background, strokeWidth: 0.5 });
+        const label = ctx.fmt(v);
+        const tw = m.width(label, fs) + 2;
+        const lb = { x: v >= 0 ? x2 + pad * 0.3 : x1 - pad * 0.3 - tw, y: y + barH / 2 - lh / 2, w: tw, h: lh };
+        if (lh * 0.9 > barH + pad * 0.4) ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: bar too thin for label`);
+        else if (lineHits(lb)) ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label covered by a line`);
+        else { placed.push(lb); text(ctx, `label:value:s${s}:c${c}`, { ...lb, text: label, role: 'value', align: v >= 0 ? 'left' : 'right' }); }
+        ends[c] = Math.max(ends[c], v >= 0 ? lb.x + lb.w : x2);
+      });
+      continue;
+    }
+    let right = 0, left = 0;
+    const y = cy(c) - barT / 2;
+    colS.forEach((s, k) => {
+      const v = val(s, c);
+      if (!v) return;
+      const [a, b] = v > 0 ? [right, right + v] : [left + v, left];
+      if (v > 0) right += v; else left += v;
+      const x1 = xOf(a), w = xOf(b) - x1;
+      const fill = ctx.color(s);
+      const box = { x: x1, y, w, h: barT };
+      bars.push({ ...box, fill });
+      ctx.add(`bar:s${s}:c${c}`, { kind: 'rect', ...box, fill, stroke: style.background, strokeWidth: 0.75 });
+      const label = rounded[c] ? ctx.fmt(rounded[c]![k], { scaled: true }) : ctx.fmt(v);
+      const tw = m.width(label, fs) + 2;
+      if (tw > w || lh * 0.9 > barT) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: segment too small`); return; }
+      // Centred, else moved along the segment (never to its edge) until the line leaves it free.
+      const slack = Math.max(0, (w - tw) / 2 - pad * 0.5);
+      const spot = [0, -0.5, 0.5, -1, 1].map((q) => ({ x: x1 + w / 2 - tw / 2 + q * slack, y: cy(c) - lh / 2, w: tw, h: lh })).find((b2) => !lineHits(b2));
+      if (!spot) { ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: label covered by a line`); return; }
+      placed.push(spot);
+      text(ctx, `label:value:s${s}:c${c}`, { ...spot, text: label, color: textOn(fill), role: 'value' });
+    });
+    ends[c] = xOf(right);
+    if (showTotals) {
+      const t = ctx.fmt(pos[c] + neg[c]);
+      const tw = m.width(t, fs, true) + 2;
+      const spot = [0, 1, 2, 3, 4].map((q) => ({ x: xOf(right) + pad * 0.4 + q * lh * 0.5, y: cy(c) - lh / 2, w: tw, h: lh }))
+        .find((b2) => b2.x + b2.w <= frame.x + frame.w + 0.5 && !lineHits(b2) && clear(b2));
+      if (!spot) ctx.hidden.push(`${spec.categories[c]}: total covered by a line`);
+      else { placed.push(spot); ends[c] = spot.x + spot.w; text(ctx, `label:total:c${c}`, { ...spot, text: t, bold: true, align: 'left', role: 'total' }); }
+    }
+  }
+
+  const xBase = xOf(0);
+  ctx.add('axis', { kind: 'line', x1: xBase, y1: py, x2: xBase, y2: yA, color: style.axis, width: 0.75 });
+  for (const i of new Set(o.categoryBreaks ?? [])) {
+    if (i >= 0 && i < nCat - 1) categoryBreakSymbol(ctx, `break:cat:${i}`, true, (cy(i) + cy(i + 1)) / 2, xBase);
+  }
+  barCategoryLabels(ctx, fit, catW, cy);
+
+  for (const l of segs) {
+    ctx.add(`line:s${l.s}`,
+      { kind: 'line', x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, color: style.background, width: 4 },
+      { kind: 'line', x1: l.x1, y1: l.y1, x2: l.x2, y2: l.y2, color: color(l.s), width: 2 });
+  }
+  for (const mk of markers) {
+    ctx.add(`marker:s${mk.s}:c${mk.c}`, { kind: 'rect', x: mk.x, y: mk.y, w: mk.w, h: mk.h, fill: color(mk.s), stroke: style.background, strokeWidth: 1, geom: 'ellipse' });
+  }
+
+  // Line labels: beside the point (level, raised, lowered; right first), then beyond the bar's end;
+  // off the bars where possible, else wholly inside one segment in a contrasting colour.
+  const inBounds = (b: Box) => b.x >= frame.x + catW + pad * 0.5 && b.x + b.w <= frame.x + frame.w && b.y >= py && b.y + b.h <= yA;
+  const under = (b: Box): string | null => {
+    const hit = bars.filter((p) => overlaps(p, b, 0));
+    if (!hit.length) return '';
+    const [h0] = hit;
+    return hit.length === 1 && b.x >= h0.x + 1 && b.x + b.w <= h0.x + h0.w - 1 && b.y >= h0.y + 1 && b.y + b.h <= h0.y + h0.h - 1 ? h0.fill : null;
+  };
+  const labelAll = nCat * lineS.length <= 24;
+  for (const mk of markers) {
+    if (!labelAll && mk.c !== nCat - 1) continue;
+    const label = fmtS(mk.s, raw(mk.s, mk.c)!);
+    const w = m.width(label, fs) + 2;
+    const xc = mk.x + r, yc = mk.y + r, g = pad * 0.3;
+    const side = (dir: 1 | -1, dy: number) => ({ x: dir > 0 ? xc + r + g : xc - r - g - w, y: yc - lh / 2 + dy, w, h: lh });
+    const cands = [1, -1].flatMap((d) => [0, -lh / 2 - r * 0.5, lh / 2 + r * 0.5].map((dy) => side(d as 1 | -1, dy)));
+    cands.push({ x: Math.max(ends[mk.c], xc + r) + g, y: yc - lh / 2, w, h: lh });
+    // On a segment, keep well apart from the segment's own label so the two read as separate numbers.
+    const ok = cands.filter((b) => { const u = inBounds(b) && !lineHits(b) ? under(b) : null; return u !== null && clear(u ? grow(b, lh * 0.4) : b); });
+    const spot = ok.find((b) => under(b) === '') ?? ok[0];
+    if (!spot) { ctx.hidden.push(`${spec.series[mk.s].name} / ${spec.categories[mk.c]}: no room for label`); continue; }
+    placed.push(spot);
+    const fill = under(spot);
+    text(ctx, `label:value:s${mk.s}:c${mk.c}`, { ...spot, text: label, role: 'value', ...(fill ? { color: textOn(fill) } : {}) });
+  }
+}

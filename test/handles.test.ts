@@ -34,8 +34,18 @@ test('handles: gap on the first column edge, axis top, selected labels only, non
   assert.equal(l.id, 'label:label:value:s0:c1');
   assert.ok(l.box && l.box.w > 0);
   // Horizontal bars: the gap handle sits on the bottom edge and drags up/down.
-  const hz = { ...stacked, options: { orientation: 'horizontal' as const } };
+  const hz = { ...stacked, options: { direction: 'right' as const } };
   assert.equal(dragHandles(hz, lay(hz))[0].cursor, 'ns');
+  // Mirrored directions: the axis handle is still at the value axis's top end.
+  for (const direction of ['down', 'left', 'right'] as const) {
+    const s = { ...stacked, options: { valueAxis: true, direction } };
+    const sc2 = lay(s);
+    const ax = dragHandles(s, sc2).find((h) => h.id === 'axisMax')!;
+    assert.ok(ax, direction);
+    assert.ok(Math.abs(valueAt(sc2, ax.at.x, ax.at.y)! - sc2.valueScale!.max) < 1e-6, direction);
+    const axisLine = sc2.shapes.filter((_, i) => sc2.roles![i] === 'axis');
+    assert.ok(axisLine.some((l) => l.kind === 'line' && Math.min(Math.hypot(l.x1 - ax.at.x, l.y1 - ax.at.y), Math.hypot(l.x2 - ax.at.x, l.y2 - ax.at.y)) < 40), `${direction}: near an axis end`);
+  }
   // Pie: nothing to drag here.
   const pie: ChartSpec = { type: 'pie', categories: ['a', 'b'], series: [{ name: 's', values: [1, 2] }] };
   assert.deepEqual(dragHandles(pie, lay(pie)), []);

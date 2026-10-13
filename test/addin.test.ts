@@ -13,7 +13,7 @@ import { addinRoutes, applyErrorMessage, applyInPowerPoint, editorPage, outlived
 import { HELPER_JXA, macroRunner } from '../src/addin/runner.ts';
 import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
-import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
+import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS, IMAGE_REL } from '../src/addin/package.ts';
 import { galleryItems, insertableItems, sampleFor } from '../src/addin/registry.ts';
 import { unzip } from '../src/ooxml/unzip.ts';
 import { readCfb } from '../src/addin/cfb.ts';
@@ -89,6 +89,48 @@ test('every insertable gallery item lays out; others explain themselves', async 
   if (missing) assert.match(parseResponse(await handleRequest(req('insert', missing.id), m)).errors[0], /not available in this version/);
   assert.match(parseResponse(await handleRequest(req('insert', 'nope'), m)).errors[0], /not available/);
   assert.match(parseResponse(await handleRequest(req('bogus'), m)).errors[0], /do not match/);
+});
+
+test('gallery: the reference tiles in order; "<item>@<direction>" inserts that way, a direction the type lacks is ignored', async () => {
+  assert.deepEqual(galleryItems().slice(0, 16).map((g) => g.id), ['stacked', 'percent', 'clustered', 'waterfall', 'waterfallDown', 'mekko', 'combo', 'line', 'area', 'area100', 'mekkoUnit', 'pie', 'doughnut', 'scatter', 'bubble', 'gantt']);
+  const spec = (item: string) => { const r = sampleFor(item); assert.ok('spec' in r, item); return r.spec; };
+  assert.equal(spec('stacked@left').options?.direction, 'left');
+  assert.equal(spec('line@right').options?.direction, 'right');
+  assert.equal(spec('line@down').options?.direction, undefined, 'lines never hang');
+  assert.equal(spec('pie@left').options?.direction, undefined);
+  assert.equal(spec('mekkoUnit').options?.mekko, 'unit');
+  // Build-down starts with the total and walks down to the result; build-up stacks components to a total.
+  const down = spec('waterfallDown').series[0].values, up = spec('waterfall').series[0].values;
+  assert.ok((down[0] as number) > 0 && down.slice(1, -1).every((v) => (v as number) < 0) && down.at(-1) === 'e');
+  assert.ok(up.slice(0, -1).every((v) => (v as number) > 0) && up.at(-1) === 'e');
+  const r = parseResponse(await handleRequest(req('insert', 'waterfallDown@right', '0,0,600,400'), m));
+  assert.deepEqual(r.errors, []);
+  assert.match(Object.fromEntries(r.tags).OC_SPEC, /"direction":"right"/);
+});
+
+test('direction request: the chart is laid out again in its place, growing the new way', async () => {
+  const insert = parseResponse(await handleRequest(req('insert', 'stacked', '10,20,600,400'), m));
+  const tags = Object.fromEntries(insert.tags);
+  const left = parseResponse(await handleRequest(req('direction', 'left', tags.OC_FRAME, '', tags.OC_SPEC), m));
+  assert.deepEqual(left.errors, []);
+  const lt = Object.fromEntries(left.tags);
+  assert.equal(lt.OC_FRAME, tags.OC_FRAME, 'same frame');
+  assert.match(lt.OC_SPEC, /"direction":"left"/);
+  const bars = left.shapes.filter((s) => s.role.startsWith('bar:'));
+  const row = bars.filter((b) => b.role.endsWith(':c0'));
+  assert.ok(row.length > 1 && row.every((b) => b.y === row[0].y && b.h === row[0].h), 'one category = one row of segments side by side');
+  assert.ok(+row[1].x < +row[0].x, 'stacked leftwards');
+  // Back up: the direction option goes away again (up is the default).
+  const up = parseResponse(await handleRequest(req('direction', 'up', lt.OC_FRAME, '', lt.OC_SPEC), m));
+  assert.doesNotMatch(Object.fromEntries(up.tags).OC_SPEC, /direction/);
+  // Old specs (orientation) are migrated first; a direction the type lacks is explained.
+  const old = JSON.stringify({ specVersion: 1, type: 'clustered', categories: ['a', 'b'], series: [{ name: 's', values: [1, 2] }], options: { orientation: 'horizontal' } });
+  assert.match(Object.fromEntries(parseResponse(await handleRequest(req('direction', 'down', '0,0,500,300', '', old), m)).tags).OC_SPEC, /"direction":"down"/);
+  const line = JSON.stringify({ specVersion: 1, type: 'line', categories: ['a', 'b'], series: [{ name: 's', values: [1, 2] }] });
+  assert.match(parseResponse(await handleRequest(req('direction', 'down', '0,0,500,300', '', line), m)).errors[0], /Line charts can grow up, left, right, not down/);
+  const pie = JSON.stringify({ specVersion: 1, type: 'pie', categories: ['a', 'b'], series: [{ name: 's', values: [1, 2] }] });
+  assert.match(parseResponse(await handleRequest(req('direction', 'left', '0,0,500,300', '', pie), m)).errors[0], /no direction/);
+  assert.match(parseResponse(await handleRequest(req('direction', 'left'), m)).errors[0], /Select an open-charts chart/);
 });
 
 test('large specs are chunked into OC_SPEC_0..n + OC_SPEC_N', async () => {
@@ -206,7 +248,7 @@ test('ppam package: add-in content type, VBA and ribbon parts, one callback pref
 
   const ui = e.get('customUI/customUI14.xml')!.text();
   assert.ok(ui.includes(`xmlns="${UI_NS}"`));
-  const callbacks = [...ui.matchAll(/(?:onAction|onLoad|getEnabled)="([^"]+)"/g)].map((x) => x[1]);
+  const callbacks = [...ui.matchAll(/(?:onAction|onLoad|getEnabled|getPressed)="([^"]+)"/g)].map((x) => x[1]);
   assert.ok(callbacks.length >= 4 && callbacks.every((c) => c.startsWith(`${built.prefix}_`)));
   for (const g of galleryItems()) assert.ok(ui.includes(`id="chart_${g.id}"`), g.id);
   assert.match(ui, /id="btnEditData"/);
@@ -222,7 +264,18 @@ test('ppam package: add-in content type, VBA and ribbon parts, one callback pref
   const cls = new TextDecoder().decode(decompress(vba.VBA.AppEvents));
   assert.match(cls, /^Attribute VB_Name = "AppEvents"\r\nAttribute VB_Base = "0\{FCFB3D2A/);
   assert.match(cls, /WithEvents App As Application/);
-  for (const g of galleryItems()) assert.ok(ui.includes(`title="${g.family}"`), `section ${g.family}`);
+  // Gallery tiles show an embedded icon: every image id has a relationship to a PNG in the package.
+  const rels = e.get('customUI/_rels/customUI14.xml.rels')!.text();
+  for (const [, id] of ui.matchAll(/ image="([^"]+)"/g)) {
+    const target = new RegExp(`Id="${id}" Type="${IMAGE_REL.replace(/\//g, '\\/')}" Target="([^"]+)"`).exec(rels)?.[1];
+    assert.ok(target, `relationship for ${id}`);
+    const png = e.get(`customUI/${target}`)!.bytes();
+    assert.deepEqual([...png.slice(1, 4)], [0x50, 0x4e, 0x47], `${target} is a PNG`);
+  }
+  assert.match(ct, /Extension="png" ContentType="image\/png"/);
+  assert.match(ui, /<gallery id="galCharts"[^>]* columns="5" itemWidth="64" itemHeight="62" showItemLabel="false"/);
+  for (const d of ['dirUp', 'dirDown', 'dirLeft', 'dirRight']) assert.match(ui, new RegExp(`<toggleButton id="${d}"[^>]* onAction="${built.prefix}_onDirection"`));
+  assert.match(source, /^Private Const DIRECTIONS As String = "stacked:up,down,left,right;.*line:up,left,right/m);
   assert.deepEqual(buildAddin().ppam, built.ppam, 'reproducible build');
 });
 
@@ -262,7 +315,8 @@ test('request parsing tolerates CRLF and missing fields', async () => {
 test('launcher: installed open-charts command runs the CLI; messages name a command that works', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'oc-launcher-'));
   const path = process.env.PATH;
-  try {
+  // The launcher is a shell script for the Mac install; Windows uses install.ps1 (test/windows.test.ts).
+  if (process.platform !== 'win32') try {
     const cli = join(dir, 'fake cli.js');
     writeFileSync(cli, 'console.log(JSON.stringify(process.argv.slice(2)))\n');
     process.env.PATH = ''; // no folder to link into: the install explains how to add one
@@ -299,7 +353,7 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     let s = setSession('ap1', { chart, state: 'applied' });
     await applyInPowerPoint(s, home, async () => assert.fail('must not run'));
     assert.equal(getSession('ap1')!.state, 'error');
-    assert.match(getSession('ap1')!.message!, /not installed.*addin install/);
+    assert.match(getSession('ap1')!.message!, /not installed.*(addin install|install\.ps1)/);
 
     writeFileSync(join(home, 'addin.json'), JSON.stringify({ prefix: 'oc123' }));
     // The macro draws the chart: the engine settles the session ("open"), and once the macro has
@@ -322,8 +376,8 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
 
     // Permission prompt unanswered (killed after the timeout), denied, PowerPoint closed, other.
     const cases: [{ message: string; killed?: boolean }, RegExp][] = [
-      [{ message: 'Command failed', killed: true }, /click Allow in that dialog, then Apply again/],
-      [{ message: 'execution error: Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)' }, /click Allow/],
+      [{ message: 'Command failed', killed: true }, process.platform === 'win32' ? /Close any open dialog in PowerPoint/ : /click Allow in that dialog, then Apply again/],
+      [{ message: 'execution error: Microsoft PowerPoint got an error: AppleEvent timed out. (-1712)' }, process.platform === 'win32' ? /Close any open dialog/ : /click Allow/],
       [{ message: 'execution error: Not authorized to send Apple events to Microsoft PowerPoint. (-1743)' }, /System Settings › Privacy & Security › Automation/],
       [{ message: 'execution error: PowerPoint is not running. (-600)' }, /PowerPoint isn't running/],
       [{ message: 'Command failed: osascript\n0:10: execution error: Something odd. (-2700)' }, /could not update the chart \(Something odd\. \(-2700\)\)/],
@@ -438,7 +492,7 @@ test('the AppleScript helper: one request per line, never starts PowerPoint, exi
 
 test('a server that outlived the PowerPoint that started it never sends Apple events and hands over', async () => {
   // A process id that is gone: a child that has exited.
-  const gone = Number(execFileSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).trim());
+  const gone = Number(execFileSync(process.execPath, ['-e', 'console.log(process.pid)'], { encoding: 'utf8' }).trim());
   assert.equal(outlivedPowerPoint(undefined, () => 1), false, 'started without PowerPoint: nothing to outlive');
   assert.equal(outlivedPowerPoint(process.pid, () => 1), false, 'its PowerPoint is still running');
   assert.equal(outlivedPowerPoint(gone, () => undefined), false, 'PowerPoint closed: Apply says it is not running');

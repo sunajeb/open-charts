@@ -176,7 +176,7 @@
         "format": { "type": "string", "pattern": "[0#?]", "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table. Excel number format, e.g. \"#,##0.0\", \"$#,##0\", \"0%\", \"#,##0;(#,##0)\"." },
         "locale": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table, gantt.", "type": "string", "examples": ["en-US", "en-GB", "en-IN", "de-DE", "fr-FR"] },
         "scale": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, table.", "enum": ["none", "auto", "k", "m", "bn"] },
-        "orientation": { "description": "Chart types: stacked, clustered, percent.", "enum": ["vertical", "horizontal"] },
+        "direction": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, combo. Which way the chart grows: up (columns, default), down (hanging columns), right (bars; a line becomes a profile), left (bars from the right). Line and area charts: up, left or right.", "enum": ["up", "down", "left", "right"] },
         "mekko": { "description": "Chart types: mekko.", "enum": ["percent", "unit"] },
         "gap": { "description": "Chart types: stacked, clustered, percent, waterfall, combo.", "type": "number", "minimum": 0, "maximum": 10 },
         "seriesLabels": { "description": "Chart types: stacked, clustered, percent, waterfall, mekko, line, area, area100, pie, doughnut, combo, mekkoxy, scatter, bubble, gantt.", "enum": ["right", "legend", "none"] },

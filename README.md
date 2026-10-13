@@ -37,11 +37,28 @@ preview, downloads a .pptx) and the **command line** (JSON in, .pptx out).
 The [user guide](docs/USER-GUIDE.md#chart-types) explains when to use each one and how to enter its
 data.
 
+### The chart gallery and directions
+
+<img src="docs/ux-shots/chart-gallery.png" width="520" alt="The chart gallery: icon tiles five per row, with small arrows around the column, waterfall, Mekko, combination, line and area icons">
+
+Charts are picked from one gallery of icons, the same in the PowerPoint ribbon and in the editor.
+Most charts can grow in more than one **direction**: the small arrows around an icon say which way.
+▲ columns growing up (the default), ▼ columns hanging down from a baseline at the top, ◀ bars
+growing to the left (categories on the right) and ▶ bars growing to the right. A line chart turned
+sideways is a **profile chart**; lines and areas are never hung upside down. Pie, doughnut, scatter,
+bubble and Gantt charts have no direction. In the data format it is one option,
+[`direction`](docs/DATA-FORMAT.md#direction).
+
+| ▼ hanging columns | ◀ bars growing left | ▶ waterfall bars | ▶ profile chart |
+|---|---|---|---|
+| <img src="test/goldens/darwin/directions-1.png" width="200" alt="Stacked columns hanging down"> | <img src="test/goldens/darwin/directions-2.png" width="200" alt="Clustered bars growing left"> | <img src="test/goldens/darwin/directions-3.png" width="200" alt="Waterfall bars"> | <img src="test/goldens/darwin/directions-7.png" width="200" alt="Profile chart"> |
+
 ## Install
 
 You need:
 
 - **A Mac with PowerPoint for Mac** (Microsoft 365 / version 16; tested on 16.105) for the add-in.
+  On a Windows PC, skip to [Install on Windows](#install-on-windows): no Node needed there.
   The web editor and the command line run anywhere Node runs.
 - **Node.js 22.6 or newer.** Check with `node --version`; install it from
   [nodejs.org](https://nodejs.org) if needed.
@@ -91,9 +108,43 @@ show):
 "$HOME/Library/Application Support/open-charts/bin/open-charts" addin install
 ```
 
-Without the add-in (Linux, Windows, or before installing), use
+Without the add-in (Linux, or before installing), use
 `node --experimental-strip-types --no-warnings src/cli.ts` from the repository folder wherever this
 README says `open-charts`, or run `npm link` there once to put `open-charts` on your PATH.
+
+## Install on Windows
+
+The same add-in runs in PowerPoint for Windows (Microsoft 365 / Office 2016 or newer, 32- or 64-bit).
+Charts move freely between Mac and PC. **The PC needs no Node and no admin rights:** the engine is
+one program, `open-charts.exe`.
+
+1. Get the **open-charts-win** folder: download the `open-charts-win` artifact from the latest CI
+   run on GitHub (*Actions › test › Artifacts*), or build it on any machine with
+   `npm install && npm run build:win` (it is written to `dist/win/`). Copy it to the PC and unzip it.
+2. Save your work and quit PowerPoint.
+3. In the folder, right-click empty space › *Open in Terminal* (or open PowerShell and `cd` there),
+   then run:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install.ps1
+   ```
+
+4. Start PowerPoint. The **open-charts** tab is before Home.
+
+`install.ps1` copies the engine to `%LOCALAPPDATA%\open-charts` and the add-in to
+`%APPDATA%\Microsoft\AddIns`. It removes the "downloaded from the internet" mark that makes Office
+block macros, and registers the add-in to load with PowerPoint
+(`HKCU\Software\Microsoft\Office\16.0\PowerPoint\AddIns\open-charts`). It also makes sure
+PowerPoint trusts the add-ins folder, then checks that the engine starts on this PC. Add `-DryRun`
+to see what it would do without changing anything. Run it again to update.
+
+To remove the add-in:
+`powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\open-charts\uninstall.ps1"`.
+
+open-charts has its own tab and its own callback names, so it works next to think-cell. Macro
+policies, application control and proxies on company laptops are covered in
+[docs/windows.md](docs/windows.md#corporate-laptops). Problems:
+[user guide › Windows](docs/USER-GUIDE.md#windows).
 
 ## Quick start in PowerPoint
 
@@ -238,6 +289,7 @@ npm test                # unit tests, zero dependencies (includes the docs examp
 npm run e2e             # editor end-to-end in Chromium (npm install; npx playwright install chromium)
 npm run goldens         # examples → .pptx → LibreOffice PDF → PNG, diffed against test/goldens/<platform>/
 npm run e2e:powerpoint  # macOS + PowerPoint: insert/update every chart type through the add-in
+npm run build:win       # dist/win: open-charts.exe (no Node needed), the .ppam, install scripts
 npm run bench           # layout and start-up times against the performance budgets
 npm run build:officejs  # Office.js add-in bundle; test/officejs.test.ts and test/e2e/officejs.spec.ts test it
 npm run officejs:live   # macOS + PowerPoint: the Office.js pane's self-test in real PowerPoint
@@ -246,7 +298,10 @@ npm run officejs:live   # macOS + PowerPoint: the Office.js pane's self-test in 
 `npm run goldens` needs `soffice` (LibreOffice) and `pdftoppm` (poppler). Baselines are per platform
 because fonts render differently; `-- --update` rewrites them after you have reviewed
 `out/goldens/actual/`, and failures write red-on-grey diffs to `out/goldens/diff/`. CI runs unit
-tests and E2E on every PR, goldens nightly.
+tests and E2E on every PR, goldens nightly. A `windows-latest` job runs the unit tests on Windows. It
+builds and smoke-tests `open-charts.exe` and runs the install scripts against a temporary profile.
+The live PowerPoint for Windows run is `e2e-powerpoint-win.ps1` on a real PC
+([docs/windows.md](docs/windows.md#acceptance-run-on-a-pc)).
 
 ## Licence and provenance
 

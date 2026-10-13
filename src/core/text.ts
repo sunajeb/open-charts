@@ -100,7 +100,10 @@ function build(regular: FontMetrics, bold: FontMetrics | null | undefined, fonts
   const shaped = (line: string, size: number, isBold: boolean) => {
     shaper ??= fonts();
     const font = isBold ? shaper[1] ?? shaper[0] : shaper[0];
-    return font ? font.getAdvanceWidth(line, size, { kerning: false }) : null;
+    if (!font) return null;
+    // Some system fonts (e.g. Windows' Arial) use GSUB lookups opentype.js can't apply; never fail a
+    // layout over it — fall back to the plain advance-width table for that line.
+    try { return font.getAdvanceWidth(line, size, { kerning: false }); } catch { return null; }
   };
   const lineWidth = (line: string, size: number, isBold: boolean) => {
     if (SHAPED.test(line)) { const w = shaped(line, size, isBold); if (w != null) return w; }

@@ -35,7 +35,10 @@ export interface DragHandle {
 /** Lays a spec out at the chart's frame and context (level arrows try their positions). */
 export type Relayout = (spec: ChartSpec) => Scene;
 
-const horizontal = (spec: ChartSpec) => spec.options?.orientation === 'horizontal' && appliesTo('orientation', spec.type);
+const horizontal = (spec: ChartSpec) => {
+  const o = (spec.options ?? {}) as { direction?: string; orientation?: string };
+  return o.direction === 'left' || o.direction === 'right' || o.orientation === 'horizontal';
+};
 const centre = (b: { x: number; y: number; w: number; h: number }) => ({ x: b.x + b.w / 2, y: b.y + b.h / 2 });
 
 /** The bars of the first category that has any: their union on the slide. */

@@ -29,6 +29,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addinHome } from './launcher.ts';
+import { openUrl } from './win.ts';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface ScreenInfo { frame: Rect; visible: Rect; scale?: number }
@@ -330,10 +331,7 @@ const defaultLaunch = (cmd: string, args: string[]) => {
     return true;
   } catch { return false; }
 };
-const defaultBrowser = (url: string) => {
-  const [cmd, args] = process.platform === 'win32' ? ['cmd', ['/c', 'start', '', url]] : ['open', [url]];
-  defaultLaunch(cmd as string, args as string[]);
-};
+const defaultBrowser = (url: string) => openUrl(url); // Windows: rundll32, no console window
 
 /**
  * Shows edit session `id` (served at `base`) in a pop-up next to the chart, on any platform: the Mac
