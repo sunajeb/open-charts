@@ -15,6 +15,8 @@ export interface SceneContent {
   altText: string;
   /** Group-level tags, normally chartTags(...). */
   tags?: Tags;
+  /** The chart's font, when it is not the deck's (a chart's own style.font). */
+  font?: string;
 }
 
 export interface SlideContent {
@@ -164,7 +166,7 @@ function slideXml(slide: SlideContent, font: string, addTags: AddTags): string {
   if (slide.title) {
     body += textXml({ kind: 'text', x: 36, y: 24, w: SLIDE.w - 72, h: 44, text: slide.title, size: 24, color: '1A1A1A', bold: true, align: 'left', valign: 'top' }, ids.next(), font, TITLE_NAME);
   }
-  for (const s of slide.scenes) body += groupXml(s, ids, font, addTags);
+  for (const s of slide.scenes) body += groupXml(s, ids, s.font ?? font, addTags);
   const cust = slide.tags?.length ? `<p:custDataLst><p:tags r:id="${addTags(slide.tags)}"/></p:custDataLst>` : '';
   return `${XML}<p:sld ${NS}${slide.hidden ? ' show="0"' : ''}><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${body}</p:spTree>${cust}</p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
 }
