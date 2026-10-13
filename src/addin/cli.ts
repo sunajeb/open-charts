@@ -11,7 +11,7 @@ import { ensureToken, tokenPath } from './token.ts';
 import { addinHome, installLauncher, removeLauncher } from './launcher.ts';
 import { buildAddin } from './package.ts';
 import { galleryItems, sampleFor } from './registry.ts';
-import { checkForUpdate, readSettings, writeSettings } from '../update.ts';
+import { checkForUpdate, installUpdate, policyUpdateOff, readSettings, writeSettings } from '../update.ts';
 import { HELPER_APP } from './popup.ts';
 import { buildPopup, canBuildPopup } from './build-popup.ts';
 import { compileBridge, handsOff, installPackaged, osascript, PPAM_DIR, registerPending, registerScript, removePackaged, SCRIPTS_DIR } from './mac-install.ts';
@@ -73,9 +73,21 @@ export function addinMain(args: string[], opts: { out?: string; register?: boole
   }
 }
 
-/** `addin update [on|off]`: turn the daily "update available" check on or off, or check now. */
+/** `addin update [on|off|install]`: turn the daily "update available" check on or off, check now, or install. */
 async function update(arg?: string) {
   const home = addinHome();
+  if (policyUpdateOff()) {
+    console.log('Updates are managed by your IT department (policy.json): no check, no download.');
+    return;
+  }
+  if (arg === 'install') {
+    const u = await checkForUpdate();
+    if (!u.available) { console.log(`open-charts ${u.current} is up to date (latest release ${u.latest}).`); return; }
+    console.log(`Downloading open-charts ${u.latest} (${u.asset ?? 'no installer for this computer'})…`);
+    const file = await installUpdate(u);
+    console.log(`Checked (checksum and signature) and opened ${file}: finish the installation there.`);
+    return;
+  }
   if (arg === 'on' || arg === 'off') {
     writeSettings(home, { updateCheck: arg === 'on' });
     console.log(`Update check ${arg === 'on' ? 'on: the add-in asks GitHub Releases once a day and tells you about a new version' : 'off'}.`);

@@ -13,7 +13,7 @@ Rules for this plan
 - [x] A1 Remove analysis notes about the reference product from the repo; keep only public-convention
       and public-manual wording
 - [ ] A2 Git history still contains the removed notes — decide: rewrite history + force-push (owner decision, Q1)
-- [ ] A3 Commit the click-handling fix (user click during background selection work runs at once)
+- [x] A3 Commit the click-handling fix (user click during background selection work runs at once)
 - [x] A4 Security: local engine server accepts only requests carrying a per-install secret token and a
       loopback Host/Origin; editor/pop-up/toolbar/VBA/Office.js pass the token; tests for rejection
 - [x] A5 Remove developer-only leftovers from the product (test macros hidden from the ribbon, debug logs off by default)
@@ -40,7 +40,8 @@ Rules for this plan
 - [ ] C4 Office.js production: static https hosting, production manifest, M365 admin-center deployment guide;
       AppSource submission later
 - [ ] C5 Updates: version check + update download (signed packages only)
-      (done: client check behind `addin update on`, design in docs/release.md; todo: add-in UI, verified download)
+      (done: client check behind `addin update on`; `addin update install` downloads, verifies SHA-256 +
+      signature, opens; IT policy.json forces it off. todo: ribbon button; signing identity needs C3)
 - [ ] C6 IT deployment guide: Intune / Jamf / M365 admin center, coexistence with think-cell, macro trust settings
 
 ## D. Verification (live runs in approved windows only)

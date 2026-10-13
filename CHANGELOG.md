@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Updates and fixes
+
+- `open-charts addin update install`: downloads this platform's installer, checks its SHA-256 and the
+  publisher's signature, and only then opens it; refused until open-charts' signing identity exists.
+  An IT policy file (`policy.json`, machine-wide) turns the update check off.
+- Installing over a running PowerPoint reloads the add-in: no restart needed.
+- PowerPoint for Mac: label commands (Convert to plain text, Reset label position) see the selected
+  label; PowerPoint no longer starts again by itself after quitting with a chart selected; an engine
+  answer that PowerPoint occasionally drops is asked for again.
+
 ### Live tests
 
 - `npm run live -- <scenario...>` (`tools/live/`) replaces the 10-minute `e2e:powerpoint` script and the

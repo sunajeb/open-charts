@@ -5,7 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { distributionXml, INSTALL_LOCATION, minMacOS, noRootAuth } from '../scripts/build-mac.ts';
@@ -13,7 +14,7 @@ import { msiName, msiVersion, rtf, wixArgs } from '../scripts/build-msi.ts';
 import { assetFiles } from '../scripts/build-win.ts';
 import { PKG_ID, registerAgentPlist, REGISTER_AGENT } from '../src/addin/mac-install.ts';
 import { launcherScript } from '../src/addin/launcher.ts';
-import { checkForUpdate, compareVersions, installerAsset, lastUpdateCheck, maybeCheckForUpdate, writeSettings } from '../src/update.ts';
+import { checkForUpdate, compareVersions, expectedSha256, installUpdate, installerAsset, lastUpdateCheck, maybeCheckForUpdate, policyUpdateOff, signatureProblem, writeSettings, type UpdateInfo } from '../src/update.ts';
 
 const read = (f: string) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 const mac = process.platform === 'darwin';
@@ -124,7 +125,7 @@ test('update check: versions, installer per platform, off by default, once a day
   const release = { tag_name: 'v0.3.0', html_url: 'https://github.com/sunajeb/open-charts/releases/tag/v0.3.0', assets: names.map((name) => ({ name, browser_download_url: `https://x/${name}` })) };
   const fake = (async () => { calls++; return new Response(JSON.stringify(release), { status: 200 }); }) as typeof fetch;
   const u = await checkForUpdate({ current: '0.2.0', fetch: fake, platform: 'darwin', now: new Date('2026-10-13T00:00:00Z') });
-  assert.deepEqual(u, { current: '0.2.0', latest: '0.3.0', available: true, url: release.html_url, asset: 'open-charts-0.3.0.pkg', checkedAt: '2026-10-13T00:00:00.000Z' });
+  assert.deepEqual(u, { current: '0.2.0', latest: '0.3.0', available: true, url: release.html_url, asset: 'open-charts-0.3.0.pkg', assetUrl: 'https://x/open-charts-0.3.0.pkg', sumsUrl: 'https://x/SHA256SUMS.txt', checkedAt: '2026-10-13T00:00:00.000Z' });
   assert.equal((await checkForUpdate({ current: '0.3.0', fetch: fake })).available, false);
   assert.equal((await checkForUpdate({ current: '0.2.0', fetch: (async () => new Response(JSON.stringify({ ...release, prerelease: true }))) as typeof fetch })).available, false);
   await assert.rejects(checkForUpdate({ fetch: (async () => new Response('', { status: 404 })) as typeof fetch }), /no published release/);
@@ -147,5 +148,55 @@ test('update check: versions, installer per platform, off by default, once a day
     assert.equal((await maybeCheckForUpdate(home, { ...opts, fetch: offline, now: new Date('2026-10-16T09:00:00Z') }))?.latest, '0.3.0', 'offline: the last result, no error');
   } finally {
     rmSync(home, { recursive: true, force: true });
+  }
+});
+
+test('update install: checksum, then signature, then open; a failed download is deleted, never opened', async () => {
+  const pkg = new TextEncoder().encode('installer bytes');
+  const hash = createHash('sha256').update(pkg).digest('hex');
+  assert.equal(expectedSha256(`${'0'.repeat(64)}  other.pkg\n${hash}  open-charts-0.3.0.pkg\n`, 'open-charts-0.3.0.pkg'), hash);
+  assert.equal(expectedSha256('nonsense', 'open-charts-0.3.0.pkg'), undefined);
+  const info: UpdateInfo = { current: '0.2.0', latest: '0.3.0', available: true, url: 'https://rel', asset: 'open-charts-0.3.0.pkg', assetUrl: 'https://x/pkg', sumsUrl: 'https://x/sums', checkedAt: '' };
+  const serve = (sums: string) => (async (url: string) => new Response(url.endsWith('sums') ? sums : pkg)) as unknown as typeof fetch;
+  const dir = mkdtempSync(join(tmpdir(), 'oc-upd-'));
+  try {
+    const opened: string[] = [];
+    const ok = await installUpdate(info, { fetch: serve(`${hash}  open-charts-0.3.0.pkg\n`), dir, verify: () => '', open: (f) => opened.push(f) });
+    assert.deepEqual(opened, [ok]);
+    assert.ok(existsSync(ok));
+    await assert.rejects(installUpdate(info, { fetch: serve(`${'1'.repeat(64)}  open-charts-0.3.0.pkg\n`), dir, verify: () => '', open: (f) => opened.push(f) }), /checksum does not match/);
+    await assert.rejects(installUpdate(info, { fetch: serve(`${hash}  open-charts-0.3.0.pkg\n`), dir, verify: () => 'not signed', open: (f) => opened.push(f) }), /not opened: not signed/);
+    assert.equal(opened.length, 1, 'nothing that failed a check was opened');
+    assert.ok(!existsSync(join(dir, 'open-charts-0.3.0.pkg')), 'and it was deleted');
+    await assert.rejects(installUpdate(info, { fetch: serve('nothing listed'), dir }), /does not list/);
+    await assert.rejects(installUpdate({ ...info, available: false }, { dir }), /up to date/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+  // Signatures: refused while open-charts has no signing identity; checked against it once it has one.
+  assert.match(signatureProblem('/x.pkg', 'darwin', { appleTeamId: '', windowsSubject: '' }), /signing identity/);
+  const mac = (out: string) => () => out;
+  assert.equal(signatureProblem('/x.pkg', 'darwin', { appleTeamId: 'ABCDE12345', windowsSubject: '' }, mac('Status: signed by a developer certificate issued by Apple for distribution\n 1. Developer ID Installer: Someone (ABCDE12345)')), '');
+  assert.match(signatureProblem('/x.pkg', 'darwin', { appleTeamId: 'ABCDE12345', windowsSubject: '' }, mac('1. Developer ID Installer: Other (ZZZZZ99999)')), /not signed by open-charts/);
+  assert.equal(signatureProblem('x.msi', 'win32', { appleTeamId: '', windowsSubject: 'CN=open-charts' }, mac('Valid|CN=open-charts, O=open-charts')), '');
+  assert.match(signatureProblem('x.msi', 'win32', { appleTeamId: '', windowsSubject: 'CN=open-charts' }, mac('NotSigned|')), /NotSigned/);
+});
+
+test('update policy: IT turns the check off machine-wide', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oc-pol-'));
+  try {
+    const policy = join(dir, 'policy.json');
+    assert.equal(policyUpdateOff(policy), false, 'no file: the user decides');
+    writeFileSync(policy, '{"updateCheck": false}');
+    assert.equal(policyUpdateOff(policy), true);
+    writeSettings(dir, { updateCheck: true });
+    let calls = 0;
+    const fake = (async () => { calls++; return new Response('{}'); }) as unknown as typeof fetch;
+    assert.equal(await maybeCheckForUpdate(dir, { fetch: fake, policy }), undefined);
+    assert.equal(calls, 0, 'the policy wins over the user setting');
+    writeFileSync(policy, 'not json');
+    assert.equal(policyUpdateOff(policy), false, 'an unreadable policy does not block');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });

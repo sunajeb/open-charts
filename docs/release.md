@@ -222,16 +222,25 @@ A machine-wide Mac package is not built yet (task C6).
 builds (see Cutting a release). The endpoint never returns a draft, so the client can only be
 offered a signed package.
 
-**Next (C5 proper).**
+**Installing an update (the user's own action).** `open-charts addin update install`:
 
-1. Show "Update available" in the add-in: a ribbon label, or a line in the Edit data window, read
-   from `/api/addin/update`.
-2. On click, download the platform's installer and `SHA256SUMS.txt`.
-3. Verify the download before opening it:
-   - the SHA-256 matches;
-   - on a Mac, `pkgutil --check-signature` shows our Developer ID Installer team ID, and
-     `spctl --assess --type install` accepts it;
-   - on Windows, `Get-AuthenticodeSignature` is `Valid` with our subject.
-4. Open the verified installer: Installer on a Mac, `msiexec` on Windows, which the user confirms.
-   An installer that fails any check is deleted and never opened.
-5. Managed (IT-deployed) machines turn the check off. A policy key that forces it off comes with C6.
+1. checks for the latest release, as above;
+2. downloads this platform's installer and `SHA256SUMS.txt`;
+3. verifies the download before opening it:
+   - the SHA-256 matches the line for the installer in `SHA256SUMS.txt`;
+   - on a Mac, `pkgutil --check-signature` shows a Developer ID Installer certificate with our team
+     ID, and `spctl --assess --type install` accepts the package;
+   - on Windows, `Get-AuthenticodeSignature` is `Valid` with our certificate subject;
+4. opens the verified installer (Installer on a Mac, `msiexec` on Windows), where the user confirms.
+
+An installer that fails any check is deleted and never opened. The signing identity (`SIGNER` in
+`src/update.ts`) is empty until the signing accounts exist (C3), so until then every download is
+refused and users install from the release page.
+
+**Managed machines.** IT turns the check off for everyone with a policy file that users cannot
+write: `/Library/Application Support/open-charts/policy.json` on a Mac,
+`%ProgramData%\open-charts\policy.json` on Windows, containing `{"updateCheck": false}`. The
+policy wins over the user's setting: no check, no download (see docs/IT-DEPLOYMENT.md).
+
+**Still to do.** Show "Update available" in the add-in (a ribbon button that runs the install
+above), once the signing identity is known.
