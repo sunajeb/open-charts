@@ -302,6 +302,56 @@ Public Sub OCPREFIX_SelectChart(ByVal n As String)
 Failed:
 End Sub
 
+' Selects several charts of the active slide, e.g. "1,2" (as Shift-click would), for scripted tests.
+Public Sub OCPREFIX_SelectCharts(ByVal list As String)
+    Dim shp As Object, k As Long, first As Boolean
+    On Error GoTo Failed
+    first = True
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If InStr("," & list & ",", "," & k & ",") > 0 Then shp.Select IIf(first, -1, 0): first = False
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Selects the piece with OC_ROLE `role` of the n-th chart (as clicking into the group would), for
+' scripted tests.
+Public Sub OCPREFIX_SelectRole(ByVal n As String, ByVal role As String)
+    Dim shp As Object, k As Long, i As Long
+    On Error GoTo Failed
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then
+                For i = 1 To shp.GroupItems.Count
+                    If TagValue(shp.GroupItems(i), "OC_ROLE") = role Then shp.GroupItems(i).Select: Exit Sub
+                Next i
+            End If
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Logs where the n-th chart is on screen ("WHERE screen=left,top,right,bottom"), and which
+' right-click items and ribbon commands apply to the selection ("APPLIES btnTotals btnCagr ..."),
+' for scripted tests.
+Public Sub OCPREFIX_Probe(ByVal n As String)
+    Dim shp As Object, k As Long, c As Variant, out As String
+    On Error Resume Next
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then Report "WHERE " & Replace(ScreenLines(shp), vbLf, " ")
+        End If
+    Next shp
+    For Each c In Array("btnEditData", "btnUpdate", "btnTotals", "btnCagr", "btnDifference", "btnSameScale", "btnUnscale", "btnPlainText", "btnResetLabel")
+        If CommandApplies(CStr(c)) Then out = out & " " & c
+    Next c
+    Report "APPLIES" & out
+End Sub
+
 ' Resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.
 Public Sub OCPREFIX_ResizeChart(ByVal n As String, ByVal factor As String)
     Dim shp As Object, k As Long

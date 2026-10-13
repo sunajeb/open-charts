@@ -373,6 +373,135 @@ const THEME_PNG = join(OUT, 'theme-png');
   console.log(`Theme slide PNGs: ${THEME_PNG}`);
 }
 
+// 11. Chart commands (ribbon Chart tools group / right-click items) and undo, live. Two charts on a
+// fresh slide: Same scale, Remove from same scale, Totals, CAGR arrow, Convert to plain text, Reset
+// label position; which commands apply to which selection (the right-click items' getVisible); and
+// how many Cmd+Z presses undo one action (insert, Update chart, a command, a resize re-layout).
+const undoCounts: Record<string, string> = {};
+{
+  ppt('activate\nmake new presentation');
+  ready = false; // PowerPoint started again: the add-in compiles again
+  ppt('set s to make new slide at end of active presentation with properties {layout:slide layout blank}\ngo to slide view of document window 1 number 1');
+  results.push(macro('Run', 'chart_stacked'));
+  results.push(macro('Run', 'chart_clustered'));
+  ppt(`set a to shape 1 of slide 1 of active presentation
+set left position of a to 20
+set width of a to 440
+set b to shape 2 of slide 1 of active presentation
+set left position of b to 500
+set width of b to 440`);
+  macro('SelectChart', '1'); macro('Run', 'btnUpdate');
+  macro('SelectChart', '2'); macro('Run', 'btnUpdate');
+  const deckNow = () => { const f = join(OUT, 'commands.pptx'); macro('ExportCopy', f, 'pptx'); return readCharts(new Uint8Array(readFileSync(f)))[0]?.charts ?? []; };
+  const specOf = (c: { spec?: string } | undefined): any => (c?.spec ? JSON.parse(c.spec) : undefined);
+  const byType = (type: string) => deckNow().find((c) => specOf(c)?.type === type);
+  const expect = (ok: boolean, what: string) => { results.push(`${ok ? 'OK' : 'FAILED'} ${what}`); if (!ok) failures.push(what); };
+  const applies = (out: string) => out.split('\n').filter((l) => l.startsWith('APPLIES')).pop() ?? '';
+
+  // Which commands apply (the right-click items show exactly these).
+  macro('SelectChart', '1');
+  let out = applies(macro('Probe', '1'));
+  expect(out === 'APPLIES btnEditData btnUpdate btnTotals btnCagr btnDifference btnResetLabel', `commands on a stacked chart (${out})`);
+  macro('SelectCharts', '1,2');
+  out = applies(macro('Probe', '1'));
+  expect(out === 'APPLIES btnSameScale', `commands on two charts (${out})`);
+
+  // Same scale: one group in both specs, the partner re-laid out at the group's scale.
+  out = macro('Run', 'btnSameScale');
+  expect(/RESULT btnSameScale OK/.test(out) && /SAMESCALE scale1 2 of 2 charts/.test(out), `Same scale (${out})`);
+  const charts = deckNow();
+  expect(charts.length === 2 && charts.every((c) => specOf(c)?.options?.scaleGroup === 'scale1'), `both charts in scaleGroup scale1 (${charts.map((c) => specOf(c)?.options?.scaleGroup).join(', ')})`);
+  macro('SelectCharts', '1,2');
+  out = applies(macro('Probe', '1'));
+  expect(out === 'APPLIES btnSameScale btnUnscale', `commands on two charts in a group (${out})`);
+  // Kept on later edits: Update on one re-lays out the other.
+  macro('SelectChart', '1');
+  out = macro('Run', 'btnUpdate');
+  expect(/SYNC scale1 1 of 1 charts/.test(out), `Update keeps the same scale (${out})`);
+  // Remove from same scale.
+  macro('SelectChart', '2');
+  out = macro('Run', 'btnUnscale');
+  expect(/RESULT btnUnscale OK/.test(out), `Remove from same scale (${out})`);
+  expect(!!byType('clustered') && !specOf(byType('clustered'))?.options?.scaleGroup, 'clustered chart left the group');
+
+  // Totals and CAGR arrow on the stacked chart (the sample has a CAGR arrow and totals).
+  macro('SelectChart', '1');
+  out = macro('Run', 'btnTotals');
+  expect(/RESULT btnTotals OK/.test(out) && specOf(byType('stacked'))?.options?.totals === false, `Totals off (${out})`);
+  macro('SelectChart', '1');
+  out = macro('Run', 'btnCagr');
+  expect(/RESULT btnCagr OK/.test(out) && !specOf(byType('stacked'))?.options?.cagr, `CAGR arrow removed (${out})`);
+  macro('SelectChart', '2');
+  out = macro('Run', 'btnTotals');
+  expect(/Totals are not available/.test(out), `Totals on a clustered chart explains (${out})`);
+
+  // Convert to plain text (a selected label), then Reset label position.
+  const label = 'label:value:s0:c0';
+  macro('SelectRole', '1', label);
+  out = applies(macro('Probe', '1'));
+  expect(/btnPlainText/.test(out), `Convert to plain text applies to a selected label (${out})`);
+  out = macro('Run', 'btnPlainText');
+  expect(/RESULT btnPlainText OK/.test(out) && specOf(byType('stacked'))?.overrides?.[label]?.detach === true, `Convert to plain text (${out})`);
+  macro('SelectRole', '1', label);
+  out = macro('Run', 'btnResetLabel');
+  expect(/This label is where open-charts puts it already/.test(out), `Reset label position on a label that was not moved explains (${out})`);
+  {
+    // A moved label (pinned through Apply, as the toolbar / direct manipulation would), then reset.
+    macro('SelectChart', '1');
+    macro('Run', 'btnEditData');
+    const cur = byType('stacked')!;
+    const spec = specOf(cur);
+    const pinned = { ...spec, overrides: { ...spec.overrides, 'label:total:c1': { pin: { x: 0.3, y: 0.1 } } } };
+    const a = await applyInEditor(specKey(cur.spec!), pinned);
+    expect(/APPLIED \w+ OK/.test(a.applied), `pin a label through Apply (${a.applied})`);
+    macro('SelectRole', '1', 'label:total:c1');
+    out = macro('Run', 'btnResetLabel');
+    expect(/RESULT btnResetLabel OK/.test(out) && !specOf(byType('stacked'))?.overrides?.['label:total:c1']?.pin, `Reset label position (${out})`);
+  }
+
+  // Undo: presses of Cmd+Z (System Events, as the user) until a marker shape made right before the
+  // action is gone, minus one = undo entries of the action.
+  const sig = () => ppt(`set out to ""
+repeat with s in shapes of slide 1 of active presentation
+  set n to 0
+  try
+    set n to count of group items of s
+  end try
+  set out to out & (name of s) & "#" & n & "@" & (round (left position of s)) & "," & (round (top of s)) & "," & (round (width of s)) & "," & (round (height of s)) & "|"
+end repeat
+return out`);
+  const press = () => { osa('tell application "Microsoft PowerPoint" to activate\ntell application "System Events" to keystroke "z" using command down'); sleep(400); };
+  const unmark = (s: string) => s.replace(/MARK#[^|]*\|/, '');
+  const measure = (name: string, action: () => void, max = 30) => {
+    try {
+      ppt('make new shape at end of slide 1 of active presentation with properties {name:"MARK", left position:2, top:2, width:6, height:6}');
+      const pre = unmark(sig());
+      action();
+      sleep(300);
+      const states = [sig()];
+      while (states[states.length - 1].includes('MARK#') && states.length <= max) { press(); states.push(sig()); }
+      const gone = !states[states.length - 1].includes('MARK#');
+      const entries = states.length - 2;
+      const restored = gone && unmark(states[states.length - 2]) === pre;
+      undoCounts[name] = gone ? `${entries}${restored ? '' : ' (state before differs)'}` : `>${max}`;
+    } catch (err) {
+      undoCounts[name] = `not measured: ${(err as Error).message.split('\n')[0]}`;
+    }
+    results.push(`UNDO ${name}: ${undoCounts[name]}`);
+  };
+  measure('insert', () => macro('Run', 'chart_stacked'));
+  macro('Run', 'chart_stacked');
+  measure('update', () => { macro('SelectChart', '3'); macro('Run', 'btnUpdate'); });
+  measure('totals', () => { macro('SelectChart', '3'); macro('Run', 'btnTotals'); });
+  measure('resize', () => {
+    macro('SelectChart', '3'); macro('ResizeChart', '3', '0.7');
+    const b = logLines().length; macro('SelectChart', '0'); waitForLog(/RELAYOUT/, b);
+  });
+  measure('same scale', () => { macro('SelectCharts', '1,3'); macro('Run', 'btnSameScale'); });
+  ppt('close active presentation saving no\nquit saving no');
+  console.log(`Undo entries per action (Cmd+Z presses): ${Object.entries(undoCounts).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+}
+
 for (const sl of slides) {
   const a = join(PNG_DIR, `slide${sl.index}.png`), b = join(CLI_PNG_DIR, `slide${sl.index}.png`);
   if (!existsSync(a) || !existsSync(b)) { failures.push(`slide ${sl.index}: PNG missing for comparison`); continue; }
