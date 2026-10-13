@@ -192,6 +192,25 @@ Private Function ChartContext(ByVal chart As Object) As String
         ThemeLine(chart.Parent) & ScaleLine(chart)
 End Function
 
+' Where the chart is on screen, for the Edit data pop-up (src/addin/popup.ts ChartWhere):
+' "screen=left,top,right,bottom" through PointsToScreenPixelsX/Y, and "window=left,top,width,height,
+' zoom" of the document window. Either is left out when PowerPoint cannot tell; the server only
+' trusts the corners when they fall inside a PowerPoint window, else it places the pop-up by the window.
+Private Function ScreenLines(ByVal chart As Object) As String
+    Dim w As Object, s As String
+    On Error Resume Next
+    Set w = ActiveWindow
+    If w Is Nothing Then Exit Function
+    Err.Clear
+    s = Fmt(w.PointsToScreenPixelsX(chart.Left)) & "," & Fmt(w.PointsToScreenPixelsY(chart.Top)) & "," & _
+        Fmt(w.PointsToScreenPixelsX(chart.Left + chart.Width)) & "," & Fmt(w.PointsToScreenPixelsY(chart.Top + chart.Height))
+    If Err.Number = 0 Then ScreenLines = "screen=" & s & vbLf
+    Err.Clear
+    s = Fmt(w.Left) & "," & Fmt(w.Top) & "," & Fmt(w.Width) & "," & Fmt(w.Height) & "," & Fmt(w.View.Zoom)
+    If Err.Number = 0 Then ScreenLines = ScreenLines & "window=" & s & vbLf
+    Err.Clear
+End Function
+
 ' A context as one answer line (src/addin/server.ts parseApplyAnswer).
 Private Function ContextLine(ByVal context As String) As String
     ContextLine = "CONTEXT" & vbTab & Replace(context, vbLf, vbTab)
@@ -313,7 +332,8 @@ Private Sub EditData()
     Set chart = SelectedChart()
     If chart Is Nothing Then Exit Sub
     ' The chart's context too: the server lays an Apply out for it by itself (ApplyEdit).
-    response = Engine("edit" & vbLf & "" & vbLf & ChartContext(chart) & SpecOf(chart))
+    ' And where it is on screen, so the Edit data pop-up opens next to it (ScreenLines).
+    response = Engine("edit" & vbLf & "" & vbLf & ChartContext(chart) & ScreenLines(chart) & SpecOf(chart))
     If response = "" Then Exit Sub
     gSessionId = ""
     Draw Nothing, response

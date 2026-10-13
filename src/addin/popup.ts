@@ -197,7 +197,7 @@ const toRect = (a: unknown): Rect | undefined =>
  * i.e. with the server). `exe` undefined = not built/installed: show() resolves undefined and the
  * caller falls back to the browser.
  */
-export function popupHelper(base: string, exe = helperPath(), log: (line: string) => void = () => {}): PopupHelper {
+export function popupHelper(base: string, exe: string | undefined, log: (line: string) => void = () => {}): PopupHelper {
   let child: ChildProcess | undefined;
   let buffer = '';
   const waiters: Array<{ event: string; resolve: (m: Msg | undefined) => void; timer: NodeJS.Timeout }> = [];
@@ -289,6 +289,7 @@ export interface OpenPopupDeps {
   log?: (line: string) => void;
   /** Windows: Edge's profile folder for pop-ups. */
   profile?: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 const defaultLaunch = (cmd: string, args: string[]) => {
@@ -324,7 +325,7 @@ export async function openPopup(base: string, id: string, where: ChartWhere | un
     log('POPUP helper did not answer: opening the editor in the browser');
   } else if (platform === 'win32') {
     const exists = deps.exists ?? existsSync;
-    const edge = edgePaths().find(exists);
+    const edge = edgePaths(deps.env).find(exists);
     const s = where?.screen;
     const chart = s && s[2] > s[0] && s[3] > s[1] ? { x: s[0], y: s[1], w: s[2] - s[0], h: s[3] - s[1] } : undefined;
     // Without the display's work area, place by the chart alone (Windows keeps a window on screen).
