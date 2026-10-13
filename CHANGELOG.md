@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+### Installers (no Node, no Terminal, no admin rights)
+
+- Mac: `open-charts-<version>.pkg` (`npm run build:mac`), installed per user. It contains the engine
+  as one universal program, the Edit data window, the add-in and *Uninstall open-charts* (in
+  ~/Applications). It registers the add-in in PowerPoint without starting it.
+  `npm run check:mac-pkg` installs it into a temporary home folder and removes it again.
+- Windows: `open-charts-<version>.msi` (`npm run build:msi`), per user, with `/quiet` for a silent
+  install. `open-charts-<version>-machine.msi` is for Intune; it sets up each user at sign-in.
+- Signing hooks: Apple Developer ID plus notarization, and Azure Trusted Signing. Both are driven by
+  environment variables and secrets, and builds are unsigned without them. A `release` workflow
+  drafts a GitHub release from a version tag (docs/release.md).
+- `open-charts addin update [on|off]` checks GitHub Releases for a newer version. The daily check
+  is off by default and only reports what it finds.
+
 ### Drag handles (PowerPoint for Mac)
 
 - A selected chart shows handles you can drag: column gap width, the top of the value axis (new
