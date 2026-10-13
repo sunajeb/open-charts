@@ -2,7 +2,8 @@
 -- PowerPoint runs this with AppleScriptTask("open-charts.scpt", handler, argument), the
 -- sandbox-approved way for Office VBA on the Mac to run outside the sandbox. `open-charts addin
 -- install` fills in the paths below and compiles this into
--- ~/Library/Application Scripts/com.microsoft.Powerpoint/open-charts.scpt.
+-- ~/Library/Application Scripts/com.microsoft.Powerpoint/open-charts.scpt. Installed from the
+-- package (open-charts-<version>.pkg), nodePath is empty and cliPath is the engine executable.
 
 property nodePath : "__NODE__"
 property cliPath : "__CLI__"
@@ -17,10 +18,9 @@ on engine(request)
 	end try
 	-- 2. Cold: answer with a one-off node process and start the server for the next call.
 	try
-		set nodeBin to quoted form of my findNode()
-		set engineArgs to " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin "
-		do shell script "nohup " & nodeBin & engineArgs & "serve > /dev/null 2>&1 &"
-		return do shell script "printf '%s' " & requestText & " | " & nodeBin & engineArgs & "run -" without altering line endings
+		set engineCmd to my engineCommand()
+		do shell script "nohup " & engineCmd & " addin serve > /dev/null 2>&1 &"
+		return do shell script "printf '%s' " & requestText & " | " & engineCmd & " addin run -" without altering line endings
 	on error message
 		return "OC" & tab & "1" & linefeed & "E" & tab & "The open-charts engine failed: " & my oneLine(message) & linefeed
 	end try
@@ -30,7 +30,7 @@ end engine
 -- loads, so the first chart inserted gets the fast path above. Returns at once.
 on startServer(ignored)
 	try
-		set serverCommand to "nohup " & quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath & " addin serve"
+		set serverCommand to "nohup " & my engineCommand() & " addin serve"
 		do shell script "{ /usr/bin/curl -sf --connect-timeout 0.3 --max-time 1 http://127.0.0.1:4174/api/addin/ping || " & serverCommand & "; } > /dev/null 2>&1 &"
 		return "OK"
 	on error message
@@ -69,6 +69,12 @@ on copyOut(arg)
 		return "failed: " & my oneLine(message)
 	end try
 end copyOut
+
+-- The command that runs the engine: the packaged executable, or node running the CLI source.
+on engineCommand()
+	if nodePath is "" then return quoted form of cliPath
+	return quoted form of my findNode() & " --experimental-strip-types --no-warnings " & quoted form of cliPath
+end engineCommand
 
 on findNode()
 	try

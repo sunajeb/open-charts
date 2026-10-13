@@ -26,9 +26,15 @@ export const reinstallCommand = (home = addinHome()) => process.platform === 'wi
 /**
  * The launcher: the Node that ran the install (or the one on PATH, if that one has gone) running the
  * open-charts folder the install was run from, so `open-charts addin install` picks up updates.
+ * Installed from the package (`node` empty), the engine executable `cli` itself.
  */
 export function launcherScript(node: string, cli: string): string {
   const q = (s: string) => `'${s.replace(/'/g, `'\\''`)}'`;
+  // Installed from the package: `cli` is the engine executable itself (no Node).
+  if (!node) return `#!/bin/sh
+# open-charts launcher, written by the open-charts installer.
+exec ${q(cli)} "$@"
+`;
   return `#!/bin/sh
 # open-charts launcher, written by \`open-charts addin install\`.
 NODE=${q(node)}

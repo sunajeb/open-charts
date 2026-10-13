@@ -1,0 +1,26 @@
+#!/bin/sh
+# open-charts package postinstall. The package installs into the home folder only ("Install for me
+# only", no administrator password), so this runs as that user. $2 is the install location,
+# ~/Library/Application Support/open-charts, where the payload put engine/open-charts.
+# `open-charts addin install` run by that engine executable (src/addin/mac-install.ts) places the
+# add-in and the bridge script exactly where an install from source does, and registers the add-in
+# in PowerPoint without starting it.
+if [ -z "$HOME" ] || [ "$HOME" = "/" ]; then
+  HOME=$(/usr/bin/dscl . -read "/Users/$(/usr/bin/id -un)" NFSHomeDirectory | /usr/bin/awk '{print $2}')
+  export HOME
+fi
+exe=
+for dir in "$2" "$HOME/Library/Application Support/open-charts"; do
+  if [ -x "$dir/engine/open-charts" ]; then exe="$dir/engine/open-charts"; break; fi
+done
+if [ -z "$exe" ]; then
+  echo "open-charts: the engine is missing in $2" >&2
+  exit 1
+fi
+log="$(dirname "$(dirname "$exe")")/install.log"
+if ! "$exe" addin install >"$log" 2>&1; then
+  cat "$log" >&2
+  exit 1
+fi
+cat "$log"
+exit 0
