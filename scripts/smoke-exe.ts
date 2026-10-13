@@ -30,7 +30,7 @@ const run = (...args: string[]) => execFileSync(exe, args, { env, encoding: 'utf
 const check = (ok: boolean, why: string) => { if (!ok) throw new Error(why); };
 
 try {
-  step('first start (unpacks resources): addin types', () => check(/stacked\s+Stacked\s+available/.test(run('addin', 'types')), 'no stacked in the gallery'));
+  step('first start (unpacks resources): addin types', () => check(/stacked\s+Stacked Column\/Bar\s+available/.test(run('addin', 'types')), 'no stacked in the gallery'));
   step('warm start: addin types', () => run('addin', 'types'));
   step('layout examples/deck.json', () => {
     run('examples/deck.json', '-o', join(dir, 'deck'));
