@@ -602,22 +602,27 @@ Private Function AutoShapeType(ByVal kind As String) As Long
 End Function
 
 Private Sub FillAndLine(ByVal s As Object, ByVal fillHex As String, ByVal lineHex As String, ByVal lineWidth As String, ByVal dash As String)
-    If fillHex = "" Then
-        s.Fill.Visible = 0
-    Else
-        s.Fill.Visible = -1
-        s.Fill.Solid
-        SetColor s.Fill.ForeColor, fillHex
-        s.Fill.Transparency = 0
-    End If
-    If lineHex = "" Then
-        s.Line.Visible = 0
-    Else
-        s.Line.Visible = -1
-        SetColor s.Line.ForeColor, lineHex
-        s.Line.Weight = Val(lineWidth)
-        If dash = "1" Then s.Line.DashStyle = 4
-    End If
+    ' One FillFormat / LineFormat object each: every s.Fill or s.Line is another call into PowerPoint.
+    With s.Fill
+        If fillHex = "" Then
+            .Visible = 0
+        Else
+            .Visible = -1
+            .Solid
+            SetColor .ForeColor, fillHex
+            .Transparency = 0
+        End If
+    End With
+    With s.Line
+        If lineHex = "" Then
+            .Visible = 0
+        Else
+            .Visible = -1
+            SetColor .ForeColor, lineHex
+            .Weight = Val(lineWidth)
+            If dash = "1" Then .DashStyle = 4
+        End If
+    End With
     On Error Resume Next
     s.Shadow.Visible = 0
 End Sub
@@ -635,24 +640,30 @@ Private Sub SetText(ByVal s As Object, f() As String)
     End Select
     ' Paragraphs are separated by CR in PowerPoint text.
     tf.TextRange.Text = Replace(Unescape(f(11)), vbLf, vbCr)
-    With tf.TextRange
-        .Font.Name = f(12)
-        .Font.NameComplexScript = f(12) ' as the .pptx writer does (a:cs), so digits render the same
-        .Font.Size = Val(f(13))
-        .Font.Bold = IIf(f(14) = "1", -1, 0)
+    Dim tr As Object
+    Set tr = tf.TextRange
+    With tr.Font
+        .Name = f(12)
+        .NameComplexScript = f(12) ' as the .pptx writer does (a:cs), so digits render the same
+        .Size = Val(f(13))
+        .Bold = IIf(f(14) = "1", -1, 0)
         ' No kerning, as the engine measured. Decks often kern text of 12 pt and up by default;
         ' Kerning is the size from which pairs are kerned (0 = all sizes), so push it past any text.
-        .Font.Kerning = 4000
-        .Font.Fill.Visible = -1
-        SetColor .Font.Fill.ForeColor, f(15)
+        .Kerning = 4000
+        With .Fill
+            .Visible = -1
+            SetColor .ForeColor, f(15)
+        End With
+    End With
+    With tr.ParagraphFormat
         Select Case f(16)
-            Case "c": .ParagraphFormat.Alignment = 2 ' msoAlignCenter
-            Case "r": .ParagraphFormat.Alignment = 3 ' msoAlignRight
-            Case Else: .ParagraphFormat.Alignment = 1 ' msoAlignLeft
+            Case "c": .Alignment = 2 ' msoAlignCenter
+            Case "r": .Alignment = 3 ' msoAlignRight
+            Case Else: .Alignment = 1 ' msoAlignLeft
         End Select
-        .ParagraphFormat.SpaceBefore = 0
-        .ParagraphFormat.SpaceAfter = 0
-        .ParagraphFormat.SpaceWithin = 1
+        .SpaceBefore = 0
+        .SpaceAfter = 0
+        .SpaceWithin = 1
     End With
 End Sub
 

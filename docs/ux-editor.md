@@ -74,8 +74,12 @@ Flow:
    The window stays open; the user may apply again (each Apply bumps `rev`).
 3. Add-in: reacts in `onSession` (PowerPoint for Mac VBA cannot poll): on `state: "applied"` it runs
    the add-in's `ApplyEdit` macro through AppleScript (`run VB macro`, 20 s timeout; it never starts
-   PowerPoint). The engine re-lays out the chart and sets the session back to `open`
-   (`POST { state: "open" }`, chart kept), so the edit is never applied to another chart that has the
+   PowerPoint). The server lays the chart out itself, for the chart's context (frame, bounds, slide
+   theme, same-scale line) that Edit data sent and each Apply answers, and passes the response to
+   `ApplyEdit`, which only draws it (no engine round trip from PowerPoint: each AppleScriptTask costs
+   about 0.2 s). If the chart was moved, resized or re-themed meanwhile, `ApplyEdit` answers its
+   context and the server lays it out again for that. As it hands the response over, the server sets
+   the session back to `open` (chart kept), so the edit is never applied to another chart that has the
    same data; once the macro has returned (the shapes are drawn) the server sets it to `drawn`. The
    next Apply sets it to `applied` again. If the call fails — macOS permission prompt
    unanswered (timeout), permission denied (-1743), PowerPoint not running, macro error — or the macro
