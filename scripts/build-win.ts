@@ -7,7 +7,7 @@
 // How the exe is made (dev-time only; works on macOS, Linux and Windows):
 //   1. esbuild bundles src/cli.ts into one CommonJS file. Every `import.meta.url` becomes the URL of
 //      the source file it was in, under a resource root: the repo for the plain bundle, and for the
-//      exe a folder its embedded assets (editor page, VBA source) are unpacked into on first start.
+//      exe a folder its embedded assets (editor page, VBA source, ribbon icons) are unpacked into on first start.
 //   2. `node --experimental-sea-config` turns it into a SEA blob (no code cache or snapshot, so the
 //      blob is the same on every platform).
 //   3. The official win-x64 node.exe of the very same Node version (a blob only runs in the Node
@@ -35,7 +35,7 @@ export const SEA_FUSE = 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2';
 export function assetFiles(root = ROOT): string[] {
   const walk = (dir: string): string[] => readdirSync(join(root, dir), { withFileTypes: true })
     .flatMap((e) => (e.isDirectory() ? walk(join(dir, e.name)) : [join(dir, e.name)]));
-  return [...walk('src/web'), ...walk('addin/vba')].map((p) => p.split(sep).join('/')).sort();
+  return [...walk('src/web'), ...walk('addin/vba'), ...walk('addin/icons')].map((p) => p.split(sep).join('/')).sort();
 }
 
 /** The repo-relative path of a source file, '/'-separated: what its import.meta.url stands for. */
