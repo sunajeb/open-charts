@@ -145,7 +145,7 @@ test('resolver: the platforms\' font folders, Office\'s own and cloud fonts incl
   assert.deepEqual(fontDirs('win32', env, 'C:\\Users\\a').slice(0, 3), ['C:\\Windows\\Fonts', 'C:\\Users\\a\\AppData\\Local\\Microsoft\\Windows\\Fonts', 'C:\\Users\\a\\AppData\\Local\\Microsoft\\FontCache\\4\\CloudFonts']);
   const mac = fontDirs('darwin', {}, '/Users/a');
   for (const d of ['/System/Library/Fonts', '/Library/Fonts', '/Users/a/Library/Fonts', '/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts', '/Users/a/Library/Group Containers/UBF8T346G9.Office/FontCache']) assert.ok(mac.includes(d), d);
-  assert.ok(mac.at(-1)!.endsWith('vendor/fonts'), 'open-charts\' own Liberation Sans last');
+  assert.ok(mac.at(-1)!.replace(/\\/g, '/').endsWith('vendor/fonts'), 'open-charts\' own Liberation Sans last');
   assert.deepEqual(fontDirs('linux', { OPEN_CHARTS_FONT_DIRS: ['/a', '/b'].join(process.platform === 'win32' ? ';' : ':') }, '/h'), ['/a', '/b']);
 });
 
