@@ -11,13 +11,14 @@
     "examples": "node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o out/deck",
     "e2e:powerpoint": "node --experimental-strip-types --no-warnings tools/e2e-powerpoint.ts",
     "e2e:agenda": "node --experimental-strip-types --no-warnings tools/e2e-agenda.ts",
-    "test": "node --experimental-strip-types --no-warnings --test 'test/*.test.ts' && npm run test:perf",
+    "test": "node --experimental-strip-types --no-warnings --test \"test/*.test.ts\" && npm run test:perf",
     "test:perf": "node --experimental-strip-types --no-warnings --test test/perf/perf.test.ts",
     "e2e": "playwright test -c test/e2e",
     "goldens": "node --experimental-strip-types --no-warnings test/goldens/run.ts",
     "bench": "node --experimental-strip-types --no-warnings scripts/bench.ts",
     "bench:accept": "node --experimental-strip-types --no-warnings test/bench/accept.ts",
     "quality": "node --experimental-strip-types --no-warnings scripts/quality.ts",
+    "build:win": "node --experimental-strip-types --no-warnings scripts/build-win.ts",
     "build:officejs": "node --experimental-strip-types --no-warnings scripts/build-officejs.ts",
     "officejs:cert": "node --experimental-strip-types --no-warnings scripts/officejs-cert.ts",
     "officejs:serve": "node --experimental-strip-types --no-warnings src/officejs/server.ts",
@@ -30,6 +31,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
-    "esbuild": "^0.25.12"
+    "esbuild": "^0.25.12",
+    "postject": "1.0.0-alpha.6"
   }
 }

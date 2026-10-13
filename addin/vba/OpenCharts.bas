@@ -4,6 +4,8 @@ Attribute VB_Name = "OpenCharts"
 ' Like the reference product's stub, this holds no chart logic. Every ribbon callback goes to
 ' Dispatch with the control id; Dispatch forwards a request to the engine (node, through the
 ' sandbox-approved AppleScriptTask bridge) and draws the native shapes the engine returns.
+' On Windows (#If Mac ... #Else) the same requests go over HTTP to the engine's local server
+' (open-charts.exe, started here when it is not running); everything else is shared.
 ' The line format is documented in src/addin/format.ts, the request in src/addin/engine.ts.
 '
 ' OCPREFIX is replaced at build time by a per-build prefix shared with customUI14.xml, so the
@@ -16,6 +18,18 @@ Private Const SCRIPT_HANDLER As String = "engine"
 Private Const TITLE As String = "open-charts"
 ' The command that reinstalls the add-in; the build writes the launcher path of this install here.
 Private Const REINSTALL As String = """$HOME/Library/Application Support/open-charts/bin/open-charts"" addin install"
+#If Mac Then
+#Else
+' Windows: the engine's local server (127.0.0.1 only) and where install.ps1 puts the engine.
+Private Const ENGINE_URL As String = "http://127.0.0.1:4174/api/addin/"
+Private Const ENGINE_EXE As String = "\open-charts\open-charts.exe"
+Private Const WIN_REINSTALL As String = "Run install.ps1 from the open-charts-win folder again (README, Install on Windows), then restart PowerPoint."
+#If VBA7 Then
+Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#Else
+Private Declare Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
+#End If
+#End If
 
 Private gRibbon As Object
 Private gEvents As AppEvents
@@ -62,7 +76,11 @@ Private Sub StartEngine()
     If gEngineStarted Then Exit Sub
     gEngineStarted = True
     On Error Resume Next
+#If Mac Then
     ignored = AppleScriptTask(SCRIPT_FILE, "startServer", "")
+#Else
+    WinStartServer 0
+#End If
 End Sub
 
 Private Sub StartEvents()
@@ -152,7 +170,11 @@ Private Sub NotifySelection()
         request = "select" & vbLf & roles & vbLf & ChartContext(chart) & ScreenLinesFor(x0, y0, x1 - x0, y1 - y0) & SpecOf(chart)
     End If
     request = "seq=" & Fmt3(Timer) & vbLf & request
+#If Mac Then
     AppleScriptTask SCRIPT_FILE, "elementSelection", request
+#End If
+    ' Windows: no element toolbar yet (it is a panel of the Mac pop-up helper), so no call at all:
+    ' a selection change never waits on the engine.
 End Sub
 
 ' ---- Automation entry points (AppleScript "run VB macro", the add-in server, tests) ---------
@@ -309,6 +331,7 @@ End Sub
 Public Sub OCPREFIX_ExportCopy(ByVal dest As String, ByVal kind As String)
     Dim tmp As String, i As Long
     On Error GoTo Failed
+#If Mac Then
     tmp = Environ("TMPDIR")
     If Right$(tmp, 1) <> "/" Then tmp = tmp & "/"
     If kind = "png" Then
@@ -322,6 +345,18 @@ Public Sub OCPREFIX_ExportCopy(ByVal dest As String, ByVal kind As String)
         ActivePresentation.SaveCopyAs tmp ' format follows the .pptx extension
     End If
     Report "EXPORT " & AppleScriptTask(SCRIPT_FILE, "copyOut", tmp & vbTab & dest)
+#Else
+    ' No sandbox on Windows: write straight to dest.
+    If kind = "png" Then
+        If Dir(dest, vbDirectory) = "" Then MkDir dest
+        For i = 1 To ActivePresentation.Slides.Count
+            ActivePresentation.Slides(i).Export dest & "\slide" & i & ".png", "PNG", 1920, 1080
+        Next i
+    Else
+        ActivePresentation.SaveCopyAs dest
+    End If
+    Report "EXPORT OK " & dest
+#End If
     Exit Sub
 Failed:
     Report "EXPORT failed: " & Err.Description
@@ -618,7 +653,11 @@ Private Function Engine(ByVal request As String) As String
     Dim result As String, t As Single
     On Error GoTo NoBridge
     t = Timer
+#If Mac Then
     result = AppleScriptTask(SCRIPT_FILE, SCRIPT_HANDLER, request)
+#Else
+    result = WinEngine(request)
+#End If
     gEngineMs = gEngineMs + (Timer - t) * 1000
     On Error GoTo 0
     If Left$(result, 3) <> "OC" & vbTab Then
@@ -628,8 +667,12 @@ Private Function Engine(ByVal request As String) As String
     Engine = result
     Exit Function
 NoBridge:
+#If Mac Then
     Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & _
         "Open Terminal and run:" & vbLf & REINSTALL & vbLf & "then restart PowerPoint."
+#Else
+    Tell "open-charts can't reach its chart engine (" & Err.Description & ")." & vbLf & vbLf & WIN_REINSTALL
+#End If
 End Function
 
 Private Function Timing() As String
@@ -668,8 +711,12 @@ End Sub
 Private Sub Report(ByVal text As String)
     If gCollect Then gCollected = gCollected & text & vbLf: Exit Sub
     On Error Resume Next
+#If Mac Then
     Dim ignored As String
     ignored = AppleScriptTask(SCRIPT_FILE, "logLine", text)
+#Else
+    WinLog text
+#End If
 End Sub
 
 Private Sub Tell(ByVal text As String)
@@ -677,6 +724,89 @@ Private Sub Tell(ByVal text As String)
     If gSilent Then Exit Sub
     MsgBox text, vbOKOnly, TITLE
 End Sub
+
+#If Mac Then
+#Else
+' ---- Windows bridge: HTTP to the engine's local server --------------------------------------
+
+' Returns the engine's response. Starts the server (open-charts.exe) if it is not running and waits
+' for it; raises an error with the reason when the engine cannot be reached.
+Private Function WinEngine(ByVal request As String) As String
+    Dim ok As Boolean, result As String
+    result = WinHttp("run", request, 30000, ok)
+    If ok Then WinEngine = result: Exit Function
+    If Not WinStartServer(20000) Then
+        If Dir(Environ("LOCALAPPDATA") & ENGINE_EXE) = "" Then Err.Raise vbObjectError + 1, , Environ("LOCALAPPDATA") & ENGINE_EXE & " is missing"
+        Err.Raise vbObjectError + 2, , "the engine did not start within 20 seconds"
+    End If
+    result = WinHttp("run", request, 30000, ok)
+    If Not ok Then Err.Raise vbObjectError + 3, , result
+    WinEngine = result
+End Function
+
+' Starts the engine's server unless it answers; waits up to waitMs for it (0: does not wait).
+Private Function WinStartServer(ByVal waitMs As Long) As Boolean
+    Dim ok As Boolean, exe As String, waited As Long
+    ' A running server accepts at once; a closed port takes Windows about a second to refuse, so the
+    ' first check gives up after 300 ms (it runs as the ribbon loads).
+    WinHttp "ping", "", 300, ok
+    If ok Then WinStartServer = True: Exit Function
+    exe = Environ("LOCALAPPDATA") & ENGINE_EXE
+    If Dir(exe) = "" Then Exit Function
+    On Error Resume Next
+    Shell """" & exe & """ addin serve", vbHide
+    On Error GoTo 0
+    Do While waited < waitMs
+        Sleep 100
+        DoEvents
+        waited = waited + 100
+        WinHttp "ping", "", 500, ok
+        If ok Then WinStartServer = True: Exit Function
+    Loop
+End Function
+
+' One call to the server: GET for "ping", else POST of body (sent as UTF-8). ok is True on 200; the
+' result is then the response, otherwise what went wrong. Never through a proxy.
+Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeoutMs As Long, ByRef ok As Boolean) As String
+    Dim http As Object
+    ok = False
+    On Error GoTo Failed
+    Set http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    On Error Resume Next
+    http.setProxy 1 ' SXH_PROXY_SET_DIRECT
+    On Error GoTo Failed
+    http.setTimeouts 1000, IIf(timeoutMs < 1000, timeoutMs, 1000), timeoutMs, timeoutMs
+    If path = "ping" Then
+        http.Open "GET", ENGINE_URL & path, False
+        http.send
+    Else
+        http.Open "POST", ENGINE_URL & path, False
+        http.setRequestHeader "Content-Type", "text/plain; charset=utf-8"
+        http.send body
+    End If
+    If http.Status = 200 Then
+        ok = True
+        WinHttp = http.responseText
+    Else
+        WinHttp = "the engine answered " & http.Status & ": " & Left$(http.responseText, 200)
+    End If
+    Exit Function
+Failed:
+    WinHttp = Err.Description
+End Function
+
+' Appends one line to %LOCALAPPDATA%\open-charts\addin.log, as the Mac bridge's logLine does.
+Private Sub WinLog(ByVal text As String)
+    Dim f As Integer, folder As String
+    On Error Resume Next
+    folder = Environ("LOCALAPPDATA") & "\open-charts"
+    If Dir(folder, vbDirectory) = "" Then MkDir folder
+    f = FreeFile
+    Open folder & "\addin.log" For Append As #f
+    Print #f, Format$(Now, "yyyy-mm-dd") & "T" & Format$(Now, "hh:nn:ss") & " " & Replace(Replace(Replace(text, vbCr, " "), vbLf, " "), vbTab, " ")
+    Close #f
+End Sub
+#End If
 
 ' ---- Drawing --------------------------------------------------------------------------------
 
@@ -1082,7 +1212,11 @@ Private Function SelectedChart() As Object
     Set SelectedChart = FindSelectedChart()
     If Not SelectedChart Is Nothing Then Exit Function
     If UngroupedSelected() Then
+#If Mac Then
         Tell "This chart was ungrouped, so it can't be edited as a chart. Undo (" & ChrW(&H2318) & "Z) the ungroup or insert it again."
+#Else
+        Tell "This chart was ungrouped, so it can't be edited as a chart. Undo (Ctrl+Z) the ungroup or insert it again."
+#End If
     Else
         Tell "Select an open-charts chart first (click it once), then choose Edit data or Update chart."
     End If

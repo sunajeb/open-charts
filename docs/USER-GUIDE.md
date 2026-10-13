@@ -839,3 +839,36 @@ date). Hover or focus the cell to see the message.
 
 **My manual formatting disappeared.** Update chart, Apply and resizing redraw the chart from its
 data. Make changes through the datasheet and options instead of editing shapes inside the group.
+
+### Windows
+
+**The open-charts tab is not on the ribbon.** Quit PowerPoint and run `install.ps1` again. It prints
+what it did. Then, in PowerPoint, open *File › Options › Add-ins*, choose *Manage: PowerPoint Add-ins
+› Go…* and make sure **open-charts** is in the list and ticked. If it is not there, click
+**Add New…** and pick `%APPDATA%\Microsoft\AddIns\open-charts.ppam`.
+
+**PowerPoint shows "Microsoft has blocked macros" or a macro warning bar.** The file still carries
+the "downloaded from the internet" mark. Run `install.ps1` again, which removes it, and restart
+PowerPoint. If the macros stay disabled, open *File › Options › Trust Center › Trust Center
+Settings… › Trusted Locations*. `%APPDATA%\Microsoft\AddIns\` should be listed (`install.ps1` adds
+it when it is missing). If your organisation disables all macros, the add-in cannot run until IT
+allows macros from trusted locations.
+
+**"open-charts can't reach its chart engine".** The add-in starts
+`%LOCALAPPDATA%\open-charts\open-charts.exe` and talks to it on `127.0.0.1:4174`.
+- *…open-charts.exe is missing*: run `install.ps1` again.
+- *…did not start within 20 seconds*: an antivirus scan or an application-control policy is holding
+  it. Run `install.ps1` again; its last step starts the engine and says so if Windows blocks it. Then
+  ask IT to allow that file.
+- Something else on the PC uses port 4174: close that program.
+
+**After Apply, the editor says "Not updated".**
+- *PowerPoint did not respond. Close any open dialog in PowerPoint…*: PowerPoint was showing a dialog
+  or you were typing in a text box. Close the dialog or click outside the text, then **Apply** again.
+- *PowerPoint isn't running* and *could not find the chart*: as on the Mac (above).
+
+**Where is the log?** `%LOCALAPPDATA%\open-charts\addin.log`, with one line per insert, update,
+re-layout and Apply. Include it when you report a problem.
+
+**Uninstall.** `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\open-charts\uninstall.ps1"`.
+Charts already on slides stay as they are.
