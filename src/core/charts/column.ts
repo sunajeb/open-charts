@@ -188,7 +188,8 @@ function layoutVertical(ctx: Ctx, md: Model): 'labels-too-wide' | void {
   }
   const px = frame.x + leftW + axisW;
   const pw = frame.w - leftW - axisW - rightW;
-  const py = frame.y + legendH + arrowsH + Math.max(totalsH + barLabelH, ticks ? lh / 2 : 0); // room for the top tick label
+  // Room for the top tick label, and for a decoration label centred on the top of the scale.
+  const py = frame.y + legendH + arrowsH + Math.max(totalsH + barLabelH, ticks || indicator || md.valueLines.length ? lh / 2 : 0);
   const ph = frame.y + frame.h - catH - (clustered && dmin < 0 ? barLabelH : 0) - py;
   if (ph < lh * 2) ctx.hidden.push('chart frame too small');
   const dist = axisDistance(md.dmin, md.dmax, brk, ph);

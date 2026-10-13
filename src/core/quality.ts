@@ -85,7 +85,8 @@ export function checkScene(scene: Scene, options: number | CheckOptions = {}): I
 
   const marks = items.filter((it) => /^(bar|marker):/.test(it.role) && it.s.kind === 'rect');
   const dataLines = items.filter((it): it is { s: LineShape; role: string } => it.role.startsWith('line:') && it.s.kind === 'line');
-  const arrows = items.filter((it): it is { s: LineShape; role: string } => it.role.startsWith('arrow:') && it.s.kind === 'line');
+  // Decoration lines (arrows, value lines, the 100% indicator) must not cross a label either.
+  const arrows = items.filter((it): it is { s: LineShape; role: string } => /^(arrow:|valueline:|indicator$)/.test(it.role) && it.s.kind === 'line');
   // A line's point label may sit wholly inside a column segment (combination charts, contrasting colour).
   const lineOwners = new Set(dataLines.map((ln) => owner(ln.role)));
   for (const t of texts) {
