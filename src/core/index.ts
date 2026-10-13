@@ -27,7 +27,7 @@ export type { Measurer, FontMetrics } from './text.ts';
 export { checkScene } from './quality.ts';
 export {
   LABEL_FIELDS, ELEMENT_PROPERTIES, ELEMENT_STYLE_KEYS, ELEMENT_KINDS, ROLE_KINDS, kindOf, propertiesFor,
-  compileOverrides, matches as roleMatches, specificity, detachElement,
+  compileOverrides, matches as roleMatches, specificity, detachElement, remapOverrides,
 } from './overrides.ts';
 export type { ElementKind, ElementProperty, PropertyInfo, Dash, Arrowheads, MarkerStyle } from './overrides.ts';
 export { minimumSize, TooSmall } from './minsize.ts';

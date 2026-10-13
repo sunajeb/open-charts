@@ -415,3 +415,22 @@ export function detachElement<T extends ChartSpec>(spec: T, scene: { shapes: Sha
   const overrides = { ...(spec.overrides ?? {}), [role]: { ...(spec.overrides?.[role] ?? {}), detach: true } };
   return { spec: { ...spec, overrides }, shapes };
 }
+
+/**
+ * Overrides after a series (`s`) or category (`c`) was inserted, deleted or moved: every key naming
+ * index i is renamed to map(i); keys whose element was deleted (map → -1) are dropped, so each override
+ * stays on its element through data edits. Selectors with `*` in that position are kept as they are.
+ * (The editor runs the same rule on its datasheet's insert / delete.)
+ */
+export function remapOverrides(o: Overrides | undefined, p: 's' | 'c', map: (i: number) => number): Overrides | undefined {
+  if (!o) return o;
+  const out: Overrides = {};
+  const re = new RegExp(`(^|:)${p}(\\d+)(?=:|$)`);
+  for (const [key, st] of Object.entries(o)) {
+    const m = re.exec(key);
+    if (!m) { out[key] = st; continue; }
+    const j = map(+m[2]);
+    if (j >= 0) out[key.replace(re, `$1${p}${j}`)] = st;
+  }
+  return out;
+}

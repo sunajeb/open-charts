@@ -268,6 +268,8 @@ Private Sub Dispatch(ByVal id As String)
         UpdateChart
     ElseIf id = "btnEditData" Then
         EditData
+    ElseIf id = "btnPlainText" Then
+        ConvertToPlainText
     Else
         Tell "This button is not known to this version of the add-in (" & id & ")."
     End If
@@ -321,6 +323,34 @@ Private Sub EditData()
         Set gEditShape = chart
         gEditId = gSessionId
     End If
+End Sub
+
+' Convert to plain text: the selected label of a chart is left on the slide as a plain text box
+' PowerPoint owns (outside the group), and the chart no longer draws it (engine op "detach").
+Private Sub ConvertToPlainText()
+    Dim chart As Object, sel As Object, shp As Object, role As String, response As String
+    Set chart = SelectedChart()
+    If chart Is Nothing Then Exit Sub
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If sel.HasChildShapeRange Then Set shp = sel.ChildShapeRange(1)
+    On Error GoTo 0
+    If Not shp Is Nothing Then role = TagValue(shp, "OC_ROLE")
+    If role = "" Then Tell "Click one label of the chart (so only it is selected), then convert it to plain text.": Exit Sub
+    response = Engine("detach" & vbLf & role & vbLf & ChartContext(chart) & SpecOf(chart))
+    If response = "" Then Exit Sub
+    Set chart = ReplaceChart(chart, response)
+    If Not chart Is Nothing Then chart.Select
+End Sub
+
+' Scripted tests: convert the label with role `role` of the selected chart to plain text.
+Public Sub OCPREFIX_ConvertToPlainText(ByVal role As String)
+    Dim chart As Object, response As String
+    Set chart = FindSelectedChart()
+    If chart Is Nothing Then Report "PLAINTEXT failed: no chart selected": Exit Sub
+    response = Engine("detach" & vbLf & role & vbLf & ChartContext(chart) & SpecOf(chart))
+    If response <> "" Then Set chart = ReplaceChart(chart, response)
+    Report "PLAINTEXT " & IIf(chart Is Nothing, "failed: " & gLastMessage, "OK")
 End Sub
 
 ' Lays a chart out again where it now is (its group's bounds are its frame) and replaces it in
@@ -503,12 +533,18 @@ Private Function Draw(ByVal sld As Object, ByVal response As String) As Object
                     n = n + 1
                 Case "S"
                     Set shp = DrawShape(sld, f)
+                    If Col(f, 26) = "1" Then
+                        ' Converted to plain text: stays on the slide, outside the chart group.
+                        shp.Name = Unescape(f(21))
+                        GoTo NextLine
+                    End If
                     names(n) = stamp & n: shp.Name = names(n)
                     roles(n) = Unescape(f(20))
                     finalNames(n) = Unescape(f(21))
                     n = n + 1
             End Select
         End If
+NextLine:
     Next i
     If n = 0 Then Exit Function
     Phase "shapes", t: tp = Timer
@@ -562,7 +598,7 @@ End Function
 ' Columns (src/addin/format.ts SHAPE_COLUMNS), f(0) = "S":
 '  1 kind 2 x 3 y 4 w 5 h 6 fill 7 lineColor 8 lineWidth 9 dash 10 arrowEnd 11 text 12 font
 '  13 size 14 bold 15 color 16 align 17 valign 18 wrap 19 autosize 20 role 21 name 22 points
-'  23 textGeom
+'  23 textGeom 24 rotate 25 arrowStart 26 plain (per-element overrides; absent from older engines)
 Private Function DrawShape(ByVal sld As Object, f() As String) As Object
     Dim kind As String, x As Single, y As Single, w As Single, h As Single, s As Object
     kind = f(1)
@@ -575,16 +611,19 @@ Private Function DrawShape(ByVal sld As Object, f() As String) As Object
                 SetColor .ForeColor, f(7)
                 .Weight = Val(f(8))
                 If f(9) = "1" Then .DashStyle = 4 ' msoLineDash
+                If f(9) = "dot" Then .DashStyle = 2 ' msoLineSquareDot
                 If f(10) = "1" Then .EndArrowheadStyle = 2 ' msoArrowheadTriangle
+                If Col(f, 25) = "1" Then .BeginArrowheadStyle = 2
             End With
         Case "text"
             If f(6) = "" And f(7) = "" Then
-                Set s = sld.Shapes.AddTextbox(1, x, y, w, h) ' msoTextOrientationHorizontal
+                Set s = sld.Shapes.AddTextbox(Orientation(Col(f, 24)), x, y, w, h)
             Else
                 Set s = sld.Shapes.AddShape(IIf(f(23) = "roundRect", 5, 1), x, y, w, h)
                 If f(23) = "roundRect" Then s.Adjustments(1) = 0.5
             End If
             FillAndLine s, f(6), f(7), f(8), "0"
+            If Col(f, 24) <> "" Then s.TextFrame2.Orientation = Orientation(Col(f, 24))
             SetText s, f
             s.Left = x: s.Top = y: s.Width = w: s.Height = h
         Case "path"
@@ -592,9 +631,24 @@ Private Function DrawShape(ByVal sld As Object, f() As String) As Object
             FillAndLine s, f(6), f(7), f(8), f(9)
         Case Else
             Set s = sld.Shapes.AddShape(AutoShapeType(kind), x, y, w, h)
-            FillAndLine s, f(6), f(7), f(8), "0"
+            FillAndLine s, f(6), f(7), f(8), f(9)
     End Select
     Set DrawShape = s
+End Function
+
+' Column i of a record, "" when an older engine did not send it.
+Private Function Col(f() As String, ByVal i As Long) As String
+    If i <= UBound(f) Then Col = f(i)
+End Function
+
+' Text direction (rotate column): -90 reads bottom to top (msoTextOrientationUpward), 90 top to
+' bottom (msoTextOrientationDownward), else horizontal.
+Private Function Orientation(ByVal rotate As String) As Long
+    Select Case rotate
+        Case "-90": Orientation = 2
+        Case "90": Orientation = 3
+        Case Else: Orientation = 1
+    End Select
 End Function
 
 Private Function AutoShapeType(ByVal kind As String) As Long
@@ -627,6 +681,7 @@ Private Sub FillAndLine(ByVal s As Object, ByVal fillHex As String, ByVal lineHe
             SetColor .ForeColor, lineHex
             .Weight = Val(lineWidth)
             If dash = "1" Then .DashStyle = 4
+            If dash = "dot" Then .DashStyle = 2 ' msoLineSquareDot
         End If
     End With
     On Error Resume Next
@@ -826,9 +881,23 @@ End Function
 ' A colour field of the line format: RRGGBB, or a theme colour name. A theme colour is set as such
 ' (ObjectThemeColor), so the chart follows the presentation's theme like PowerPoint's own shapes.
 Private Sub SetColor(ByVal cf As Object, ByVal v As String)
-    Dim t As Long
+    Dim t As Long, at As Long, shade As Single
+    ' A theme colour with a tint / shade (per-element overrides): "accent1-lighter40" / "accent1-darker25".
+    at = InStr(v, "-lighter")
+    If at > 0 Then
+        shade = Val(Mid$(v, at + 8)) / 100
+    Else
+        at = InStr(v, "-darker")
+        If at > 0 Then shade = -Val(Mid$(v, at + 7)) / 100
+    End If
+    If at > 0 Then v = Left$(v, at - 1)
     t = ThemeIndex(v)
-    If t > 0 Then cf.ObjectThemeColor = t Else cf.RGB = HexColor(v)
+    If t > 0 Then
+        cf.ObjectThemeColor = t
+        If at > 0 Then cf.TintAndShade = shade
+    Else
+        cf.RGB = HexColor(v)
+    End If
 End Sub
 
 ' msoThemeColorIndex of a theme colour name (src/core/theme.ts), 0 for anything else.
@@ -844,6 +913,8 @@ Private Function ThemeIndex(ByVal v As String) As Long
         Case "accent4": ThemeIndex = 8
         Case "accent5": ThemeIndex = 9
         Case "accent6": ThemeIndex = 10
+        Case "hlink": ThemeIndex = 11 ' msoThemeColorHyperlink
+        Case "folHlink": ThemeIndex = 12 ' msoThemeColorFollowedHyperlink
         Case "tx1": ThemeIndex = 13 ' msoThemeColorText1: follows the slide master's colour map
         Case "bg1": ThemeIndex = 14 ' msoThemeColorBackground1
         Case "tx2": ThemeIndex = 15 ' msoThemeColorText2
