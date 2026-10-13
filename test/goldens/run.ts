@@ -49,6 +49,16 @@ for (const { path, name } of decks) {
   const spec = JSON.parse(readFileSync(join(root, path), 'utf8'));
   expectedPages.set(name, Array.isArray(spec.slides) ? spec.slides.length : 1);
 }
+// Style files: the style showcase (one chart per type) under each examples/styles/*.json ("style-<name>").
+const showcase = JSON.parse(readFileSync(join(root, 'examples/style-showcase.json'), 'utf8'));
+for (const f of readdirSync(join(root, 'examples/styles')).filter((x) => x.endsWith('.json')).sort()) {
+  const name = `style-${basename(f, '.json')}`;
+  execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'examples/style-showcase.json', '--style', `examples/styles/${f}`, '-o', join(out, name)], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+  expectedPages.set(name, showcase.slides.length);
+}
+// Template fill: the example template filled with the example data ("fill-template", 10 slides).
+execFileSync(process.execPath, ['--experimental-strip-types', '--no-warnings', 'src/cli.ts', 'fill', 'examples/template/template.pptx', 'examples/template/data.json', '-o', join(out, 'fill-template.pptx')], { cwd: root, stdio: ['ignore', 'ignore', 'inherit'] });
+expectedPages.set('fill-template', 10);
 
 // 2. One LibreOffice run converts every deck (a private profile avoids clashing with a running instance).
 const profile = `file://${join(out, 'lo-profile')}`;
