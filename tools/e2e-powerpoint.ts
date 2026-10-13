@@ -64,10 +64,11 @@ const launch = () => {
     try { if (osa('application "Microsoft PowerPoint" is running') === 'false') break; } catch { /* quitting */ }
     sleep(500);
   }
-  try { launch(); } catch (e) {
+  quitting = false;
+  try { ppt('activate\nmake new presentation'); } catch (e) {
     if (!/-60[09]/.test(String((e as Error).message))) throw e;
     sleep(3000);
-    launch();
+    ppt('activate\nmake new presentation');
   }
 };
 const logLines = () => (existsSync(LOG) ? readFileSync(LOG, 'utf8').split('\n').filter(Boolean) : []);
