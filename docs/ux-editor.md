@@ -81,7 +81,11 @@ Flow:
    unanswered (timeout), permission denied (-1743), PowerPoint not running, macro error — or the macro
    found no chart, the server sets `error` with a message for the user. An `error` session is still
    picked up by an explicit **Update chart** on that chart (never by the automatic re-layout). On
-   `"cancelled"` it stops. Other hosts may instead poll `GET`
+   `"cancelled"` it stops. The server only sends Apple events to the PowerPoint that started it (macOS
+   attributes the server to that process; an event to a later PowerPoint froze it): once that
+   PowerPoint has quit and another runs, an Apply fails at once with "PowerPoint was restarted after
+   this editor window opened…", and the new PowerPoint's first ping or engine call gets 503, which
+   makes the bridge start a fresh server. Other hosts may instead poll `GET`
    and act when `rev` grows. When the editor runs inside an Office dialog it
    also calls `Office.context.ui.messageParent(JSON.stringify({ type: "open-charts:apply" | "open-charts:cancel", id, rev }))`,
    and posts the same object to `window.opener` / `window.parent` when present, so the add-in can
