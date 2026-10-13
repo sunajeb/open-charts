@@ -18,6 +18,9 @@ Private Const SCRIPT_HANDLER As String = "engine"
 Private Const TITLE As String = "open-charts"
 ' The command that reinstalls the add-in; the build writes the launcher path of this install here.
 Private Const REINSTALL As String = """$HOME/Library/Application Support/open-charts/bin/open-charts"" addin install"
+' The directions each chart type can grow in ("stacked:up,down,left,right;line:up,left,right;..."),
+' written by the build from DIRECTIONS in src/core/spec.ts.
+Private Const DIRECTIONS As String = ""
 #If Mac Then
 #Else
 ' Windows: the engine's local server (127.0.0.1 only) and where install.ps1 puts the engine.
@@ -63,6 +66,11 @@ Private gAgendaSig As String
 ' Agenda slides: the layout new ones use when the deck has it, and their title.
 Private Const AGENDA_LAYOUT As String = "open-charts agenda"
 Private Const AGENDA_TITLE As String = "Agenda"
+' The direction buttons: the direction the next inserted chart grows in ("" = up, the default), and
+' the selected chart's type and direction as of the last selection change ("" = no chart selected).
+Private gNextDir As String
+Private gSelType As String
+Private gSelDir As String
 
 ' ---- Loading --------------------------------------------------------------------------------
 
@@ -106,6 +114,37 @@ Public Sub OCPREFIX_onAction(ByVal control As Object)
     Dispatch control.Id
 End Sub
 
+' The chart gallery: the tile's id is "chart_<item>".
+Public Sub OCPREFIX_onGallery(ByVal control As Object, ByVal selectedId As String, ByVal selectedIndex As Integer)
+    Dispatch selectedId
+End Sub
+
+' Direction buttons (dirUp, dirDown, dirLeft, dirRight): turn the selected chart, or pick the
+' direction of the next insert. A toggle button reports its new state; the click is what counts.
+Public Sub OCPREFIX_onDirection(ByVal control As Object, ByVal pressed As Boolean)
+    Dispatch control.Id
+End Sub
+
+' Pressed: the selected chart's direction, or (nothing selected) the direction picked for the next insert.
+Public Sub OCPREFIX_getDirPressed(ByVal control As Object, ByRef pressed)
+    If Not gEventsOk Then RefreshSelection
+    If gSelType <> "" Then
+        pressed = (gSelDir = DirOf(control.Id))
+    Else
+        pressed = (gNextDir = DirOf(control.Id))
+    End If
+End Sub
+
+' With a chart selected, only the directions its type can grow in; with none, all (for the next insert).
+Public Sub OCPREFIX_getDirEnabled(ByVal control As Object, ByRef enabled)
+    If Not gEventsOk Then RefreshSelection
+    If gSelType = "" Then
+        enabled = True
+    Else
+        enabled = CanGrow(gSelType, DirOf(control.Id))
+    End If
+End Sub
+
 ' Edit data and Update chart need a selected chart. Until PowerPoint has shown that it reports
 ' selection changes, they stay enabled and explain themselves when nothing suitable is selected.
 ' A piece of an ungrouped chart also enables them, so the click can say why it is not a chart.
@@ -125,13 +164,65 @@ Public Sub OnSelectionChange()
     On Error Resume Next
     CheckResized
     AgendaAutoCheck
+    RefreshSelection
     NotifySelection
     If Not gRibbon Is Nothing Then
         gRibbon.InvalidateControl "btnEditData"
         gRibbon.InvalidateControl "btnUpdate"
     End If
+    InvalidateDirections
     gBusy = False
 End Sub
+
+' Reads the selected chart's type and direction (from its OC_SPEC) for the direction buttons.
+Private Sub RefreshSelection()
+    Dim chart As Object, spec As String
+    gSelType = ""
+    gSelDir = ""
+    On Error Resume Next
+    Set chart = FindSelectedChart()
+    If chart Is Nothing Then Exit Sub
+    spec = SpecOf(chart)
+    gSelType = JsonString(spec, "type")
+    gSelDir = JsonString(spec, "direction")
+    If gSelDir = "" And JsonString(spec, "orientation") = "horizontal" Then gSelDir = "right"
+    If gSelDir = "" Then gSelDir = "up"
+End Sub
+
+Private Sub InvalidateDirections()
+    If gRibbon Is Nothing Then Exit Sub
+    gRibbon.InvalidateControl "dirUp"
+    gRibbon.InvalidateControl "dirDown"
+    gRibbon.InvalidateControl "dirLeft"
+    gRibbon.InvalidateControl "dirRight"
+End Sub
+
+' "dirLeft" -> "left".
+Private Function DirOf(ByVal controlId As String) As String
+    DirOf = LCase$(Mid$(controlId, 4))
+End Function
+
+' Whether a chart type can grow in a direction (DIRECTIONS; a type it does not list: up only).
+Private Function CanGrow(ByVal chartType As String, ByVal dir As String) As Boolean
+    Dim entry As Variant
+    For Each entry In Split(DIRECTIONS, ";")
+        If Left$(entry, Len(chartType) + 1) = chartType & ":" Then
+            CanGrow = InStr(1, "," & Mid$(entry, Len(chartType) + 2) & ",", "," & dir & ",") > 0
+            Exit Function
+        End If
+    Next entry
+    CanGrow = (dir = "up")
+End Function
+
+' The first string value of `key` in compact JSON (OC_SPEC is written by JSON.stringify), or "".
+Private Function JsonString(ByVal json As String, ByVal key As String) As String
+    Dim at As Long, q As Long
+    at = InStr(1, json, """" & key & """:""")
+    If at = 0 Then Exit Function
+    at = at + Len(key) + 4
+    q = InStr(at, json, """")
+    If q > at Then JsonString = Mid$(json, at, q - at)
+End Function
 
 ' The element mini toolbar (src/addin/toolbar.ts): tells the add-in server which elements of an
 ' open-charts chart are selected (their OC_ROLE tags) and where, or that none are any more. Only
@@ -375,6 +466,8 @@ Private Sub Dispatch(ByVal id As String)
     gBusy = True
     If Left$(id, 6) = "chart_" Then
         InsertChart Mid$(id, 7)
+    ElseIf id = "dirUp" Or id = "dirDown" Or id = "dirLeft" Or id = "dirRight" Then
+        ChangeDirection DirOf(id)
     ElseIf id = "btnUpdate" Then
         UpdateChart
     ElseIf id = "btnEditData" Then
@@ -403,12 +496,43 @@ Private Sub InsertChart(ByVal itemId As String)
     Else
         frame = Fmt(placeholder.Left) & "," & Fmt(placeholder.Top) & "," & Fmt(placeholder.Width) & "," & Fmt(placeholder.Height)
     End If
+    ' A direction picked beforehand applies to this one insert ("stacked@left"); the engine ignores a
+    ' direction the chart type cannot take.
+    If gNextDir <> "" Then itemId = itemId & "@" & gNextDir
+    gNextDir = ""
+    InvalidateDirections
     response = Engine("insert" & vbLf & itemId & vbLf & frame & vbLf & "" & vbLf & ThemeLine(sld))
     If response = "" Then Exit Sub
     Set grp = Draw(sld, response)
     If grp Is Nothing Then Exit Sub
     If Not placeholder Is Nothing Then placeholder.Delete
     grp.Select
+End Sub
+
+' A direction button: the selected chart is laid out again in its place, growing `dir`; with no
+' chart selected, the button picks the direction of the next insert (a second click clears it).
+Private Sub ChangeDirection(ByVal dir As String)
+    Dim chart As Object, sld As Object, oldGroup As String, response As String
+    Set chart = FindSelectedChart()
+    If chart Is Nothing Then
+        If UngroupedSelected() Then
+            Tell "This chart was ungrouped, so it can't be edited as a chart. Undo (" & ChrW(&H2318) & "Z) the ungroup or insert it again."
+            Exit Sub
+        End If
+        gNextDir = IIf(gNextDir = dir Or dir = "up", "", dir)
+        InvalidateDirections
+        Exit Sub
+    End If
+    Set sld = chart.Parent
+    oldGroup = TagValue(chart, "OC_SGROUP")
+    response = Engine("direction" & vbLf & dir & vbLf & ChartContext(chart) & SpecOf(chart))
+    If response = "" Then Exit Sub
+    Set chart = ReplaceChart(chart, response)
+    If chart Is Nothing Then Exit Sub
+    SyncAfter sld, chart, oldGroup
+    chart.Select
+    RefreshSelection
+    InvalidateDirections
 End Sub
 
 Private Sub UpdateChart()

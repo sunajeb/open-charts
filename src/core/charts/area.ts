@@ -1,10 +1,11 @@
 import type { Ctx } from '../common.ts';
 import {
-  axisFormatter, fitCategories, reportFit, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks, axisWidth, sharedScale,
+  axisFormatter, barCategories, barCategoryLabels, bottomAxisHeight, bottomValueAxis, fitCategories, reportFit, legend, num, seriesLabelWidth, seriesLabelsRight, text, valueAxis, valueTicks, axisWidth, sharedScale,
 } from '../common.ts';
 import { niceTicks, roundToTotal, textOn } from '../numbers.ts';
 import { overlaps, type Box } from '../place.ts';
 import type { PathCmd } from '../types.ts';
+import { sideways } from '../direction.ts';
 
 /**
  * Stacked area (`area`) and 100% stacked area (`area100`) charts. Each series is a filled band between
@@ -18,31 +19,12 @@ import type { PathCmd } from '../types.ts';
  * - Series are named right of the last point (default) or in a legend.
  */
 export function layoutArea(ctx: Ctx) {
+  const md = areaModel(ctx);
+  if (sideways(ctx.o)) { layoutAreaBars(ctx, md); return; }
   const { spec, style, frame, o, fs, lh, pad, m } = ctx;
-  const percent = spec.type === 'area100';
-  const nCat = spec.categories.length;
-  const cats = [...Array(nCat).keys()];
-  const sers = spec.series.map((_, i) => i);
-  if (spec.series.some((s) => s.values.some((v) => (num(v) ?? 0) < 0))) ctx.hidden.push('negative values ignored in area chart');
-
-  // Values with gaps interpolated; `given` marks the points that came from the datasheet.
-  const given = sers.map((s) => cats.map((c) => num(spec.series[s].values[c]) != null));
-  const vals = sers.map((s) => interpolate(cats.map((c) => Math.max(0, num(spec.series[s].values[c]) ?? NaN))));
-  const totals = cats.map((c) => sers.reduce((a, s) => a + vals[s][c], 0));
-  const shown = (s: number, c: number) => (percent ? (totals[c] ? (vals[s][c] / totals[c]) * 100 : 0) : vals[s][c]);
-  const pctDecimals = o.decimals ?? 0;
-  const shares = cats.map((c) => roundToTotal(sers.map((s) => shown(s, c)), pctDecimals));
-  const rounded = cats.map((c) => (o.format ? null : roundToTotal(sers.map((s) => vals[s][c] / ctx.scale.div), ctx.decimals)));
-  const label = (s: number, c: number) =>
-    percent ? ctx.pct(shares[c][s], pctDecimals) : rounded[c] ? ctx.fmt(rounded[c]![s], { scaled: true }) : ctx.fmt(vals[s][c]);
-
-  let dmax = percent ? 100 : Math.max(...totals);
-  if (dmax <= 0) { ctx.hidden.push('area chart has no positive values'); dmax = 1; }
-  let ticks = o.valueAxis ? niceTicks(0, dmax, valueTicks(ctx)) : null;
-  if (ticks) dmax = ticks[ticks.length - 1];
-  let axisFmt = axisFormatter(ctx, ticks, percent);
+  const { percent, nCat, cats, sers, given, totals, shown, label, showTotals } = md;
+  let { dmax, ticks, axisFmt } = md;
   const axisW = axisWidth(ctx, 0, ticks, axisFmt, percent);
-  const showTotals = !percent && !!o.totals;
 
   // Horizontal layout: points run edge to edge; the first and last category labels may overhang the
   // plot by half their width, so the plot is inset just enough to keep them in the frame.
@@ -174,6 +156,139 @@ export function layoutArea(ctx: Ctx) {
       .reverse();
     seriesLabelsRight(ctx, items, pxR, py - totalsH, bottom);
   }
+}
+
+/** Interpolated values, shares, rounded labels and the value domain, shared by columns and bars. */
+function areaModel(ctx: Ctx) {
+  const { spec, o } = ctx;
+  const percent = spec.type === 'area100';
+  const nCat = spec.categories.length;
+  const cats = [...Array(nCat).keys()];
+  const sers = spec.series.map((_, i) => i);
+  if (spec.series.some((s) => s.values.some((v) => (num(v) ?? 0) < 0))) ctx.hidden.push('negative values ignored in area chart');
+
+  // Values with gaps interpolated; `given` marks the points that came from the datasheet.
+  const given = sers.map((s) => cats.map((c) => num(spec.series[s].values[c]) != null));
+  const vals = sers.map((s) => interpolate(cats.map((c) => Math.max(0, num(spec.series[s].values[c]) ?? NaN))));
+  const totals = cats.map((c) => sers.reduce((a, s) => a + vals[s][c], 0));
+  const shown = (s: number, c: number) => (percent ? (totals[c] ? (vals[s][c] / totals[c]) * 100 : 0) : vals[s][c]);
+  const pctDecimals = o.decimals ?? 0;
+  const shares = cats.map((c) => roundToTotal(sers.map((s) => shown(s, c)), pctDecimals));
+  const rounded = cats.map((c) => (o.format ? null : roundToTotal(sers.map((s) => vals[s][c] / ctx.scale.div), ctx.decimals)));
+  const label = (s: number, c: number) =>
+    percent ? ctx.pct(shares[c][s], pctDecimals) : rounded[c] ? ctx.fmt(rounded[c]![s], { scaled: true }) : ctx.fmt(vals[s][c]);
+
+  let dmax = percent ? 100 : Math.max(...totals);
+  if (dmax <= 0) { ctx.hidden.push('area chart has no positive values'); dmax = 1; }
+  const ticks = o.valueAxis ? niceTicks(0, dmax, valueTicks(ctx)) : null;
+  if (ticks) dmax = ticks[ticks.length - 1];
+  const axisFmt = axisFormatter(ctx, ticks, percent);
+  const showTotals = !percent && !!o.totals;
+  return { percent, nCat, cats, sers, given, totals, shown, label, showTotals, dmax, ticks, axisFmt };
+}
+type AreaModel = ReturnType<typeof areaModel>;
+
+/**
+ * Area bars (direction right; left is this mirrored): the categories run down the left from the top
+ * edge of the plot to its bottom edge, the bands stack to the right, the value axis runs along the
+ * bottom and the series are named in a legend. Point labels sit inside their band where it is wide
+ * enough across the label's height; stacked totals sit right of the outermost band.
+ */
+function layoutAreaBars(ctx: Ctx, md: AreaModel) {
+  const { spec, style, frame, fs, lh, pad, m } = ctx;
+  const { nCat, cats, sers, given, totals, shown, label, showTotals, axisFmt: fmt0 } = md;
+  let { dmax, ticks } = md;
+  let axisFmt = fmt0;
+  if (ctx.o.seriesLabels === 'right') ctx.o.seriesLabels = 'legend';
+  const legendH = legend(ctx);
+  const axisH = bottomAxisHeight(ctx, ticks);
+  const { catW, fit } = barCategories(ctx);
+  const totalW = showTotals ? Math.max(...cats.map((c) => m.width(ctx.fmt(totals[c]), fs, true))) + 2 + pad * 0.6 : 0;
+  // The first and last category labels are centred on the plot's top and bottom edges: inset the plot
+  // by half their height so they stay in the frame.
+  const half = (c: number) => (fit.hidden.has(c) ? 0 : (fit.lines[c].length * fit.lh) / 2);
+  const top = frame.y + legendH + Math.max(half(0), showTotals ? lh / 2 : 0);
+  const yA = frame.y + frame.h - axisH;
+  const bottom = yA - Math.max(half(nCat - 1), showTotals ? lh / 2 : 0, pad * 0.3);
+  const px = frame.x + catW + pad;
+  const pw = frame.x + frame.w - totalW - px;
+  const ph = bottom - top;
+  ({ dmax, ticks } = sharedScale(ctx, 0, dmax, pw, ticks));
+  if (ticks) axisFmt = axisFormatter(ctx, ticks, md.percent);
+  if (pw < lh * 2 || ph < lh * 2) ctx.hidden.push('chart frame too small');
+  const xOf = (v: number) => px + (v / dmax) * pw;
+  const yOf = (c: number) => (nCat > 1 ? top + (ph * c) / (nCat - 1) : (top + bottom) / 2);
+  const ys = nCat > 1 ? cats.map(yOf) : [top, bottom];
+
+  if (ticks) bottomValueAxis(ctx, ticks, xOf, yA, axisFmt);
+
+  // Cumulative edges: left[s][c] / right[s][c] in slide x.
+  const leftE: number[][] = [], rightE: number[][] = [];
+  const acc = cats.map(() => 0);
+  for (const s of sers) {
+    leftE.push(cats.map((c) => xOf(acc[c])));
+    cats.forEach((c) => { acc[c] += shown(s, c); });
+    rightE.push(cats.map((c) => xOf(acc[c])));
+  }
+  const pick = (arr: number[]) => (nCat > 1 ? arr : [arr[0], arr[0]]);
+  const edgeAt = (arr: number[], y: number) => {
+    const xs = pick(arr);
+    if (y <= ys[0]) return xs[0];
+    for (let k = 1; k < ys.length; k++) if (y <= ys[k]) return xs[k - 1] + ((xs[k] - xs[k - 1]) * (y - ys[k - 1])) / (ys[k] - ys[k - 1]);
+    return xs[xs.length - 1];
+  };
+  /** Tightest band edges over [y1, y2]: rightmost left edge and leftmost right edge. */
+  const span = (s: number, y1: number, y2: number) => {
+    const probe = [y1, y2, ...ys.filter((y) => y > y1 && y < y2)];
+    return { left: Math.max(...probe.map((y) => edgeAt(leftE[s], y))), right: Math.min(...probe.map((y) => edgeAt(rightE[s], y))) };
+  };
+
+  for (const s of sers) {
+    if (cats.every((c) => !shown(s, c))) { ctx.hidden.push(`${spec.series[s].name}: no values`); continue; }
+    const rt = pick(rightE[s]), lf = pick(leftE[s]);
+    const commands: PathCmd[] = [
+      ...ys.map((y, k) => ({ op: k ? 'L' : 'M', x: rt[k], y }) as PathCmd),
+      ...ys.map((_, k) => ({ op: 'L', x: lf[ys.length - 1 - k], y: ys[ys.length - 1 - k] }) as PathCmd),
+      { op: 'Z' },
+    ];
+    ctx.add(`area:s${s}`, { kind: 'path', commands, fill: ctx.color(s), stroke: style.background, strokeWidth: 0.75 });
+  }
+
+  // Point labels inside their band, clamped into the plot at the ends.
+  const placed: Box[] = [];
+  const clampY = (y: number) => Math.min(Math.max(y, top + pad * 0.2), bottom - pad * 0.2 - lh);
+  for (const s of sers) {
+    for (const c of cats) {
+      if (!given[s][c] || !shown(s, c)) continue;
+      const t = label(s, c);
+      const w = m.width(t, fs) + 2;
+      const y = clampY(yOf(c) - lh / 2);
+      const room = span(s, y, y + lh);
+      const box = { x: (room.left + room.right) / 2 - w / 2, y, w, h: lh };
+      if (room.right - room.left < w + pad * 0.2 || placed.some((p) => overlaps(p, box, 0))) {
+        ctx.hidden.push(`${spec.series[s].name} / ${spec.categories[c]}: band too thin for label`);
+        continue;
+      }
+      placed.push(box);
+      text(ctx, `label:value:s${s}:c${c}`, { ...box, text: t, color: textOn(ctx.color(s)), role: 'value' });
+    }
+  }
+  if (showTotals) {
+    const last = sers.length - 1;
+    for (const c of cats) {
+      if (!totals[c]) continue;
+      const t = ctx.fmt(totals[c]);
+      const w = m.width(t, fs, true) + 2;
+      const y = yOf(c) - lh / 2;
+      const edge = Math.max(...[y, y + lh, ...ys.filter((v) => v > y && v < y + lh)].map((v) => edgeAt(rightE[last], v)));
+      const box = { x: edge + pad * 0.3, y, w, h: lh };
+      if (box.x + w > frame.x + frame.w + 0.5 || placed.some((p) => overlaps(p, box, 0))) { ctx.hidden.push(`${spec.categories[c]}: no room for total`); continue; }
+      placed.push(box);
+      text(ctx, `label:total:c${c}`, { ...box, text: t, bold: true, align: 'left', role: 'total' });
+    }
+  }
+  ctx.add('axis', { kind: 'line', x1: px, y1: top, x2: px, y2: bottom, color: style.axis, width: 0.75 });
+  barCategoryLabels(ctx, fit, catW, yOf);
 }
 
 /** Fill NaN gaps by linear interpolation between known neighbours; leading/trailing gaps become 0. */

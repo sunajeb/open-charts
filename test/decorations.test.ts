@@ -141,7 +141,7 @@ test('value axis break: compressed range, symbols on spanning bars and the axis,
   const crossing = lay({ ...spec, options: { axisBreak: { from: 5, to: 330 } } });
   assert.ok(crossing.hidden.some((h) => /segment ends inside it/.test(h)));
   const wiggle = lay({ type: 'clustered', categories: ['a', 'b'], series: [{ name: 'x', values: [15, 3] }, { name: 'y', values: [14, 2] }],
-    options: { axisBreak: { from: 5, to: 12, style: 'wiggle' }, orientation: 'horizontal' } });
+    options: { axisBreak: { from: 5, to: 12, style: 'wiggle' }, direction: 'right' } });
   assert.equal(byRole(wiggle, /^break:s\d+:c0$/).length, 6);
   clean(wiggle);
 });

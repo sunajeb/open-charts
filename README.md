@@ -37,6 +37,22 @@ preview, downloads a .pptx) and the **command line** (JSON in, .pptx out).
 The [user guide](docs/USER-GUIDE.md#chart-types) explains when to use each one and how to enter its
 data.
 
+### The chart gallery and directions
+
+<img src="docs/ux-shots/chart-gallery.png" width="520" alt="The chart gallery: icon tiles five per row, with small arrows around the column, waterfall, Mekko, combination, line and area icons">
+
+Charts are picked from one gallery of icons, the same in the PowerPoint ribbon and in the editor.
+Most charts can grow in more than one **direction**: the small arrows around an icon say which way.
+▲ columns growing up (the default), ▼ columns hanging down from a baseline at the top, ◀ bars
+growing to the left (categories on the right) and ▶ bars growing to the right. A line chart turned
+sideways is a **profile chart**; lines and areas are never hung upside down. Pie, doughnut, scatter,
+bubble and Gantt charts have no direction. In the data format it is one option,
+[`direction`](docs/DATA-FORMAT.md#direction).
+
+| ▼ hanging columns | ◀ bars growing left | ▶ waterfall bars | ▶ profile chart |
+|---|---|---|---|
+| <img src="test/goldens/darwin/directions-1.png" width="200" alt="Stacked columns hanging down"> | <img src="test/goldens/darwin/directions-2.png" width="200" alt="Clustered bars growing left"> | <img src="test/goldens/darwin/directions-3.png" width="200" alt="Waterfall bars"> | <img src="test/goldens/darwin/directions-7.png" width="200" alt="Profile chart"> |
+
 ## Install
 
 You need:

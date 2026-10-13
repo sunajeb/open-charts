@@ -115,7 +115,7 @@ test('Mac: the helper shows the pop-up; when it cannot, the editor opens in the 
   assert.equal(await none.show('http://b', 'x'), undefined);
 });
 
-test('Mac helper protocol: preload, info, show at the placed frame, eval, and exit with the server', async () => {
+test('Mac helper protocol: preload, info, show at the placed frame, eval, and exit with the server', { skip: process.platform === 'win32' && 'the stand-in helper is a shell script' }, async () => {
   // A stand-in helper: answers like addin/popup-mac/main.swift and records what it was sent.
   const dir = mkdtempSync(join(tmpdir(), 'oc-popup-'));
   const exe = join(dir, 'helper');
@@ -144,7 +144,8 @@ rl.on('close', () => process.exit(0));
   const show = seen.find((m) => m.cmd === 'show')!;
   assert.deepEqual(show, { cmd: 'show', panel: 'datasheet', id: 'sess1', url: 'http://127.0.0.1:4174/?session=sess1&popup=1', frame: [812, 250, POPUP_SIZE.w, POPUP_SIZE.h], focus: true });
   h.stop();
-  await new Promise((r) => setTimeout(r, 100));
+  // Wait for the exit itself (a fixed delay was flaky under load), up to 10 s.
+  for (const end = Date.now() + 10_000; h.running && Date.now() < end;) await new Promise((r) => setTimeout(r, 20));
   assert.equal(h.running, false);
 });
 

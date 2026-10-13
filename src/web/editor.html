@@ -8,6 +8,7 @@
   :root {
     --bg: #eef0ec; --panel: #ffffff; --panel-2: #f7f8f5; --ink: #1c2330; --muted: #5f6877; --faint: #8a919c;
     --rule: #dcdfd8; --rule-strong: #c3c8bf; --accent: #1f3a5f; --accent-ink: #ffffff; --accent-soft: #e4ecf6;
+    --gal-bg: #ffffff; --gal-ink: #1c2330; --gal-hover: #eef3fa; --gal-arrow: #6b7484; --gal-arrow-on: #1d5bd8;
     --sel: #d6e3f3; --warn: #a8461a; --warn-soft: #fbece2; --ok: #2f6b45; --ok-soft: #e5f2e9;
     --err: #b42318; --err-soft: #fdecea; --shadow: 0 1px 2px rgba(20, 28, 40, .06), 0 4px 16px rgba(20, 28, 40, .06);
     --pop-shadow: 0 8px 28px rgba(20, 28, 40, .18), 0 1px 3px rgba(20, 28, 40, .12);
@@ -20,6 +21,7 @@
     :root:not([data-theme="light"]) {
       --bg: #15181d; --panel: #1d2128; --panel-2: #242931; --ink: #e7e9ec; --muted: #a2a9b4; --faint: #7d8592;
       --rule: #333a44; --rule-strong: #46505c; --accent: #7fa3cc; --accent-ink: #0e1724; --accent-soft: #24344a;
+      --gal-bg: #2a2d33; --gal-ink: #f1f3f5; --gal-hover: #363a42; --gal-arrow: #ffffff; --gal-arrow-on: #8cb8ff;
       --sel: #2b405c; --warn: #f0a070; --warn-soft: #3a2a20; --ok: #8fd1a5; --ok-soft: #1f3327;
       --err: #ff8a80; --err-soft: #3d2222; --shadow: none; --pop-shadow: 0 8px 28px rgba(0, 0, 0, .5);
       color-scheme: dark;
@@ -191,23 +193,40 @@
   #sheet tr.base-row input { width: 100%; box-sizing: border-box; }
   .chips .check { font-size: 12px; }
   .type-btn { width: 100%; justify-content: flex-start; padding: 6px 10px; gap: 10px; }
-  .type-btn .gal-ico { width: 40px; height: 28px; }
+  .type-btn .gal-ico { width: 32px; height: 32px; margin: 0; }
   .type-btn .t { font-weight: 600; }
   .type-btn::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg) translateY(-2px); }
 
   /* ---- Popovers: gallery, colour, context menu, tooltip, toast ---- */
   .pop { position: fixed; z-index: 50; background: var(--panel); border: 1px solid var(--rule-strong); border-radius: 10px; box-shadow: var(--pop-shadow); }
-  #gallery { padding: 12px; width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px 14px; }
-  #gallery h3 { margin: 0 0 6px; font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
-  #gallery .group-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 4px; }
-  .gal-item { flex-direction: column; gap: 4px; padding: 6px 4px; font-size: 11px; border-color: transparent; background: transparent; white-space: normal; text-align: center; }
+  /* Chart gallery: icon tiles 5 per row; directional tiles carry ▲ ▼ ◀ ▶ arrows around the icon. */
+  #gallery { padding: 12px; width: min(620px, calc(100vw - 24px)); max-height: calc(100vh - 80px); overflow-y: auto; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; background: var(--gal-bg); color: var(--gal-ink); }
+  .tile { position: relative; height: 112px; }
+  .gal-item { position: absolute; inset: 0; flex-direction: column; justify-content: flex-start; gap: 2px; padding: 14px 2px 4px; font-size: 11px; line-height: 1.25; border-color: transparent; background: transparent; white-space: pre-line; text-align: center; color: inherit; }
+  .gal-item:hover:not(:disabled) { background: var(--gal-hover); border-color: transparent; }
   .gal-item[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
-  .gal-ico { width: 48px; height: 32px; display: block; }
-  .gal-ico .i1 { fill: #1F3A5F; } .gal-ico .i2 { fill: #3E6A9E; } .gal-ico .i3 { fill: #7FA3CC; } .gal-ico .i4 { fill: #B9CDE5; }
-  .gal-ico .ln { fill: none; stroke: #1F3A5F; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-  .gal-ico .ln2 { fill: none; stroke: #7FA3CC; stroke-width: 2; stroke-linejoin: round; }
-  .gal-ico .ax { stroke: #8a919c; stroke-width: 1; }
-  .gal-ico .bg { fill: #eef1f5; }
+  .gal-ico { width: 48px; height: 48px; display: block; flex: none; margin-bottom: 8px; }
+  .gal-dir { position: absolute; z-index: 1; width: 18px; height: 14px; padding: 0; border: 0; border-radius: 3px; background: transparent; display: grid; place-items: center; color: var(--gal-arrow); }
+  .gal-dir::before { content: ""; width: 9px; height: 7px; background: currentColor; }
+  .gal-dir[data-dir="up"] { top: 1px; left: calc(50% - 9px); } .gal-dir[data-dir="up"]::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+  .gal-dir[data-dir="down"] { top: 62px; left: calc(50% - 9px); } .gal-dir[data-dir="down"]::before { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+  .gal-dir[data-dir="left"], .gal-dir[data-dir="right"] { top: 31px; width: 14px; height: 18px; } .gal-dir[data-dir="left"]::before, .gal-dir[data-dir="right"]::before { width: 7px; height: 9px; }
+  .gal-dir[data-dir="left"] { left: calc(50% - 40px); } .gal-dir[data-dir="left"]::before { clip-path: polygon(0 50%, 100% 0, 100% 100%); }
+  .gal-dir[data-dir="right"] { left: calc(50% + 26px); } .gal-dir[data-dir="right"]::before { clip-path: polygon(0 0, 100% 50%, 0 100%); }
+  .gal-dir:hover, .gal-dir:focus-visible { color: var(--gal-arrow-on); background: var(--gal-hover); outline: none; }
+  .gal-dir:hover::before, .gal-dir:focus-visible::before { transform: scale(1.35); }
+  .gal-dir[aria-pressed="true"] { color: var(--accent-ink); background: var(--accent); }
+  .gal-preview { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr; gap: 4px; margin-top: 6px; padding-top: 8px; border-top: 1px solid var(--rule); }
+  .gal-preview .cap { font-size: 11px; color: var(--muted); }
+  .gal-preview .pic { height: 170px; border-radius: 6px; overflow: hidden; background: #fff; display: grid; place-items: center; }
+  .gal-preview .pic svg { width: 100%; height: 100%; }
+  /* Direction control in the Chart section: the same four arrows. */
+  .dir-seg { display: inline-flex; gap: 2px; }
+  .dir-seg button { width: 30px; height: 26px; padding: 0; justify-content: center; }
+  .dir-seg button::before { content: ""; width: 10px; height: 9px; background: currentColor; }
+  .dir-seg [data-dir="up"]::before { clip-path: polygon(50% 0, 100% 100%, 0 100%); } .dir-seg [data-dir="down"]::before { clip-path: polygon(0 0, 100% 0, 50% 100%); }
+  .dir-seg [data-dir="left"]::before { width: 9px; height: 10px; clip-path: polygon(0 50%, 100% 0, 100% 100%); } .dir-seg [data-dir="right"]::before { width: 9px; height: 10px; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+  .dir-seg [aria-checked="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
   #colorPop { padding: 10px; width: 216px; display: flex; flex-direction: column; gap: 8px; }
   #colorPop .swatches { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
   #colorPop .swatches button { width: 24px; height: 24px; padding: 0; border-radius: 5px; border: 1px solid rgba(0, 0, 0, .2); }
@@ -323,7 +342,7 @@
       <div class="sec-body">
         <button id="typeBtn" class="type-btn" type="button" aria-haspopup="dialog" aria-expanded="false" data-tip="Chart type — the data carries over where the shapes match"></button>
         <label class="field ctl" data-mode="deck" data-tip="Slide title above the chart (the action title)">Slide title<input id="title" type="text" autocomplete="off"></label>
-        <label class="check ctl" data-opt="orientation" data-tip="Draw the categories as horizontal bars instead of columns"><input id="orientation" type="checkbox"> Horizontal bars</label>
+        <div class="field ctl" data-opt="direction" data-tip="Which way the chart grows: columns up or hanging down, bars to the left or right (a line chart turns into a profile)">Direction<div class="dir-seg" id="direction" role="radiogroup" aria-label="Direction"><button type="button" role="radio" data-dir="up" aria-label="Up: columns growing up"></button><button type="button" role="radio" data-dir="down" aria-label="Down: columns hanging from the top"></button><button type="button" role="radio" data-dir="left" aria-label="Left: bars growing to the left"></button><button type="button" role="radio" data-dir="right" aria-label="Right: bars growing to the right"></button></div></div>
         <div class="field ctl" data-for="combo" data-tip="Series drawn as a line on top of the columns">Series drawn as lines<div class="chips" id="asLine"></div></div>
       </div>
     </section>
@@ -473,6 +492,11 @@ const defaultOf = (type, k) => SPEC.defaults[type]?.[k];
 /** Remove options the chart type does not read (they would fail validation). */
 function dropUnused(c) {
   if (!c.options) return;
+  // Before directions, bars were `orientation: "horizontal"` (the engine's migrate() does the same).
+  if ('orientation' in c.options) {
+    if (c.options.orientation === 'horizontal' && c.options.direction === undefined) c.options.direction = 'right';
+    delete c.options.orientation;
+  }
   for (const k of Object.keys(c.options)) if (k in SPEC.options && !applies(k, c.type)) delete c.options[k];
 }
 // The default palette: theme slots (accent1…accent6) that follow the presentation's theme.
@@ -490,41 +514,24 @@ const ACCENTS = ['C0504D', 'E46C0A', 'F2B134', '4F9D69', '2E8B9A', '7B5EA7', '1C
 // Series colours do not apply to these types (slices per category, scores, cells, schedule rows).
 const NO_SERIES_COLOR = ['pie', 'doughnut', 'harvey', 'table', 'gantt'];
 
-// Chart type gallery, grouped like the reference product's insert menu.
-const I = (body) => `<svg class="gal-ico" viewBox="0 0 48 32" aria-hidden="true">${body}</svg>`;
-const TYPES = [
-  ['Column & bar', [
-    ['stacked', 'Stacked', I('<rect class="i1" x="6" y="18" width="8" height="12"/><rect class="i2" x="6" y="12" width="8" height="6"/><rect class="i3" x="6" y="8" width="8" height="4"/><rect class="i1" x="20" y="14" width="8" height="16"/><rect class="i2" x="20" y="8" width="8" height="6"/><rect class="i3" x="20" y="4" width="8" height="4"/><rect class="i1" x="34" y="10" width="8" height="20"/><rect class="i2" x="34" y="5" width="8" height="5"/><rect class="i3" x="34" y="2" width="8" height="3"/>')],
-    ['clustered', 'Clustered', I('<rect class="i1" x="5" y="12" width="5" height="18"/><rect class="i3" x="10" y="18" width="5" height="12"/><rect class="i1" x="19" y="6" width="5" height="24"/><rect class="i3" x="24" y="14" width="5" height="16"/><rect class="i1" x="33" y="9" width="5" height="21"/><rect class="i3" x="38" y="4" width="5" height="26"/>')],
-    ['percent', '100%', I('<rect class="i1" x="6" y="14" width="8" height="16"/><rect class="i2" x="6" y="7" width="8" height="7"/><rect class="i3" x="6" y="2" width="8" height="5"/><rect class="i1" x="20" y="18" width="8" height="12"/><rect class="i2" x="20" y="9" width="8" height="9"/><rect class="i3" x="20" y="2" width="8" height="7"/><rect class="i1" x="34" y="11" width="8" height="19"/><rect class="i2" x="34" y="6" width="8" height="5"/><rect class="i3" x="34" y="2" width="8" height="4"/>')],
-    ['waterfall', 'Waterfall', I('<rect class="i1" x="3" y="10" width="7" height="20"/><rect class="i3" x="12" y="5" width="7" height="5"/><rect class="i3" x="21" y="2" width="7" height="3"/><rect class="i4" x="30" y="2" width="7" height="9"/><rect class="i1" x="39" y="11" width="7" height="19"/>')],
-    ['combo', 'Combination', I('<rect class="i2" x="6" y="16" width="8" height="14"/><rect class="i2" x="20" y="12" width="8" height="18"/><rect class="i2" x="34" y="9" width="8" height="21"/><polyline class="ln" points="10,10 24,6 38,3" style="stroke:#F2B134"/>')],
-  ]],
-  ['Line & area', [
-    ['line', 'Line', I('<line class="ax" x1="3" y1="30" x2="45" y2="30"/><polyline class="ln" points="4,22 14,17 24,19 34,10 44,6"/><polyline class="ln2" points="4,27 14,25 24,22 34,22 44,16"/>')],
-    ['area', 'Stacked area', I('<polygon class="i3" points="4,30 4,14 16,10 28,12 44,4 44,30"/><polygon class="i2" points="4,30 4,20 16,17 28,18 44,12 44,30"/><polygon class="i1" points="4,30 4,25 16,23 28,24 44,20 44,30"/>')],
-    ['area100', '100% area', I('<rect class="i3" x="4" y="2" width="40" height="28"/><polygon class="i2" points="4,30 4,12 16,9 28,14 44,8 44,30"/><polygon class="i1" points="4,30 4,21 16,18 28,22 44,17 44,30"/>')],
-  ]],
-  ['Mekko', [
-    ['mekko', 'Mekko', I('<rect class="i1" x="3" y="14" width="16" height="16"/><rect class="i2" x="3" y="6" width="16" height="8"/><rect class="i3" x="3" y="2" width="16" height="4"/><rect class="i1" x="20" y="19" width="12" height="11"/><rect class="i2" x="20" y="8" width="12" height="11"/><rect class="i3" x="20" y="2" width="12" height="6"/><rect class="i1" x="33" y="10" width="12" height="20"/><rect class="i2" x="33" y="5" width="12" height="5"/><rect class="i3" x="33" y="2" width="12" height="3"/>')],
-    ['mekkoxy', 'Mekko XY', I('<rect class="i1" x="3" y="12" width="16" height="18"/><rect class="i3" x="3" y="6" width="16" height="6"/><rect class="i1" x="20" y="18" width="10" height="12"/><rect class="i3" x="20" y="14" width="10" height="4"/><rect class="i1" x="31" y="22" width="14" height="8"/><rect class="i3" x="31" y="19" width="14" height="3"/>')],
-  ]],
-  ['XY', [
-    ['scatter', 'Scatter', I('<line class="ax" x1="4" y1="30" x2="45" y2="30"/><line class="ax" x1="4" y1="2" x2="4" y2="30"/><circle class="i1" cx="11" cy="22" r="2.4"/><circle class="i1" cx="18" cy="17" r="2.4"/><circle class="i1" cx="26" cy="19" r="2.4"/><circle class="i3" cx="32" cy="10" r="2.4"/><circle class="i3" cx="40" cy="6" r="2.4"/><circle class="i3" cx="36" cy="14" r="2.4"/>')],
-    ['bubble', 'Bubble', I('<line class="ax" x1="4" y1="30" x2="45" y2="30"/><line class="ax" x1="4" y1="2" x2="4" y2="30"/><circle class="i3" cx="14" cy="20" r="5" fill-opacity=".85"/><circle class="i1" cx="28" cy="13" r="7" fill-opacity=".85"/><circle class="i2" cx="39" cy="22" r="3.5" fill-opacity=".85"/>')],
-  ]],
-  ['Circular', [
-    ['pie', 'Pie', I('<circle class="i3" cx="24" cy="16" r="13"/><path class="i1" d="M24 16 L24 3 A13 13 0 0 1 36.4 20 Z"/><path class="i2" d="M24 16 L36.4 20 A13 13 0 0 1 20 28.4 Z"/>')],
-    ['doughnut', 'Doughnut', I('<circle cx="24" cy="16" r="10" fill="none" stroke="#7FA3CC" stroke-width="6"/><path d="M24 6 A10 10 0 0 1 33.5 19" fill="none" stroke="#1F3A5F" stroke-width="6"/><path d="M33.5 19 A10 10 0 0 1 21 25.5" fill="none" stroke="#3E6A9E" stroke-width="6"/>')],
-  ]],
-  ['Special', [
-    ['harvey', 'Harvey balls', I('<circle cx="10" cy="16" r="6.5" fill="#fff" stroke="#1F3A5F" stroke-width="1.4"/><path class="i1" d="M10 16 L10 9.5 A6.5 6.5 0 0 1 16.5 16 Z"/><circle cx="24" cy="16" r="6.5" fill="#fff" stroke="#1F3A5F" stroke-width="1.4"/><path class="i1" d="M24 16 L24 9.5 A6.5 6.5 0 0 1 24 22.5 Z"/><circle class="i1" cx="38" cy="16" r="6.5"/>')],
-    ['table', 'Table', I('<rect class="bg" x="4" y="3" width="40" height="26" rx="1"/><rect class="i1" x="4" y="3" width="40" height="6"/><g class="ax"><line x1="4" y1="15.5" x2="44" y2="15.5"/><line x1="4" y1="22" x2="44" y2="22"/><line x1="17" y1="3" x2="17" y2="29"/><line x1="30" y1="3" x2="30" y2="29"/></g>')],
-    ['gantt', 'Gantt', I('<line class="ax" x1="4" y1="3" x2="44" y2="3"/><rect class="i1" x="6" y="7" width="14" height="5"/><rect class="i2" x="16" y="15" width="16" height="5"/><rect class="i3" x="28" y="23" width="14" height="5"/><polygon class="i1" points="36,14.5 39,17.5 36,20.5 33,17.5" style="fill:#C0504D"/>')],
-  ]],
-];
-const TYPE_INFO = Object.fromEntries(TYPES.flatMap(([, items]) => items.map(([t, label, icon]) => [t, { label, icon }])));
-
+// Chart gallery: the add-in's catalogue (src/addin/registry.ts, sent as OC_SPEC.gallery) — icon
+// tiles in the reference's order; a tile's arrows pick the direction the chart grows in.
+const GALLERY = SPEC.gallery ?? [];
+const DIRECTIONS = SPEC.directions ?? {};
+const dirsOf = (t) => DIRECTIONS[t] ?? ['up'];
+const DIR_WORDS = { up: 'columns growing up', down: 'columns hanging from the top', left: 'bars growing to the left', right: 'bars growing to the right' };
+const flatLabel = (tile) => tile.label.replace(/\/\n/g, '/').replace(/\n/g, ' ');
+/** The tile a chart is drawn as: its type and the tile's options; a build-down waterfall starts with its total. */
+function tileOf(c) {
+  const o = c.options ?? {};
+  const fits = GALLERY.filter((g) => g.type === c.type && Object.entries(g.options).every(([k, v]) => (o[k] ?? defaultOf(c.type, k)) === v));
+  if (c.type === 'waterfall') {
+    const v = c.series[0]?.values ?? [];
+    const down = typeof v[0] === 'number' && v[0] > 0 && v.slice(1).some((x) => typeof x === 'number') && v.slice(1).every((x) => typeof x !== 'number' || x <= 0);
+    return fits.find((g) => (g.id === 'waterfallDown') === down) ?? fits[0];
+  }
+  return fits[0] ?? GALLERY.find((g) => g.type === c.type) ?? { id: c.type, type: c.type, label: c.type, options: {}, directions: ['up'], icon: '' };
+}
 const SHEET_HINTS = {
   stacked: 'Each row is a series stacked in every column; each column is a category.',
   clustered: 'Each row is a series; its bars stand side by side in every category.',
@@ -770,10 +777,18 @@ function renderArrowSelects() {
 }
 
 function renderTypeBtn() {
-  const t = chart().type, info = TYPE_INFO[t] ?? { label: t, icon: '' };
-  $('typeBtn').dataset.type = t;
-  $('typeBtn').innerHTML = `${info.icon}<span><span class="t">${info.label}</span></span>`;
-  $('typeBtn').setAttribute('aria-label', `Chart type: ${info.label}. Change`);
+  const c = chart(), tile = tileOf(c), label = flatLabel(tile);
+  $('typeBtn').dataset.type = c.type;
+  $('typeBtn').innerHTML = `${tile.icon}<span><span class="t">${label}</span></span>`;
+  $('typeBtn').setAttribute('aria-label', `Chart type: ${label}. Change`);
+}
+function renderDirection() {
+  const t = chart().type, d = opts().direction ?? 'up';
+  for (const b of $('direction').querySelectorAll('button')) {
+    b.disabled = !dirsOf(t).includes(b.dataset.dir);
+    b.setAttribute('aria-checked', String(b.dataset.dir === d));
+    b.tabIndex = b.dataset.dir === d ? 0 : -1;
+  }
 }
 
 function renderForm() {
@@ -798,7 +813,7 @@ function renderForm() {
   $('valueAxis').checked = !!shown('valueAxis');
   $('zeroBased').value = o.zeroBased === undefined ? '' : String(o.zeroBased);
   $('step').checked = !!shown('step');
-  $('orientation').checked = shown('orientation') === 'horizontal';
+  renderDirection();
   $('percentData').checked = !!shown('percentData');
   $('combo').value = shown('combo') ?? 'stacked';
   $('sort').value = shown('sort') ?? 'sheet';
@@ -1325,26 +1340,98 @@ $('colorHex').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.pr
 $('colorHex').addEventListener('input', () => $('colorHex').removeAttribute('aria-invalid'));
 
 function buildGallery() {
-  $('gallery').replaceChildren(...TYPES.map(([group, items]) => {
-    const g = document.createElement('div');
-    g.setAttribute('role', 'group'); g.setAttribute('aria-label', group);
-    const h = document.createElement('h3'); h.textContent = group;
-    const list = document.createElement('div'); list.className = 'group-items';
-    list.append(...items.map(([t, label, icon]) => {
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'gal-item'; b.dataset.type = t;
-      b.innerHTML = `${icon}<span>${label}</span>`;
-      b.onclick = () => { closePops(true); if (chart().type !== t) setType(t); };
-      return b;
-    }));
-    g.append(h, list);
-    return g;
-  }));
+  const pane = document.createElement('div');
+  pane.className = 'gal-preview'; pane.id = 'galPreview'; pane.setAttribute('aria-hidden', 'true');
+  pane.innerHTML = '<div class="cap"></div><div class="pic"></div>';
+  $('gallery').replaceChildren(...GALLERY.map((tile) => {
+    const box = document.createElement('div');
+    box.className = 'tile'; box.dataset.tile = tile.id;
+    const label = flatLabel(tile);
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'gal-item'; b.dataset.type = tile.type; b.dataset.tile = tile.id;
+    b.innerHTML = `${tile.icon}<span>${tile.label}</span>`;
+    b.title = tile.description;
+    b.setAttribute('aria-label', tile.directions.length > 1 ? `${label}; Shift+arrow keys pick a direction` : label);
+    b.onclick = () => pickTile(tile, 'up');
+    b.onmouseenter = b.onfocus = () => galleryPreview(tile, 'up');
+    box.append(b);
+    if (tile.directions.length > 1) {
+      for (const d of ['up', 'down', 'left', 'right']) {
+        if (!tile.directions.includes(d)) continue;
+        const a = document.createElement('button');
+        a.type = 'button'; a.className = 'gal-dir'; a.dataset.dir = d; a.tabIndex = -1;
+        a.setAttribute('aria-label', `${label}: ${DIR_WORDS[d]}`);
+        a.dataset.tip = `${label}: ${DIR_WORDS[d]}`;
+        a.onclick = () => pickTile(tile, d);
+        a.onmouseenter = a.onfocus = () => galleryPreview(tile, d);
+        box.append(a);
+      }
+    }
+    return box;
+  }), pane);
+}
+/** Draw the chart as a gallery tile, growing in direction `dir`: its type (data carried over), its options, its direction. */
+function pickTile(tile, dir) {
+  closePops(true);
+  asTile(chart(), tile, dir);
+  changed(true, 'type');
+}
+/** Turn chart `c` into a tile's chart growing `dir`: type (data carried over), the tile's options, the direction. */
+function asTile(c, tile, dir, live = true) {
+  if (c.type !== tile.type) setTypeQuiet(tile.type, c, live);
+  const o = (c.options ??= {});
+  for (const [k, v] of Object.entries(tile.options)) { if (v === defaultOf(tile.type, k)) delete o[k]; else o[k] = v; }
+  if (dir === 'up' || !dirsOf(tile.type).includes(dir)) delete o.direction; else o.direction = dir;
+  return c;
+}
+
+// Live preview in the gallery: hovering (or focusing) a tile or one of its arrows draws the current
+// data as that chart, in that direction, in the strip under the tiles. Debounced and cached.
+const galCache = new Map();
+let galTimer = 0, galKey = '';
+function galleryPreview(tile, dir) {
+  const key = `${tile.id}@${dir}`;
+  if (key === galKey) return;
+  galKey = key;
+  clearTimeout(galTimer);
+  galTimer = setTimeout(async () => {
+    const pane = $('galPreview');
+    pane.querySelector('.cap').textContent = dir === 'up' && tile.directions.length < 2 ? flatLabel(tile) : `${flatLabel(tile)} · ${DIR_WORDS[dir]}`;
+    const c = asTile(structuredClone(chart()), tile, dir, false);
+    const ckey = `${key}|${JSON.stringify(c)}`;
+    let svg = galCache.get(ckey);
+    if (!svg) {
+      try {
+        const body = { style: deck.style, slides: [{ chart: c }] };
+        // The Office.js pane lays out in the page (OC_HOST); elsewhere the server does.
+        if (office) svg = (await office.render(body)).slides[0].svg;
+        else {
+          const res = await fetch('/api/render', { method: 'POST', body: JSON.stringify(body) });
+          if (!res.ok) return;
+          svg = (await res.json()).slides[0].svg;
+        }
+        if (galCache.size > 40) galCache.clear();
+        galCache.set(ckey, svg);
+      } catch { return; }
+    }
+    if (galKey !== key) return;
+    pane.querySelector('.pic').innerHTML = svg;
+    // Just the chart area of the slide (deck.ts CHART_FRAME, with a little air): a bigger thumbnail.
+    pane.querySelector('.pic svg')?.setAttribute('viewBox', '40 88 880 424');
+    pane.dataset.preview = key;
+  }, 120);
 }
 function openGallery() {
   if (!$('gallery').hidden) return closePops(true);
   closePops(false);
-  for (const b of $('gallery').querySelectorAll('.gal-item')) b.setAttribute('aria-pressed', String(b.dataset.type === chart().type));
+  const now = tileOf(chart()), dir = opts().direction ?? 'up';
+  galKey = '';
+  galleryPreview(now, dir);
+  for (const t of $('gallery').querySelectorAll('.tile')) {
+    const on = t.dataset.tile === now.id;
+    t.querySelector('.gal-item').setAttribute('aria-pressed', String(on));
+    for (const a of t.querySelectorAll('.gal-dir')) a.setAttribute('aria-pressed', String(on && a.dataset.dir === dir));
+  }
   popReturn = $('typeBtn');
   $('typeBtn').setAttribute('aria-expanded', 'true');
   const b = $('typeBtn').getBoundingClientRect();
@@ -1359,6 +1446,12 @@ $('gallery').addEventListener('keydown', (e) => {
   const dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
   if (!dir) return;
   e.preventDefault();
+  // Shift+arrow on a tile: insert it growing that way (its ▲ ▼ ◀ ▶ arrow).
+  if (e.shiftKey) {
+    const arrow = document.activeElement.closest('.tile')?.querySelector(`.gal-dir[data-dir="${e.key.slice(5).toLowerCase()}"]`);
+    arrow?.click();
+    return;
+  }
   const items = [...$('gallery').querySelectorAll('.gal-item')];
   const at = document.activeElement.getBoundingClientRect();
   const cx = at.left + at.width / 2, cy = at.top + at.height / 2;
@@ -1424,8 +1517,10 @@ function changed(rebuild, key) {
 }
 function setOpt(k, v, key = k) { if (v === undefined) delete opts()[k]; else opts()[k] = v; changed(false, key); }
 
-function setType(to) {
-  const c = chart(), o = opts(), from = c.type;
+function setType(to) { setTypeQuiet(to); changed(true, 'type'); }
+/** Change the chart type, carrying the data over, without re-rendering (the caller does). */
+function setTypeQuiet(to, c = chart(), live = true) {
+  const o = (c.options ??= {}), from = c.type;
   // Options left at the old type's default follow the new type's default.
   for (const k of Object.keys(o)) if (o[k] === defaultOf(from, k)) delete o[k];
   convertData(c, from, to);
@@ -1437,10 +1532,10 @@ function setType(to) {
   // Harvey balls read 0–4 quarters (or 0–1): start from a small assessment grid if the data does not fit.
   if (to === 'harvey' && c.series.some((s) => s.values.some((v) => typeof v === 'number' && (v < 0 || v > 4)))) {
     Object.assign(c, structuredClone(HARVEY_SAMPLE));
+    if (!live) return;
     remapCategories(() => -1);
     invalid.clear(); focusCell = null;
   }
-  changed(true, 'type');
 }
 
 $('title').oninput = (e) => { slide().title = e.target.value; changed(false, 'title'); };
@@ -1465,7 +1560,19 @@ $('mekko').onchange = (e) => { setOpt('mekko', e.target.value === 'percent' ? un
 $('totals').onchange = (e) => { setOpt('totals', e.target.checked); };
 $('valueAxis').onchange = (e) => { setOpt('valueAxis', e.target.checked); };
 $('step').onchange = (e) => { setOpt('step', e.target.checked || undefined); };
-$('orientation').onchange = (e) => { setOpt('orientation', e.target.checked ? 'horizontal' : undefined); };
+$('direction').onclick = (e) => {
+  const b = e.target.closest('button[data-dir]');
+  if (b && !b.disabled) setOpt('direction', b.dataset.dir === 'up' ? undefined : b.dataset.dir);
+};
+// A radio group: arrow keys move the choice (skipping directions the type cannot take).
+$('direction').addEventListener('keydown', (e) => {
+  const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
+  if (!step) return;
+  e.preventDefault();
+  const all = [...$('direction').querySelectorAll('button:not(:disabled)')];
+  const next = all[(all.indexOf(document.activeElement) + step + all.length) % all.length];
+  next?.focus(); next?.click();
+});
 $('zeroBased').onchange = (e) => { setOpt('zeroBased', e.target.value === '' ? undefined : e.target.value === 'true'); };
 $('percentData').onchange = (e) => { setOpt('percentData', e.target.checked || undefined); };
 $('combo').onchange = (e) => { setOpt('combo', e.target.value === 'stacked' ? undefined : e.target.value); };

@@ -118,7 +118,7 @@ test('COL-7: column width is slot / (1 + gap)', () => {
 test('SER-1: default series identification: names right for stacked, a legend for clustered and horizontal bars', () => {
   assert.ok(lay(samples.stacked!).roles!.some((r) => r.startsWith('label:series:')));
   assert.ok(lay(samples.clustered!).roles!.some((r) => r.startsWith('legend:')));
-  assert.ok(lay({ ...samples.stacked!, options: { orientation: 'horizontal' } }).roles!.some((r) => r.startsWith('legend:')));
+  assert.ok(lay({ ...samples.stacked!, options: { direction: 'right' } }).roles!.some((r) => r.startsWith('legend:')));
 });
 
 test('SER-3: names beside the plot that would take over a third of the frame become a legend', () => {
@@ -426,7 +426,7 @@ test('LEG-2: legend swatches follow the mark: boxes for columns and areas, short
 test('MIN-2: minimum sizes per type grow with the categories', () => {
   const spec = (type: ChartSpec['type'], n: number, options?: ChartSpec['options']) => ({ type, categories: Array.from({ length: n }, (_, i) => `${i}`), series: [{ name: 's', values: [] }], options }) as unknown as ChartSpec;
   assert.deepEqual(minimumSize(spec('stacked', 20)), { w: 320, h: 120 });
-  assert.deepEqual(minimumSize(spec('stacked', 20, { orientation: 'horizontal' })), { w: 200, h: 270 });
+  assert.deepEqual(minimumSize(spec('stacked', 20, { direction: 'right' })), { w: 200, h: 270 });
   assert.deepEqual(minimumSize(spec('mekko', 12)), { w: 288, h: 140 });
   assert.deepEqual(minimumSize(spec('pie', 30)), { w: 200, h: 120 });
   assert.deepEqual(minimumSize(spec('scatter', 3)), { w: 200, h: 140 });
