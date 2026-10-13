@@ -37,7 +37,8 @@ tab on the ribbon, before Home, with one group, **Charts**:
 
 | Control | What it does |
 |---|---|
-| **Insert chart** | A menu of chart types, grouped *Column and bar · Line and area · Mekko · XY · Pie · Timeline and table*. Inserts the chart with sample data on the current slide. |
+| **Insert chart** | The chart gallery: one icon per chart, five per row (see [Choosing a chart and its direction](#choosing-a-chart-and-its-direction)). Inserts the chart with sample data on the current slide. |
+| **Direction** ▲ ▼ ◀ ▶ | With a chart selected: draws it growing that way, in place. With nothing selected: the next chart you insert grows that way. The arrow of the selected chart's direction shows pressed; directions its type cannot take are greyed out. |
 | **Edit data** | Opens the selected chart's datasheet in your browser. Click **Apply to slide** there and the chart on the slide updates. |
 | **Update chart** | Lays the selected chart out again at its current size and position. |
 
@@ -66,7 +67,7 @@ Mac](#undo-and-the-right-click-menu-on-a-mac)): there, use the ribbon.
 
 ### Insert, edit, apply, resize
 
-1. **Insert.** Click a slide in Normal view, then **Insert chart** and pick a type. If the slide has
+1. **Insert.** Click a slide in Normal view, then **Insert chart** and pick a chart. If the slide has
    an empty content placeholder, the chart takes its place and size; otherwise it goes in the
    standard chart area. The chart arrives with sample data.
 2. **Edit data.** With the chart selected, click **Edit data**. A small datasheet window pops up
@@ -91,6 +92,45 @@ including ones written by the command line or the web editor, and on decks you r
 someone else: the data travels inside the file. Don't ungroup the chart or edit its shapes by hand
 if you want to keep editing its data: the next Update chart or Apply redraws the chart from its data
 and replaces those changes.
+
+## Choosing a chart and its direction
+
+![The chart gallery](ux-shots/chart-gallery.png)
+
+The gallery lists the charts in the same order everywhere — the ribbon's **Insert chart** and the
+editor's chart-type button: Stacked, 100% and Clustered column/bar; Build-up and Build-down
+waterfall; Mekko with a % axis; Combination; Line/Profile; Stacked and 100% area; Mekko with a unit
+axis; Pie; Doughnut; Scatter; Bubble; Gantt/Timeline; then Mekko XY, Harvey balls and Table.
+
+**Directions.** The small arrows around an icon are the directions that chart can grow in:
+
+| Arrow | The chart | Charts |
+|---|---|---|
+| ▲ up | columns growing up from a baseline at the bottom (the default) | every chart with arrows |
+| ▼ down | columns hanging from a baseline at the top; category names above them, totals below — for losses, reductions, or the lower half of a pair | stacked, 100%, clustered, both waterfalls, both Mekkos, combination |
+| ◀ left | bars growing to the left, category names on the right — e.g. the left half of a butterfly chart | the ▼ charts, plus line and both areas |
+| ▶ right | bars growing to the right, category names on the left | the same as ◀ |
+
+A line chart turned sideways is a **profile chart**: the categories (criteria, say) run down the
+side and each series is a line through its scores — the classic vendor comparison. A Mekko chart
+turned sideways draws one row per category, as tall as its share of the total. Pie, doughnut,
+scatter, bubble and Gantt charts have no arrows.
+
+- **In the editor**, click an icon for its default (▲) or one of its arrows for that direction.
+  With the keyboard: arrow keys move between icons, **Shift+arrow** picks that direction, **Enter**
+  picks the icon. While you hover (or focus) an icon or an arrow, the strip under the gallery
+  previews your data as that chart, that way, before you pick it. The **Direction** buttons in the
+  Chart section turn the current chart.
+- **In PowerPoint**, a ribbon gallery cannot have clickable arrows inside its tiles, so the four
+  **Direction** buttons sit next to it. Select a chart and click an arrow to turn it in place (its
+  data, size and position stay); or, with nothing selected, click an arrow and then insert — the new
+  chart grows that way. Only the directions the selected chart can take are enabled.
+
+**Build-up or build-down waterfall?** A *build-up* waterfall stacks components up to a total on the
+right (cost elements adding up to total cost). A *build-down* waterfall starts with the total on the
+left and subtracts its parts step by step down to the result (revenue down to net income). They are
+the same chart with different data, exactly as in the reference manual: the two tiles just insert
+different sample data. Either can then be turned with the arrows.
 
 ## Office.js add-in (Windows, web, Mac)
 
@@ -305,7 +345,7 @@ images are rendered from `examples/`.
 **Use it for** composition over time: revenue by segment, headcount by function.
 **Datasheet:** each row is a segment stacked in every column; each column is a category.
 Negative values stack downwards from the baseline.
-**Options:** horizontal bars, value axis, column gap, series labels (right of the last column by
+**Options:** direction, value axis, column gap, series labels (right of the last column by
 default, or a legend), totals (on by default), CAGR and difference arrows. Segment labels are
 rounded so they add up exactly to the total shown on top.
 
@@ -315,7 +355,7 @@ rounded so they add up exactly to the total shown on top.
 
 **Use it for** side-by-side comparison: win rate by region and segment.
 **Datasheet:** each row is a series; its bars stand side by side in every category.
-**Options:** horizontal bars, value axis, column gap, series labels (a legend by default). No totals
+**Options:** direction, value axis, column gap, series labels (a legend by default). No totals
 or arrows.
 
 ### 100% column (`percent`)
@@ -327,7 +367,7 @@ or arrows.
 column reads exactly 100%. Negative values are ignored (and reported).
 If your data is already in percent and a column may add up to less than 100% (survey answers with
 no-replies), tick **Values are %**: each column then keeps its own total.
-**Options:** horizontal bars, value axis, gap, series labels, totals (off by default; the raw column
+**Options:** direction, value axis, gap, series labels, totals (off by default; the raw column
 totals), CAGR and difference arrows (on the raw totals). The add-in also offers **100% with % axis**,
 the same chart with the value axis switched on.
 
@@ -649,7 +689,7 @@ minimums, in points (72 pt = 1 inch; a 16:9 slide is 960 × 540 pt):
 | Chart type | Minimum width | Minimum height |
 |---|---|---|
 | Stacked, clustered, 100%, waterfall, combination, line, area (n = categories) | 200, or 40 + 14 per category | 120 |
-| Horizontal bars | 200 | 120, or 30 + 12 per category |
+| Bars and profiles (direction ◀ or ▶) | 200 | 120, or 30 + 12 per category |
 | Mekko, Mekko XY | 240, or 24 per category | 140 |
 | Pie, doughnut | 200 | 120 |
 | Scatter, bubble | 200 | 140 |
@@ -772,3 +812,36 @@ date). Hover or focus the cell to see the message.
 
 **My manual formatting disappeared.** Update chart, Apply and resizing redraw the chart from its
 data. Make changes through the datasheet and options instead of editing shapes inside the group.
+
+### Windows
+
+**The open-charts tab is not on the ribbon.** Quit PowerPoint and run `install.ps1` again. It prints
+what it did. Then, in PowerPoint, open *File › Options › Add-ins*, choose *Manage: PowerPoint Add-ins
+› Go…* and make sure **open-charts** is in the list and ticked. If it is not there, click
+**Add New…** and pick `%APPDATA%\Microsoft\AddIns\open-charts.ppam`.
+
+**PowerPoint shows "Microsoft has blocked macros" or a macro warning bar.** The file still carries
+the "downloaded from the internet" mark. Run `install.ps1` again, which removes it, and restart
+PowerPoint. If the macros stay disabled, open *File › Options › Trust Center › Trust Center
+Settings… › Trusted Locations*. `%APPDATA%\Microsoft\AddIns\` should be listed (`install.ps1` adds
+it when it is missing). If your organisation disables all macros, the add-in cannot run until IT
+allows macros from trusted locations.
+
+**"open-charts can't reach its chart engine".** The add-in starts
+`%LOCALAPPDATA%\open-charts\open-charts.exe` and talks to it on `127.0.0.1:4174`.
+- *…open-charts.exe is missing*: run `install.ps1` again.
+- *…did not start within 20 seconds*: an antivirus scan or an application-control policy is holding
+  it. Run `install.ps1` again; its last step starts the engine and says so if Windows blocks it. Then
+  ask IT to allow that file.
+- Something else on the PC uses port 4174: close that program.
+
+**After Apply, the editor says "Not updated".**
+- *PowerPoint did not respond. Close any open dialog in PowerPoint…*: PowerPoint was showing a dialog
+  or you were typing in a text box. Close the dialog or click outside the text, then **Apply** again.
+- *PowerPoint isn't running* and *could not find the chart*: as on the Mac (above).
+
+**Where is the log?** `%LOCALAPPDATA%\open-charts\addin.log`, with one line per insert, update,
+re-layout and Apply. Include it when you report a problem.
+
+**Uninstall.** `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\open-charts\uninstall.ps1"`.
+Charts already on slides stay as they are.

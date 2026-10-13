@@ -4,6 +4,7 @@
 import type { ChartSpec, Frame, Scene, Style } from './types.ts';
 import type { Measurer } from './text.ts';
 import { fits, wrap } from './text.ts';
+import { sideways } from './direction.ts';
 
 export interface Size { w: number; h: number }
 
@@ -24,8 +25,9 @@ export class TooSmall extends Error {
  * |---------------------------------------------------|---------------------|---------------------|
  * | stacked, clustered, percent, waterfall, combo,    | max(200, 40 + 14·n) | 120                 |
  * | line, area, area100 (n = categories)              |                     |                     |
- * | stacked / clustered / percent, horizontal         | 200                 | max(120, 30 + 12·n) |
+ * | the same, direction left or right (bars, profile) | 200                 | max(120, 30 + 12·n) |
  * | mekko, mekkoxy                                    | max(240, 24·n)      | 140                 |
+ * | mekko, direction left or right                    | 200                 | max(160, 24·n)      |
  * | pie, doughnut                                     | 200                 | 120                 |
  * | scatter, bubble                                   | 200                 | 140                 |
  * | harvey (r = rows)                                 | max(160, 60 + 24·n) | max(80, 24 + 16·r)  |
@@ -38,12 +40,13 @@ export class TooSmall extends Error {
 export function minimumSize(spec: ChartSpec): Size {
   const n = spec.categories.length;
   switch (spec.type) {
-    case 'stacked': case 'clustered': case 'percent':
-      if (spec.options?.orientation === 'horizontal') return { w: 200, h: Math.max(120, 30 + 12 * n) };
+    case 'stacked': case 'clustered': case 'percent': case 'waterfall': case 'combo': case 'line': case 'area': case 'area100':
+      if (sideways(spec.options ?? {})) return { w: 200, h: Math.max(120, 30 + 12 * n) };
       return { w: Math.max(200, 40 + 14 * n), h: 120 };
-    case 'waterfall': case 'combo': case 'line': case 'area': case 'area100':
-      return { w: Math.max(200, 40 + 14 * n), h: 120 };
-    case 'mekko': case 'mekkoxy':
+    case 'mekko':
+      if (sideways(spec.options ?? {})) return { w: 200, h: Math.max(160, 24 * n) };
+      return { w: Math.max(240, 24 * n), h: 140 };
+    case 'mekkoxy':
       return { w: Math.max(240, 24 * n), h: 140 };
     case 'pie': case 'doughnut':
       return { w: 200, h: 120 };

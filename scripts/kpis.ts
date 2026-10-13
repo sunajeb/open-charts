@@ -90,8 +90,20 @@ export function cagrChecks(spec: ChartSpec, sc: Scene): Check[] {
 }
 
 // Waterfall: every connector meets the bars on both sides; every total = previous total + steps shown.
-export function waterfallChecks(spec: ChartSpec, sc: Scene): Check[] {
+/**
+ * The scene of a chart drawn as bars (direction left / right) with x and y swapped, so the column
+ * checks below read it as columns (a mirror — direction down / left — changes none of them).
+ */
+function upright(spec: ChartSpec, sc: Scene): Scene {
+  const d = spec.options?.direction;
+  if (d !== 'left' && d !== 'right') return sc;
+  return { ...sc, shapes: sc.shapes.map((s) => (s.kind === 'rect' ? { ...s, x: s.y, y: s.x, w: s.h, h: s.w }
+    : s.kind === 'line' ? { ...s, x1: s.y1, y1: s.x1, x2: s.y2, y2: s.x2 } : s)) };
+}
+
+export function waterfallChecks(spec: ChartSpec, scene: Scene): Check[] {
   if (spec.type !== 'waterfall') return [];
+  const sc = upright(spec, scene);
   const loc = spec.options?.locale;
   const out: Check[] = [];
   const bars = sc.shapes.flatMap((s, i) => (s.kind === 'rect' && sc.roles![i].startsWith('bar:') ? [{ r: s as RectShape, c: col(sc.roles![i]) }] : []));
@@ -119,8 +131,9 @@ export function waterfallChecks(spec: ChartSpec, sc: Scene): Check[] {
 }
 
 // Mekko / Mekko XY: column widths add up to the plot width (±0.5 pt), touch, and follow the data.
-export function mekkoChecks(spec: ChartSpec, sc: Scene): Check[] {
+export function mekkoChecks(spec: ChartSpec, scene: Scene): Check[] {
   if (spec.type !== 'mekko' && spec.type !== 'mekkoxy') return [];
+  const sc = upright(spec, scene);
   const cols = new Map<number, { x: number; w: number }>();
   sc.shapes.forEach((s, i) => { if (s.kind === 'rect' && sc.roles![i].startsWith('bar:')) cols.set(col(sc.roles![i]), { x: s.x, w: s.w }); });
   const axis = sc.shapes.find((s, i) => sc.roles![i] === 'axis' && s.kind === 'line' && Math.abs(s.y1 - s.y2) < 0.01) as LineShape | undefined;

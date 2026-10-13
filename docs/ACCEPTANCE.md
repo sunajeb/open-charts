@@ -23,6 +23,7 @@ exported decks and PNGs). The images below are copied into `docs/acceptance/`.
 | 7 | Timings vs targets | Insert **pass** (cold 1.8 s → 1.3 s after O5); update **pass** in VBA, about 1 s by wall clock including AppleScript |
 | 8 | Every ribbon control incl. nothing selected | **Pass** |
 | 9 | Office.js add-in (P3): bundle parity, task pane contract, manifest | **Pass** in Chromium + WebKit against a recording mock of PowerPoint JS; **not yet run in live PowerPoint** (owner steps below) |
+| 10 | Windows: same add-in on PowerPoint for Windows | Built and tested without PowerPoint (see [Windows](#10-windows)); **live run pending on the owner's PC** |
 
 | 9 | Edit data pop-up: open < 300 ms, live updates, Esc reverts; element toolbar | See [§9](#9-edit-data-pop-up-and-element-toolbar) |
 
@@ -342,3 +343,30 @@ Fixed on this branch:
   2.27 s outlier inside AppleScript's `run VB macro`, which a ribbon click does not pay), VBA
   0.71–0.96 s (engine 0.22–0.37 s). `e2e:powerpoint`: first insert 1.31 s (was 1.81 s), warm median
   0.89 s.
+
+## 10. Windows
+
+Windows support uses the same `.ppam`, ribbon, VBA and tags as the Mac, with an HTTP bridge, a
+single-executable engine and a COM Apply helper ([docs/windows.md](windows.md)). Where each part
+was verified:
+
+| Check | Where | Result |
+|---|---|---|
+| VBA: the Mac compiles exactly the code it did before; Windows compiles no `AppleScriptTask`; `PtrSafe` declares for 32- and 64-bit Office; same `ApplyEdit` on both | unit (`test/windows.test.ts`, VBA run through a `#If` preprocessor) | **Pass** |
+| Mac regression: the add-in with the `#If Mac` branches, merged with master (overrides, pop-up, mini toolbar), in real PowerPoint for Mac (`npm run e2e:powerpoint`) | Mac, live | **Pass**: `OK: 19 chart types inserted and saved, updates applied`. Edit data and Apply ended with session `drawn` (`APPLIED … OK (168 ms)`); the automatic re-layouts and the same-scale Apply in a restarted PowerPoint passed. An earlier run, before the last merge, stopped at the CLI-comparison step on a `-600` timing race when PowerPoint was reopened; the add-in itself passed |
+| PowerShell Apply helper protocol: one request per line, timeout restarts it, tabs, newlines and Unicode survive | unit, with a stand-in helper (macOS) | **Pass** |
+| Real PowerShell helper: ping, and *not running* without PowerPoint | unit on Windows (CI) | runs in the `windows` job |
+| `npm run build:win` on macOS: bundle, node.exe v22.12.0 checked against SHASUMS256.txt, blob injected, SEA fuse set, signature removed | Mac | **Pass** (83.8 MB PE32+ x64) |
+| The same bundle as a macOS SEA (`--host`): resources unpacked, gallery, example deck, `addin build`, `addin serve`, ping, engine request, editor page, quit | Mac, `scripts/smoke-exe.ts dist/host/open-charts` | **Pass** (first start 3.1 s, warm 0.36 s, server up in 1.1 s) |
+| `open-charts.exe` runs: the same smoke test | CI `windows` job | runs in the `windows` job |
+| The VBA's HTTP call made as VBA makes it (`MSXML2.ServerXMLHTTP`, direct connection), Unicode label both ways | CI `windows` job | runs in the `windows` job |
+| `install.ps1 -DryRun` changes nothing; install into a temporary profile (files, HKCU `Path` and `AutoLoad=1`, trusted location, download mark removed, engine starts); `uninstall.ps1` removes it all and stops the engine | CI `windows` job | runs in the `windows` job |
+| Unit suite on Windows (paths, line endings, no `sh`) | CI `windows` job | runs in the `windows` job |
+| Live PowerPoint for Windows with think-cell: VBA compiles, ribbon, every gallery item, update, resize, Edit data + Apply over COM, PNG export | owner's PC: `e2e-powerpoint-win.ps1` ([how](windows.md#acceptance-run-on-a-pc)) | **pending** |
+
+Not verified yet, and to look for in the PC run's zip:
+- whether `Application.Run` from COM finds the add-in macro by its plain name (the helper falls back to
+  `open-charts.ppam!OpenCharts.<name>`; the log says when it had to),
+- whether `WindowSelectionChange` fires for selection changes made through COM (the resize check),
+- first start time of the unsigned exe under the PC's antivirus.
+

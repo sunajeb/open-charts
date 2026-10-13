@@ -120,7 +120,7 @@
           { "name": "SMB", "values": [10, 12, 8] }
         ],
         "options": {
-          "orientation": "horizontal",
+          "direction": "right",
           "levelArrows": [{ "from": { "category": 0 }, "to": { "category": 2 } }],
           "valueLines": [{ "value": "mean" }]
         }

@@ -200,7 +200,7 @@ test('horizontal bars: thin segments are labelled above or below the bar with a 
   const scene = layoutChart({
     type: 'stacked', categories: ['North', 'South', 'East'],
     series: [{ name: 'A', values: [50, 60, 40] }, { name: 'B', values: [30, 20, 35] }, { name: 'C', values: [0.6, 0.8, 0.4] }, { name: 'D', values: [20, 15, 25] }],
-    options: { orientation: 'horizontal', decimals: 1 },
+    options: { direction: 'right', decimals: 1 },
   }, F, m);
   assert.deepEqual(scene.hidden, []);
   assert.deepEqual(strict(scene), []);

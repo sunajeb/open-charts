@@ -7,7 +7,10 @@ import { delimiter, join } from 'node:path';
 
 /** Where the add-in keeps its engine copy, settings, log and launcher. */
 export function addinHome(): string {
-  return process.env.OPEN_CHARTS_HOME ?? join(homedir(), 'Library', 'Application Support', 'open-charts');
+  if (process.env.OPEN_CHARTS_HOME) return process.env.OPEN_CHARTS_HOME;
+  // Windows: where install.ps1 puts open-charts.exe (the VBA looks there too).
+  if (process.platform === 'win32') return join(process.env.LOCALAPPDATA ?? join(homedir(), 'AppData', 'Local'), 'open-charts');
+  return join(homedir(), 'Library', 'Application Support', 'open-charts');
 }
 
 export const launcherPath = (home = addinHome()) => join(home, 'bin', 'open-charts');
@@ -16,7 +19,9 @@ export const launcherPath = (home = addinHome()) => join(home, 'bin', 'open-char
 const shellPath = (p: string) => `"${p.startsWith(homedir() + '/') ? `$HOME${p.slice(homedir().length)}` : p}"`;
 
 /** The command to (re)install the add-in, as the user can paste it into Terminal. */
-export const reinstallCommand = (home = addinHome()) => `${shellPath(launcherPath(home))} addin install`;
+export const reinstallCommand = (home = addinHome()) => process.platform === 'win32'
+  ? 'powershell -ExecutionPolicy Bypass -File install.ps1 (in the open-charts-win folder you downloaded)'
+  : `${shellPath(launcherPath(home))} addin install`;
 
 /**
  * The launcher: the Node that ran the install (or the one on PATH, if that one has gone) running the

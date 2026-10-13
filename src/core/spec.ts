@@ -24,6 +24,28 @@ export const SERIES_KEYS = ['name', 'values', 'color', 'as', 'hidden'] as const;
 export type ChartTypeName = typeof CHART_TYPES[number];
 const except = (...types: ChartTypeName[]) => CHART_TYPES.filter((t) => !types.includes(t));
 
+/**
+ * The direction a chart grows in (the reference's insert arrows ▲ ▼ ◀ ▶, manual: Rotate and flip
+ * elements): `up` columns from the baseline (default), `down` columns hanging from the top, `right`
+ * bars growing to the right (categories on the left), `left` bars growing to the left (categories on
+ * the right). A line chart turned sideways is a profile chart; lines and areas are never hung upside
+ * down (a value axis growing downwards reads as a loss).
+ */
+export const DIRECTIONS = {
+  stacked: ['up', 'down', 'left', 'right'],
+  clustered: ['up', 'down', 'left', 'right'],
+  percent: ['up', 'down', 'left', 'right'],
+  waterfall: ['up', 'down', 'left', 'right'],
+  mekko: ['up', 'down', 'left', 'right'],
+  line: ['up', 'left', 'right'],
+  area: ['up', 'left', 'right'],
+  area100: ['up', 'left', 'right'],
+  combo: ['up', 'down', 'left', 'right'],
+} as const satisfies Partial<Record<ChartTypeName, readonly Direction[]>>;
+export type Direction = 'up' | 'down' | 'left' | 'right';
+/** Directions a chart type can be drawn in (`['up']` for the types without arrows). */
+export const directionsOf = (type: string): readonly Direction[] => (DIRECTIONS as Record<string, readonly Direction[]>)[type] ?? ['up'];
+
 /** Inclusive numeric limits, shared by the validator, the JSON Schema and the editor's inputs. */
 export const LIMITS = {
   decimals: { min: 0, max: 10, step: 1 },
@@ -50,7 +72,7 @@ export const OPTIONS = {
   format: { types: except('harvey', 'gantt'), value: 'Excel number format', auto: 'none' },
   locale: { types: except('harvey'), value: '`en-US` `en-GB` `en-IN` `de-DE` `fr-FR`', auto: '`en-US`' },
   scale: { types: except('harvey', 'gantt'), value: '`none` `auto` `k` `m` `bn`' },
-  orientation: { types: ['stacked', 'clustered', 'percent'], value: '`vertical` `horizontal`' },
+  direction: { types: Object.keys(DIRECTIONS) as ChartTypeName[], value: '`up` `down` `left` `right`' },
   valueAxis: { types: ['stacked', 'clustered', 'percent', 'waterfall', 'mekko', 'line', 'area', 'area100', 'combo', 'mekkoxy'], value: 'boolean' },
   zeroBased: { types: ['line', 'scatter', 'bubble'], value: 'boolean', auto: 'on, unless the data sits in a narrow band far from zero' },
   gap: { types: ['stacked', 'clustered', 'percent', 'waterfall', 'combo'], value: `number ${LIMITS.gap.min}–${LIMITS.gap.max}` },
@@ -96,7 +118,7 @@ export const appliesTo = (key: string, type: string): boolean =>
 export function optionDefaults(type: string): ChartOptions {
   const all: ChartOptions = {
     scale: 'none',
-    orientation: 'vertical',
+    direction: 'up',
     valueAxis: type === 'line',
     gap: 0.5,
     totals: type === 'stacked' || type === 'mekko' || type === 'mekkoxy',
@@ -116,6 +138,7 @@ export const editorSpec = () => ({
   options: Object.fromEntries(OPTION_KEYS.map((k) => [k, OPTIONS[k].types])),
   defaults: Object.fromEntries(CHART_TYPES.map((t) => [t, optionDefaults(t)])),
   limits: LIMITS,
+  directions: DIRECTIONS,
 });
 export const DECK_KEYS = ['$schema', 'specVersion', 'style', 'slides'] as const;
 export const SLIDE_KEYS = ['title', 'chart', 'charts'] as const;
@@ -136,8 +159,9 @@ const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v
 export function migrate<T extends object>(spec: T, warnings?: string[], base = ''): T & { specVersion: number } {
   if (!spec || typeof spec !== 'object' || Array.isArray(spec)) return spec as T & { specVersion: number };
   const v = (spec as { specVersion?: unknown }).specVersion;
-  if (v !== undefined) return spec as T & { specVersion: number };
+  if (v !== undefined) return renameOrientation(spec, warnings, base) as T & { specVersion: number };
   const out = { specVersion: SPEC_VERSION, ...clone(spec) } as T & { specVersion: number; type?: unknown; options?: Record<string, unknown> };
+  renameOrientation(out, warnings, base, true);
   const { type, options } = out;
   if (isObj(options) && CHART_TYPES.includes(type as never)) {
     for (const k of Object.keys(options)) {
@@ -147,6 +171,30 @@ export function migrate<T extends object>(spec: T, warnings?: string[], base = '
       }
     }
   }
+  return out;
+}
+
+/**
+ * `options.orientation` (`vertical` | `horizontal`, before chart directions) is now `direction`
+ * (`up` | `right`): rewritten wherever it appears, with a warning. Returns a copy when it changes
+ * anything (in place with `inPlace`, for a copy `migrate` already made).
+ */
+function renameOrientation<T extends object>(spec: T, warnings: string[] | undefined, base: string, inPlace = false): T {
+  const o = (spec as { options?: unknown }).options;
+  if (!isObj(o) || !('orientation' in o)) return spec;
+  const out = inPlace ? spec : clone(spec);
+  const opts = (out as { options: Record<string, unknown> }).options;
+  const { orientation, ...rest } = opts;
+  const dir = orientation === 'horizontal' ? 'right' : orientation === 'vertical' ? 'up' : undefined;
+  if (dir === undefined) return spec; // an invalid value: the validator reports it under its own name
+  const next: Record<string, unknown> = {};
+  // Same position in the options, so the spec still reads the same way.
+  for (const k of Object.keys(opts)) {
+    if (k === 'orientation') { if (dir !== 'up' && rest.direction === undefined) next.direction = dir; }
+    else next[k] = opts[k];
+  }
+  (out as { options: Record<string, unknown> }).options = next;
+  warnings?.push(`${base}/options/orientation: renamed to "direction"${dir === 'up' ? ' (up is the default; removed)' : ` ("${dir}")`}`);
   return out;
 }
 
@@ -362,7 +410,10 @@ function validateOptions(e: Errors, o: Record<string, unknown>, type: string, nC
     if (o[k] !== undefined && !values.includes(o[k] as string)) e.add(p(k), `must be one of ${values.join(', ')}, got ${describe(o[k])}`);
   };
   enumOf('scale', ['none', 'auto', 'k', 'm', 'bn']);
-  enumOf('orientation', ['vertical', 'horizontal']);
+  if (o.direction !== undefined && appliesTo('direction', type)) {
+    const ok = directionsOf(type);
+    if (!ok.includes(o.direction as Direction)) e.add(p('direction'), `must be one of ${ok.join(', ')} for ${type} charts, got ${describe(o.direction)}`);
+  }
   enumOf('mekko', ['percent', 'unit']);
   enumOf('seriesLabels', ['right', 'legend', 'none']);
   enumOf('labelContent', ['percent', 'value', 'both']);

@@ -4,15 +4,21 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkScene, type ChartSpec, type Frame, type Scene, type Shape } from '../src/core/index.ts';
 import { samples } from '../src/core/samples.ts';
+import { directionsOf } from '../src/core/spec.ts';
 import type { Measurer } from '../src/core/text.ts';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
 export interface Case { name: string; spec: ChartSpec }
 
-/** Every sample (one per chart type) and every chart of every example deck. */
+/** Every sample (one per chart type, and in each other direction it can grow in) and every chart of every example deck. */
 export function allCases(): Case[] {
   const out: Case[] = Object.entries(samples).map(([type, spec]) => ({ name: `sample:${type}`, spec: spec! }));
+  for (const [type, spec] of Object.entries(samples)) {
+    for (const direction of directionsOf(type).filter((d) => d !== 'up')) {
+      out.push({ name: `sample:${type}:${direction}`, spec: { ...spec!, options: { ...spec!.options, direction } } });
+    }
+  }
   for (const f of readdirSync(`${root}examples`).filter((f) => f.endsWith('.json')).sort()) {
     const deck = JSON.parse(readFileSync(`${root}examples/${f}`, 'utf8'));
     const slides: { chart?: ChartSpec; charts?: { chart: ChartSpec }[] }[] = Array.isArray(deck.slides) ? deck.slides : [{ chart: deck }];

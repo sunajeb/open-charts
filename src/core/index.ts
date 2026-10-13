@@ -4,6 +4,7 @@ import { makeCtx, type LayoutHints } from './common.ts';
 export type { LayoutHints } from './common.ts';
 import { resolveColor, resolveStyle, themeOf } from './theme.ts';
 import { appliesTo, prepareSpec } from './spec.ts';
+import { mirrorShapes } from './direction.ts';
 import { resolveCollisions } from './resolve.ts';
 import { restoreRoles, visibleSeries } from './visible.ts';
 import { minimumSize, placeholder, TooSmall } from './minsize.ts';
@@ -38,9 +39,9 @@ export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
 export {
   SPEC_VERSION, migrate, migrateDeck, validateSpec, validateDeck, validateStyle, InvalidSpecError, OPTIONS, LIMITS, appliesTo, optionDefaults, editorSpec,
-  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES,
+  CHART_KEYS, OPTION_KEYS, SERIES_KEYS, DECK_KEYS, STYLE_KEYS, STYLE_NUMBER_KEYS, SLIDE_KEYS, SLIDE_CHART_KEYS, CHART_TYPES, DIRECTIONS, directionsOf,
 } from './spec.ts';
-export type { SpecError, OptionInfo, OptionKey } from './spec.ts';
+export type { SpecError, OptionInfo, OptionKey, Direction } from './spec.ts';
 export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
 export type { NumberStyle, Locale } from './numbers.ts';
 export { parseCategoryDate, years360, cagrYears } from './dates.ts';
@@ -135,6 +136,9 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     }
     if (size.w !== frame.w || size.h !== frame.h) break;
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
+    // "down" and "left" are the native "up" / "right" layouts mirrored (direction.ts).
+    const dir = ctx.o.direction;
+    if (dir === 'down' || dir === 'left') mirrorShapes(ctx.shapes, ctx.roles, ctx.frame, dir === 'left' ? 'x' : 'y');
     ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
     restoreRoles(ctx.roles, index);
     const warnings = any(prepared.overrides) ? unmatched(prepared.overrides, seen, prepared) : [];

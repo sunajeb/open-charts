@@ -18,6 +18,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
       - run: npm test
       - run: npm run quality -- --quick
 
@@ -39,6 +41,86 @@ jobs:
           name: e2e-results
           path: test-results/
           retention-days: 7
+
+  # Windows: the unit suite, the engine as a single executable (no Node on the PC), its smoke test,
+  # the VBA's HTTP calls made the way VBA makes them (MSXML2.ServerXMLHTTP from COM), and
+  # install.ps1 / uninstall.ps1 against a temporary profile. No PowerPoint on the runner: the live
+  # add-in run is tools/e2e-powerpoint-win.ps1 on a real PC (docs/ACCEPTANCE.md).
+  windows:
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:win
+      - run: node --experimental-strip-types --no-warnings scripts/smoke-exe.ts dist/win/open-charts.exe
+      - name: install.ps1, the engine as VBA calls it, uninstall.ps1 (temporary profile)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tmp = Join-Path $env:RUNNER_TEMP 'oc-profile'
+          $engine = Join-Path $tmp 'Local\open-charts'
+          $addins = Join-Path $tmp 'Roaming\Microsoft\AddIns'
+          $office = 'HKCU:\Software\open-charts-ci\Office\16.0\PowerPoint'
+          $common = @('-EngineDir', $engine, '-AddInsDir', $addins, '-OfficeKey', $office)
+          powershell -NoProfile -ExecutionPolicy Bypass -File dist\win\install.ps1 -DryRun @common
+          if ($LASTEXITCODE -or (Test-Path $engine) -or (Test-Path $office)) { throw 'the dry run changed something' }
+          # A "downloaded from the internet" mark, as a browser leaves it: install.ps1 must remove it.
+          Set-Content -Path dist\win\open-charts.ppam -Stream Zone.Identifier -Value "[ZoneTransfer]`r`nZoneId=3"
+          powershell -NoProfile -ExecutionPolicy Bypass -File dist\win\install.ps1 @common
+          if ($LASTEXITCODE) { throw "install.ps1 exited $LASTEXITCODE" }
+          $exe = Join-Path $engine 'open-charts.exe'
+          $ppam = Join-Path $addins 'open-charts.ppam'
+          foreach ($f in $exe, $ppam, (Join-Path $engine 'addin.json'), (Join-Path $engine 'uninstall.ps1')) { if (-not (Test-Path $f)) { throw "missing $f" } }
+          if (Get-Item $ppam -Stream Zone.Identifier -ErrorAction SilentlyContinue) { throw 'the ppam is still marked as downloaded' }
+          $reg = Get-ItemProperty (Join-Path $office 'AddIns\open-charts')
+          if ($reg.Path -ne $ppam -or $reg.AutoLoad -ne 1) { throw "registry: $($reg | Out-String)" }
+          if ((Get-ItemProperty (Join-Path $office 'Security\Trusted Locations\open-charts')).Path -ne "$addins\") { throw 'no trusted location' }
+          if ((Get-Content (Join-Path $engine 'addin.json') -Raw | ConvertFrom-Json).prefix -notmatch '^OC[0-9A-F]{24}$') { throw 'addin.json prefix' }
+          # The engine as the VBA starts it (hidden) and calls it (ServerXMLHTTP, UTF-8 both ways).
+          Start-Process -FilePath $exe -ArgumentList 'addin', 'serve' -WindowStyle Hidden
+          $up = $false
+          for ($i = 0; $i -lt 150 -and -not $up; $i++) {
+            Start-Sleep -Milliseconds 100
+            $http = New-Object -ComObject MSXML2.ServerXMLHTTP.6.0
+            $http.setProxy(1)
+            $http.setTimeouts(1000, 1000, 5000, 5000)
+            try { $http.open('GET', 'http://127.0.0.1:4174/api/addin/ping', $false); $http.send(); $up = ($http.status -eq 200) } catch { }
+          }
+          if (-not $up) { throw 'the engine did not start' }
+          $label = 'Caf' + [char]0xE9 + ' ' + [char]0x2713
+          $spec = '{"type":"stacked","categories":["' + $label + '","b"],"series":[{"name":"S","values":[1,2]}]}'
+          $http = New-Object -ComObject MSXML2.ServerXMLHTTP.6.0
+          $http.setProxy(1)
+          $http.open('POST', 'http://127.0.0.1:4174/api/addin/run', $false)
+          $http.setRequestHeader('Content-Type', 'text/plain; charset=utf-8')
+          $http.send("update`n`n48,96,864,408`n48,96,864,408`n$spec")
+          $answer = [string]$http.responseText
+          if ($http.status -ne 200 -or -not $answer.StartsWith("OC`t") -or -not $answer.Contains($label)) { throw "engine answer: $($answer.Substring(0, [Math]::Min(300, $answer.Length)))" }
+          Write-Host 'the engine answered over ServerXMLHTTP with the Unicode label intact'
+          powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $engine 'uninstall.ps1') @common
+          if ($LASTEXITCODE) { throw "uninstall.ps1 exited $LASTEXITCODE" }
+          foreach ($p in $engine, $ppam, (Join-Path $office 'AddIns\open-charts'), (Join-Path $office 'Security\Trusted Locations\open-charts')) { if (Test-Path $p) { throw "not removed: $p" } }
+          $still = $true
+          try { Invoke-WebRequest -UseBasicParsing http://127.0.0.1:4174/api/addin/ping -TimeoutSec 2 | Out-Null } catch { $still = $false }
+          if ($still) { throw 'the engine is still running after uninstall' }
+          Remove-Item -Recurse -Force 'HKCU:\Software\open-charts-ci'
+          Write-Host 'install / uninstall OK'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-charts-win
+          path: |
+            dist/win/open-charts.exe
+            dist/win/open-charts.ppam
+            dist/win/addin.json
+            dist/win/*.ps1
+          retention-days: 30
 
   # LibreOffice renders fonts differently per OS, so baselines are per platform (test/goldens/<platform>/).
   # Until test/goldens/linux/ is committed (download the "goldens" artifact, review, commit), this job
