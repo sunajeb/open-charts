@@ -420,7 +420,7 @@ console.log(`\nTimings (wall clock, AppleScript run VB macro included):
   update      ${ms(timings.update)}   VBA ${ms(vbaMs(/RESULT btnUpdate/))}
   resize      ${ms(timings.resize)} (selection change incl. re-layout)
   edit data   ${timings.edit} ms to session + editor launch
-  apply       ${ms(timings.apply)} from editor Apply to chart updated (first PowerPoint session, then a restarted one)   VBA ${ms(vbaMs(/APPLIED/))}`);
+  apply       ${timings.apply.join(' ms, ')} ms from editor Apply to chart updated (single chart, then a same-scale pair in a restarted PowerPoint)   VBA ${vbaMs(/APPLIED/).join(' ms, ')} ms`);
 console.log(`PNGs: ${PNG_DIR} (CLI writer: ${CLI_PNG_DIR})`);
 if (failures.length) {
   console.error(`\nFAILED:\n  ${failures.join('\n  ')}`);

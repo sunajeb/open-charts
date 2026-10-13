@@ -144,18 +144,24 @@ end run`;
  * newline): after drawing, the context of the new chart; without an APPLIED line, the chart's
  * context did not match the one the response was laid out for, so lay it out again for this one.
  */
-export function parseApplyAnswer(out: string): { lines: string[]; context?: string; applied?: string } {
+export function parseApplyAnswer(out: string): { lines: string[]; context?: string; applied?: string; timer?: [number, number] } {
   const lines: string[] = [];
-  let context: string | undefined, applied: string | undefined;
+  let context: string | undefined, applied: string | undefined, timer: [number, number] | undefined;
   for (const line of out.replace(/\r/g, '\n').split('\n')) {
     if (line.startsWith('CONTEXT\t')) context = line.slice(8).replace(/\t/g, '\n');
-    else if (line.trim()) {
+    else if (line.startsWith('TIMER\t')) {
+      const [a, b] = line.slice(6).split('\t').map(Number);
+      if (Number.isFinite(a) && Number.isFinite(b)) timer = [a, b];
+    } else if (line.trim()) {
       lines.push(line.trim());
       if (line.startsWith('APPLIED ')) applied = line.trim();
     }
   }
-  return { lines, context, applied };
+  return { lines, context, applied, ...(timer ? { timer } : {}) };
 }
+
+/** Seconds since local midnight, as VBA's Timer counts. */
+const sinceMidnight = (ms: number) => { const d = new Date(ms); return (ms - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 1000; };
 
 /** What the user should be told when `run VB macro` failed (osascript's error, or a timeout). */
 export function applyErrorMessage(err: { message: string; killed?: boolean }): string {
@@ -217,6 +223,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   let context = contextOf(s.id);
   let response = await lay(context);
   if (response) settle();
+  let sent = Date.now();
   let result = await run(applyScript(prefix), APPLY_TIMEOUT_MS, [s.id, context ?? '', response]);
   let answer = typeof result === 'string' ? parseApplyAnswer(result) : undefined;
   if (answer && !answer.applied && answer.context !== undefined && prepare) {
@@ -224,10 +231,16 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
     context = answer.context;
     response = await lay(context);
     if (response) settle();
+    sent = Date.now();
     result = await run(applyScript(prefix), APPLY_TIMEOUT_MS, [s.id, '*', response]);
     answer = typeof result === 'string' ? parseApplyAnswer(result) : undefined;
   }
-  const ms = Date.now() - t;
+  const back = Date.now(), ms = back - t;
+  // Where the time went: until the macro started (osascript, Apple event), in it, and back.
+  const [t0, t1] = answer?.timer ?? [];
+  const parts = t0 !== undefined && t1 !== undefined && t1 >= t0
+    ? `, to macro ${Math.round((t0 - sinceMidnight(sent)) * 1000)} ms, macro ${Math.round((t1 - t0) * 1000)} ms, back ${Math.round((sinceMidnight(back) - t1) * 1000)} ms`
+    : '';
   if (result && typeof result === 'object') {
     log(`APPLY ${s.id} failed after ${ms} ms: ${result.killed ? 'timed out' : result.message}`, home);
     return fail(applyErrorMessage(result));
@@ -237,7 +250,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   const now = ours();
   // An older add-in (no answer) settles through the engine instead: "open" means it drew.
   const drew = answer?.applied ? / OK\b/.test(answer.applied) : now?.state === 'open';
-  log(`APPLY ${s.id} ${drew ? 'done' : 'ran, but no chart was updated'} (${ms} ms${prepare ? `, layout ${layoutMs} ms` : ''})`, home);
+  log(`APPLY ${s.id} ${drew ? 'done' : 'ran, but no chart was updated'} (${ms} ms${prepare ? `, layout ${layoutMs} ms` : ''}${parts})`, home);
   if (drew && now) setSession(s.id, { state: 'drawn' });
   else fail('PowerPoint could not find the chart. Click it once on the slide, then Apply again (or click Update chart).');
 }

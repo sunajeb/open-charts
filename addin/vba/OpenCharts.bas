@@ -178,6 +178,12 @@ Failed:
 Done:
     gCollect = False
     gSilent = False
+    ' When the macro started and ended (seconds since midnight), for the server's timing log.
+    OCPREFIX_ApplyEdit = OCPREFIX_ApplyEdit & vbLf & "TIMER" & vbTab & Fmt3(t) & vbTab & Fmt3(Timer)
+End Function
+
+Private Function Fmt3(ByVal v As Double) As String
+    Fmt3 = Replace(Format$(v, "0.000"), ",", ".")
 End Function
 
 ' What a layout depends on besides the data: the request lines between the session id and the spec.
