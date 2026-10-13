@@ -459,31 +459,35 @@ set width of b to 440`);
     expect(/RESULT btnResetLabel OK/.test(out) && !specOf(byType('stacked'))?.overrides?.['label:total:c1']?.pin, `Reset label position (${out})`);
   }
 
-  // Undo: presses of Cmd+Z (System Events, as the user) until a marker shape made right before the
-  // action is gone, minus one = undo entries of the action.
-  const sig = () => ppt(`set out to ""
-repeat with s in shapes of slide 1 of active presentation
+  // Undo: Cmd+Z presses (System Events, as the user) until the slide is back to the state before the
+  // action. Each action follows a keyboard edit of the user's (nudging chart 1 with the arrow key), so
+  // an action that merged into the previous undo entry would overshoot instead of stopping there. The
+  // chart the action replaces is renamed first, so a replacement with the same geometry still shows.
+  const sig = () => ppt(`set acc to ""
+set sl to slide 1 of presentation 1
+repeat with i from 1 to (count of shapes of sl)
+  set s to shape i of sl
   set n to 0
   try
     set n to count of group items of s
   end try
-  set out to out & (name of s) & "#" & n & "@" & (round (left position of s)) & "," & (round (top of s)) & "," & (round (width of s)) & "," & (round (height of s)) & "|"
+  set acc to acc & (get name of s) & "#" & n & "@" & ((get left position of s) as integer) & "," & ((get top of s) as integer) & "," & ((get width of s) as integer) & "," & ((get height of s) as integer) & "|"
 end repeat
-return out`);
+return acc`);
   const press = () => { osa('tell application "Microsoft PowerPoint" to activate\ntell application "System Events" to keystroke "z" using command down'); sleep(400); };
-  const unmark = (s: string) => s.replace(/MARK#[^|]*\|/, '');
-  const measure = (name: string, action: () => void, max = 30) => {
+  const measure = (name: string, action: () => void, max = 8) => {
     try {
-      ppt('make new shape at end of slide 1 of active presentation with properties {name:"MARK", left position:2, top:2, width:6, height:6}');
-      const pre = unmark(sig());
+      macro('SelectChart', '1');
+      osa('tell application "Microsoft PowerPoint" to activate\ntell application "System Events" to key code 124');
+      sleep(500);
+      try { ppt('set name of shape 3 of slide 1 of presentation 1 to "BEFORE"'); } catch { /* no third chart yet */ }
+      const pre = sig();
       action();
       sleep(300);
       const states = [sig()];
-      while (states[states.length - 1].includes('MARK#') && states.length <= max) { press(); states.push(sig()); }
-      const gone = !states[states.length - 1].includes('MARK#');
-      const entries = states.length - 2;
-      const restored = gone && unmark(states[states.length - 2]) === pre;
-      undoCounts[name] = gone ? `${entries}${restored ? '' : ' (state before differs)'}` : `>${max}`;
+      for (let i = 0; i < max && states[states.length - 1] !== pre; i++) { press(); states.push(sig()); }
+      const k = states.indexOf(pre);
+      undoCounts[name] = k > 0 ? String(k) : `not back to the state before in ${max} presses`;
     } catch (err) {
       undoCounts[name] = `not measured: ${(err as Error).message.split('\n')[0]}`;
     }
@@ -500,6 +504,8 @@ return out`);
   measure('same scale', () => { macro('SelectCharts', '1,3'); macro('Run', 'btnSameScale'); });
   ppt('close active presentation saving no\nquit saving no');
   console.log(`Undo entries per action (Cmd+Z presses): ${Object.entries(undoCounts).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  // One press per action; a resize is the user's drag plus the add-in's re-layout: two.
+  for (const [k, v] of Object.entries(undoCounts)) if (!v.startsWith('not measured') && v !== (k === 'resize' ? '2' : '1')) failures.push(`undo ${k}: ${v} presses`);
 }
 
 for (const sl of slides) {

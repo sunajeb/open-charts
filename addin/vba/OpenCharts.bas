@@ -70,6 +70,8 @@ Private gCollected As String
 ' The direction buttons: the direction the next inserted chart grows in ("" = up, the default), and
 ' the selected chart's type and direction as of the last selection change ("" = no chart selected).
 Private gNextDir As String
+' How often PowerPoint asked a right-click item whether to show (OCPREFIX_Probe reports it).
+Private gVisibleCalls As Long
 Private gSelType As String
 Private gSelDir As String
 
@@ -163,6 +165,7 @@ End Sub
 ' Right-click menu items (customUI contextMenus): shown only on open-charts charts, and only the
 ' commands that apply to what is selected.
 Public Sub OCPREFIX_getVisible(ByVal control As Object, ByRef visible)
+    gVisibleCalls = gVisibleCalls + 1
     visible = False
     On Error Resume Next
     visible = CommandApplies(CommandId(control.Id))
@@ -463,6 +466,7 @@ Public Sub OCPREFIX_Probe(ByVal n As String)
         If CommandApplies(CStr(c)) Then out = out & " " & c
     Next c
     Report "APPLIES" & out
+    Report "VISIBLECALLS " & gVisibleCalls
 End Sub
 
 ' Resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.

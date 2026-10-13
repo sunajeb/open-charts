@@ -667,6 +667,23 @@ resizing one chart of the group re-lay out the other charts of the group on that
 line, a slide can hold several charts (`"charts": [...]`); without explicit frames they share the
 chart area side by side.
 
+## Undo and the right-click menu on a Mac
+
+**Undo.** Each open-charts action is one step of PowerPoint's undo (⌘Z): inserting a chart, Update
+chart, Apply from the datasheet, a change in the element toolbar, a direction button and every Chart
+tools command (Same scale re-draws several charts and is still one step). Measured in PowerPoint for
+Mac 16 with `npm run e2e:powerpoint`: one ⌘Z each takes the slide back to exactly where it was.
+Resizing is two steps: your drag, then the re-layout open-charts does when you click elsewhere. The
+first ⌘Z gives you back the stretched drawing, the second the original size; after one ⌘Z, clicking
+elsewhere lays the stretched chart out again.
+
+On Windows the add-in also starts a new undo step before each action (`StartNewUndoEntry`, which
+PowerPoint for Windows needs so a macro's changes are not merged into your last edit), so Ctrl+Z
+undoes the action and nothing before it. That path has not been measured in PowerPoint for Windows
+yet.
+
+**Right-click menu.** PowERPOINT_MAC_CONTEXT_MENU
+
 ## Resizing
 
 open-charts never stretches a chart. Text keeps its point size; the layout is recomputed for the new
