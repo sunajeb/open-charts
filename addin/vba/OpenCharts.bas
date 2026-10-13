@@ -30,6 +30,8 @@ Private gLastMessage As String
 ' The chart last opened with Edit data, so Apply in the editor can update it in place.
 Private gEditShape As Object
 Private gEditId As String
+' The element mini toolbar: what NotifySelection last reported ("" = nothing selected).
+Private gSelSig As String
 ' Filled by Draw from the engine's answer.
 Private gNothing As Boolean
 Private gSessionId As String
@@ -99,11 +101,55 @@ Public Sub OnSelectionChange()
     gBusy = True
     On Error Resume Next
     CheckResized
+    NotifySelection
     If Not gRibbon Is Nothing Then
         gRibbon.InvalidateControl "btnEditData"
         gRibbon.InvalidateControl "btnUpdate"
     End If
     gBusy = False
+End Sub
+
+' The element mini toolbar (src/addin/toolbar.ts): tells the add-in server which elements of an
+' open-charts chart are selected (their OC_ROLE tags) and where, or that none are any more. Only
+' when that changes, and never for other selections: one AppleScriptTask that starts a background
+' curl and returns at once. Silent: an older bridge script without the handler is ignored.
+Private Sub NotifySelection()
+    Dim sel As Object, chart As Object, shp As Object, roles As String, r As String, i As Long
+    Dim x0 As Double, y0 As Double, x1 As Double, y1 As Double, sig As String, request As String
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If sel.HasChildShapeRange Then
+        Set chart = sel.ChildShapeRange(1).ParentGroup
+        If Not chart Is Nothing Then
+            If Not IsChart(chart) Then Set chart = Nothing
+        End If
+    End If
+    If Not chart Is Nothing Then
+        x0 = 1E+30: y0 = 1E+30: x1 = -1E+30: y1 = -1E+30
+        For i = 1 To sel.ChildShapeRange.Count
+            Set shp = sel.ChildShapeRange(i)
+            r = TagValue(shp, "OC_ROLE")
+            If r <> "" Then
+                roles = roles & IIf(roles = "", "", vbTab) & r
+                If shp.Left < x0 Then x0 = shp.Left
+                If shp.Top < y0 Then y0 = shp.Top
+                If shp.Left + shp.Width > x1 Then x1 = shp.Left + shp.Width
+                If shp.Top + shp.Height > y1 Then y1 = shp.Top + shp.Height
+            End If
+        Next i
+    End If
+    If roles = "" Then
+        If gSelSig = "" Then Exit Sub
+        gSelSig = ""
+        request = "select" & vbLf & "" & vbLf
+    Else
+        sig = chart.Id & "|" & roles & "|" & Fmt(x0) & "," & Fmt(y0) & "," & Fmt(x1) & "," & Fmt(y1)
+        If sig = gSelSig Then Exit Sub
+        gSelSig = sig
+        request = "select" & vbLf & roles & vbLf & ChartContext(chart) & ScreenLinesFor(x0, y0, x1 - x0, y1 - y0) & SpecOf(chart)
+    End If
+    request = "seq=" & Fmt3(Timer) & vbLf & request
+    AppleScriptTask SCRIPT_FILE, "elementSelection", request
 End Sub
 
 ' ---- Automation entry points (AppleScript "run VB macro", the add-in server, tests) ---------
@@ -190,6 +236,30 @@ End Function
 Private Function ChartContext(ByVal chart As Object) As String
     ChartContext = TagValue(chart, "OC_FRAME") & vbLf & Fmt(chart.Left) & "," & Fmt(chart.Top) & "," & Fmt(chart.Width) & "," & Fmt(chart.Height) & vbLf & _
         ThemeLine(chart.Parent) & ScaleLine(chart)
+End Function
+
+' Where the chart is on screen, for the Edit data pop-up (src/addin/popup.ts ChartWhere):
+' "screen=left,top,right,bottom" through PointsToScreenPixelsX/Y, and "window=left,top,width,height,
+' zoom" of the document window. Either is left out when PowerPoint cannot tell; the server only
+' trusts the corners when they fall inside a PowerPoint window, else it places the pop-up by the window.
+Private Function ScreenLines(ByVal chart As Object) As String
+    ScreenLines = ScreenLinesFor(chart.Left, chart.Top, chart.Width, chart.Height)
+End Function
+
+' The same for a rectangle on the slide (pt).
+Private Function ScreenLinesFor(ByVal x As Double, ByVal y As Double, ByVal cx As Double, ByVal cy As Double) As String
+    Dim w As Object, s As String
+    On Error Resume Next
+    Set w = ActiveWindow
+    If w Is Nothing Then Exit Function
+    Err.Clear
+    s = Fmt(w.PointsToScreenPixelsX(x)) & "," & Fmt(w.PointsToScreenPixelsY(y)) & "," & _
+        Fmt(w.PointsToScreenPixelsX(x + cx)) & "," & Fmt(w.PointsToScreenPixelsY(y + cy))
+    If Err.Number = 0 Then ScreenLinesFor = "screen=" & s & vbLf
+    Err.Clear
+    s = Fmt(w.Left) & "," & Fmt(w.Top) & "," & Fmt(w.Width) & "," & Fmt(w.Height) & "," & Fmt(w.View.Zoom)
+    If Err.Number = 0 Then ScreenLinesFor = ScreenLinesFor & "window=" & s & vbLf
+    Err.Clear
 End Function
 
 ' A context as one answer line (src/addin/server.ts parseApplyAnswer).
@@ -315,7 +385,8 @@ Private Sub EditData()
     Set chart = SelectedChart()
     If chart Is Nothing Then Exit Sub
     ' The chart's context too: the server lays an Apply out for it by itself (ApplyEdit).
-    response = Engine("edit" & vbLf & "" & vbLf & ChartContext(chart) & SpecOf(chart))
+    ' And where it is on screen, so the Edit data pop-up opens next to it (ScreenLines).
+    response = Engine("edit" & vbLf & "" & vbLf & ChartContext(chart) & ScreenLines(chart) & SpecOf(chart))
     If response = "" Then Exit Sub
     gSessionId = ""
     Draw Nothing, response
