@@ -95,3 +95,8 @@ Paused (WIP committed, resume when a slot frees):
 - `worktree-agent-ae1e538056e5cb79e` template: style files done + tested (736b5f1); template fill written, untested (7b5c8c7) — left: CLI `fill`, test template, tests, live check, docs, goldens.
 - `worktree-agent-aa7bbb00335276f0b` agenda: engine + CLI deck agenda done (54742b4); add-in side WIP (0bde1f4) — left: engine hook, format, VBA ribbon/commands, tests, live test, docs.
 Owner questions pending: mini-toolbar implementation (8 questions), Windows laptop facts (PowerShell snippet + 7 questions).
+
+- [ ] Same scale from the ribbon: select 2+ charts → "Same scale" command (writes scaleGroup), kept automatically
+- [ ] Undo: one Cmd+Z per insert / data edit / format (check Mac VBA options; Windows: Application.StartNewUndoEntry)
+- [ ] Direct manipulation on Mac: transparent overlay + event monitor in the helper app for drag handles (gap width, label pin, axis bounds, arrow levels) and a native right-click menu — feasibility first (Accessibility permission)
+- [ ] Copy/paste a chart to another deck stays editable (tags) — add to acceptance
