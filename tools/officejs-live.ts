@@ -59,7 +59,9 @@ for (let waited = 0; !ownsLock; waited += 30) {
   if (waited % 300 === 0) console.log(`Waiting for ${LOCK} (another live run or the owner is using PowerPoint)…`);
   await sleep(30_000);
 }
-try {
+// --no-sideload: the owner copied the manifest (Finder), because macOS keeps this process out of
+// PowerPoint's folder; the build's manifest is the same each time, so that copy stays valid.
+if (!process.argv.includes('--no-sideload')) try {
   mkdirSync(WEF, { recursive: true });
   copyFileSync(join(dist, 'manifest.xml'), join(WEF, 'open-charts-officejs.manifest.xml'));
 } catch (e) {
