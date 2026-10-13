@@ -18,6 +18,8 @@
 //      native=JSON    what its shapes look like now: [{role, kind, props}] (core/overrides.ts
 //                     RenderedEntry); with base, formatting changed in PowerPoint since is kept as
 //                     overrides (mergeNativeEdits) instead of being drawn over
+//      screen=…, window=…  (edit) where the chart is on screen, for the Edit data pop-up
+//                     (src/addin/popup.ts ChartWhere); not part of the layout context
 //   (edit sends the same lines 3–4 and params, so the server can lay an Apply out by itself:
 //    layoutForApply)
 //   5… spec     the chart's OC_SPEC tag, reassembled (update, relayout, edit); always starts with "{"
@@ -39,6 +41,7 @@ import type { Session } from '../server.ts';
 import { FORMAT_VERSION, num, record, shapeBounds, shapeRecord } from './format.ts';
 import { galleryItems, sampleFor, typeLabel } from './registry.ts';
 import { reinstallCommand } from './launcher.ts';
+import { parseWhere, type ChartWhere } from './popup.ts';
 
 export interface AddinRequest {
   op: string; arg: string; frame?: Frame; bounds?: Frame; spec: string;
@@ -54,6 +57,8 @@ export interface AddinRequest {
    * layout depends on besides the data. VBA compares it with the chart's own to reuse a layout.
    */
   context?: string;
+  /** Edit data: where the chart is on screen (`screen=`, `window=`), to put the pop-up next to it. */
+  where?: ChartWhere;
 }
 
 /** Context of one layout in PowerPoint: the slide's theme and the chart's same-scale group. */
@@ -72,8 +77,8 @@ function parseTheme(v: string): Partial<ThemeColors> | undefined {
 /** Edit sessions on the add-in's local server (src/addin/server.ts). */
 export interface Sessions {
   get(id: string): Promise<Session | undefined>;
-  /** Stores the chart as an open session and shows it in the editor. */
-  open(id: string, chart: object, title: string): Promise<void>;
+  /** Stores the chart as an open session and shows it in the editor (`where`: next to the chart). */
+  open(id: string, chart: object, title: string, where?: ChartWhere): Promise<void>;
   /**
    * Marks an applied session as laid out (back to "open", chart kept; the add-in server sets it to
    * "drawn" once PowerPoint has finished drawing). Sessions are keyed by the chart's OC_SPEC, so
@@ -92,10 +97,12 @@ export function parseRequest(text: string): AddinRequest {
     params[lines[i].slice(0, at)] = lines[i].slice(at + 1).trim();
   }
   const scale = Number(params.scale);
-  // base= / native= describe the shapes, not the layout's context.
-  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native)=/.test(l)).map((l) => `${l}\n`).join('') : '';
+  // base= / native= describe the shapes, screen= / window= where the chart is on screen (Edit data
+  // pop-up): neither is the layout's context.
+  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window)=/.test(l)).map((l) => `${l}\n`).join('') : '';
   const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
   const base = json(params.base), native = json(params.native);
+  const where = parseWhere(params);
   return {
     op: (lines[0] ?? '').trim(),
     arg: (lines[1] ?? '').trim(),
@@ -106,6 +113,7 @@ export function parseRequest(text: string): AddinRequest {
     ...(params.scale && scale > 0 && Number.isFinite(scale) ? { ptPerUnit: scale } : {}),
     ...(context ? { context } : {}),
     ...(base && typeof base === 'object' && !Array.isArray(base) && Array.isArray(native) ? { base, native } : {}),
+    ...(where ? { where } : {}),
   };
 }
 
@@ -185,7 +193,7 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const { chart, style } = readSpec(req.spec); // fail early on a damaged tag
         if (!sessions) return error('Editing is not available here.');
         const id = specKey(req.spec);
-        await sessions.open(id, style ? { ...chart, style } : chart, `${typeLabel(chart.type)} chart`);
+        await sessions.open(id, style ? { ...chart, style } : chart, `${typeLabel(chart.type)} chart`, req.where);
         if (req.context) rememberContext(id, req.context, req.spec);
         return `${header()}\n${record('I', id)}\n`;
       }

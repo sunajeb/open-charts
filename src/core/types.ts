@@ -185,6 +185,12 @@ export interface Style {
   theme?: Partial<Record<'accent1' | 'accent2' | 'accent3' | 'accent4' | 'accent5' | 'accent6' | 'dk1' | 'lt1' | 'dk2' | 'lt2', string>>;
   /** Number defaults for every chart; a chart's own options win. */
   numbers?: Pick<ChartOptions, 'locale' | 'decimals' | 'scale'>;
+  /**
+   * Default element styles: role or selector → ElementStyle, the same vocabulary as a chart's
+   * `overrides` (DATA-FORMAT.md "Overrides"), e.g. {"gridline:*": {"line": "D9D9D9", "dash": "dot"}}.
+   * A chart's own overrides win, property by property. `pin` and `detach` are per element only.
+   */
+  elements?: Overrides;
 }
 
 export interface Frame { x: number; y: number; w: number; h: number }

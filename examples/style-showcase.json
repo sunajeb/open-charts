@@ -1,0 +1,1026 @@
+{
+  "slides": [
+    {
+      "title": "Revenue rose 19% in 2022; the base business added 2m in 2024",
+      "chart": {
+        "type": "stacked",
+        "categories": [
+          "2021",
+          "2022",
+          "2023",
+          "2024"
+        ],
+        "series": [
+          {
+            "name": "Base",
+            "values": [
+              12,
+              18,
+              20,
+              22
+            ]
+          },
+          {
+            "name": "Upsell",
+            "values": [
+              5,
+              2,
+              4,
+              6
+            ]
+          },
+          {
+            "name": "New",
+            "values": [
+              4,
+              5,
+              6,
+              7
+            ]
+          }
+        ],
+        "options": {
+          "unit": "m",
+          "categoryGaps": [
+            1
+          ],
+          "valueLines": [
+            {
+              "value": "mean"
+            }
+          ],
+          "levelArrows": [
+            {
+              "from": {
+                "category": 0
+              },
+              "to": {
+                "category": 1
+              }
+            },
+            {
+              "from": {
+                "category": 2,
+                "series": 0
+              },
+              "to": {
+                "category": 3,
+                "series": 0
+              },
+              "mode": "absolute"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Two regions sell above the average of 12.25",
+      "chart": {
+        "type": "clustered",
+        "categories": [
+          "North",
+          "South",
+          "East",
+          "West",
+          "Central",
+          "Online"
+        ],
+        "series": [
+          {
+            "name": "Sales",
+            "values": [
+              4.35,
+              2.7,
+              2.64,
+              6.68,
+              17.9,
+              39.2
+            ]
+          }
+        ],
+        "options": {
+          "decimals": 2,
+          "seriesLabels": "none",
+          "valueLines": [
+            {
+              "value": "mean"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Online reached half of a growing market (100%= row)",
+      "chart": {
+        "type": "percent",
+        "categories": [
+          "2023",
+          "2024",
+          "2025"
+        ],
+        "series": [
+          {
+            "name": "Online",
+            "values": [
+              40,
+              45,
+              50
+            ]
+          },
+          {
+            "name": "Stores",
+            "values": [
+              45,
+              40,
+              38
+            ]
+          },
+          {
+            "name": "Wholesale",
+            "values": [
+              15,
+              15,
+              12
+            ]
+          }
+        ],
+        "options": {
+          "percentData": true,
+          "percentBase": [
+            1200,
+            1350,
+            1500
+          ],
+          "totals": true,
+          "seriesLabels": "legend"
+        }
+      }
+    },
+    {
+      "title": "Cash went negative before the equity raise closed the gap",
+      "chart": {
+        "type": "waterfall",
+        "categories": [
+          "Opening cash",
+          "Capex",
+          "Operating loss",
+          "Working capital",
+          "Pre-financing",
+          "Equity raise",
+          "Debt drawdown",
+          "Closing cash"
+        ],
+        "series": [
+          {
+            "name": "Cash",
+            "values": [
+              12,
+              -30,
+              -8,
+              2,
+              null,
+              40,
+              10,
+              null
+            ]
+          }
+        ],
+        "options": {
+          "unit": "m",
+          "totalsAt": [
+            0,
+            4,
+            7
+          ],
+          "valueAxis": true
+        }
+      }
+    },
+    {
+      "title": "Our lead over the market widened to 22 points, above the 45 target",
+      "chart": {
+        "type": "line",
+        "categories": [
+          "2021",
+          "2022",
+          "2023",
+          "2024",
+          "2025"
+        ],
+        "series": [
+          {
+            "name": "Us",
+            "values": [
+              40,
+              44,
+              47,
+              52,
+              58
+            ]
+          },
+          {
+            "name": "Market",
+            "values": [
+              30,
+              31,
+              33,
+              34,
+              36
+            ]
+          }
+        ],
+        "options": {
+          "valueLines": [
+            {
+              "value": 45,
+              "label": "Target {value}"
+            }
+          ],
+          "levelArrows": [
+            {
+              "from": {
+                "category": 4,
+                "series": 1
+              },
+              "to": {
+                "category": 4,
+                "series": 0
+              },
+              "mode": "absolute"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "title": "Monthly active users by platform, with a gap in May (m)",
+      "chart": {
+        "type": "area",
+        "categories": [
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec"
+        ],
+        "series": [
+          {
+            "name": "iOS",
+            "values": [
+              4.1,
+              4.3,
+              4.6,
+              4.8,
+              5.1,
+              5.3,
+              5.2,
+              5.6,
+              5.9,
+              6.2,
+              6.4,
+              6.9
+            ]
+          },
+          {
+            "name": "Android",
+            "values": [
+              3.8,
+              3.9,
+              4,
+              4.4,
+              4.5,
+              4.9,
+              5,
+              5.1,
+              5.4,
+              5.6,
+              5.9,
+              6.1
+            ]
+          },
+          {
+            "name": "Web",
+            "values": [
+              2.2,
+              2.1,
+              2.3,
+              2.2,
+              null,
+              2.4,
+              2.6,
+              2.5,
+              2.7,
+              2.6,
+              2.8,
+              2.9
+            ]
+          }
+        ],
+        "options": {
+          "seriesLabels": "legend",
+          "valueAxis": true
+        }
+      }
+    },
+    {
+      "title": "Channel mix: online overtook stores in 2022",
+      "chart": {
+        "type": "area100",
+        "categories": [
+          "2019",
+          "2020",
+          "2021",
+          "2022",
+          "2023",
+          "2024",
+          "2025"
+        ],
+        "series": [
+          {
+            "name": "Stores",
+            "values": [
+              61,
+              48,
+              45,
+              41,
+              37,
+              34,
+              31
+            ]
+          },
+          {
+            "name": "Online",
+            "values": [
+              27,
+              40,
+              42,
+              45,
+              49,
+              52,
+              55
+            ]
+          },
+          {
+            "name": "Wholesale",
+            "values": [
+              12,
+              12,
+              13,
+              14,
+              14,
+              14,
+              14
+            ]
+          }
+        ],
+        "options": {
+          "valueAxis": true
+        }
+      }
+    },
+    {
+      "title": "Win rate by region against the company average",
+      "chart": {
+        "type": "combo",
+        "categories": [
+          "North America",
+          "Europe",
+          "Asia Pacific",
+          "Latin America",
+          "Middle East"
+        ],
+        "series": [
+          {
+            "name": "Enterprise",
+            "values": [
+              38,
+              31,
+              27,
+              22,
+              25
+            ]
+          },
+          {
+            "name": "Mid-market",
+            "values": [
+              29,
+              26,
+              24,
+              19,
+              21
+            ]
+          },
+          {
+            "name": "Company average",
+            "values": [
+              33,
+              33,
+              33,
+              33,
+              33
+            ],
+            "as": "line"
+          }
+        ],
+        "options": {
+          "combo": "clustered",
+          "unit": "%",
+          "valueAxis": true
+        }
+      }
+    },
+    {
+      "title": "Cost base by region: EMEA carries the heaviest overhead",
+      "chart": {
+        "type": "mekko",
+        "categories": [
+          "North America",
+          "EMEA",
+          "Asia Pacific",
+          "Latin America"
+        ],
+        "series": [
+          {
+            "name": "Cost of sales",
+            "values": [
+              320,
+              210,
+              150,
+              60
+            ]
+          },
+          {
+            "name": "Sales & marketing",
+            "values": [
+              140,
+              120,
+              70,
+              25
+            ]
+          },
+          {
+            "name": "R&D",
+            "values": [
+              110,
+              60,
+              55,
+              10
+            ]
+          },
+          {
+            "name": "G&A",
+            "values": [
+              50,
+              70,
+              25,
+              15
+            ]
+          }
+        ],
+        "options": {
+          "mekko": "unit",
+          "unit": "m",
+          "valueAxis": true
+        }
+      }
+    },
+    {
+      "title": "IT spend per employee: Enterprise spends most, and mostly on software",
+      "chart": {
+        "type": "mekkoxy",
+        "categories": [
+          "Enterprise",
+          "Mid-market",
+          "SMB",
+          "Public sector",
+          "Consumer"
+        ],
+        "series": [
+          {
+            "name": "Employees (m)",
+            "values": [
+              42,
+              31,
+              58,
+              19,
+              12
+            ]
+          },
+          {
+            "name": "Software",
+            "values": [
+              1850,
+              1320,
+              640,
+              980,
+              410
+            ]
+          },
+          {
+            "name": "Hardware",
+            "values": [
+              920,
+              780,
+              520,
+              610,
+              380
+            ]
+          },
+          {
+            "name": "Services",
+            "values": [
+              640,
+              410,
+              180,
+              450,
+              120
+            ]
+          }
+        ],
+        "options": {
+          "sort": "descending",
+          "unit": {
+            "text": "$",
+            "position": "prefix"
+          },
+          "valueAxis": true
+        }
+      }
+    },
+    {
+      "title": "Survey: how customers first heard of us",
+      "chart": {
+        "type": "pie",
+        "categories": [
+          "Search",
+          "Word of mouth",
+          "Events",
+          "Partners",
+          "Social media",
+          "Press",
+          "Other"
+        ],
+        "series": [
+          {
+            "name": "Respondents",
+            "values": [
+              312,
+              254,
+              61,
+              40,
+              18,
+              9,
+              6
+            ]
+          }
+        ],
+        "options": {
+          "decimals": 1,
+          "seriesLabels": "legend"
+        }
+      }
+    },
+    {
+      "title": "Cost base 2025: people costs dominate",
+      "chart": {
+        "type": "doughnut",
+        "categories": [
+          "Salaries",
+          "Contractors",
+          "Cloud hosting",
+          "Facilities",
+          "Travel",
+          "Software licences",
+          "Other"
+        ],
+        "series": [
+          {
+            "name": "Cost 2025",
+            "values": [
+              412,
+              96,
+              71,
+              38,
+              9,
+              6,
+              3
+            ]
+          }
+        ],
+        "options": {
+          "unit": "m",
+          "totals": true
+        }
+      }
+    },
+    {
+      "title": "Larger accounts pay more per seat",
+      "chart": {
+        "type": "scatter",
+        "categories": [
+          "Acme",
+          "Globex",
+          "Initech",
+          "Umbrella",
+          "Hooli",
+          "Stark",
+          "Wayne",
+          "Wonka",
+          "Tyrell",
+          "Cyberdyne",
+          "Soylent",
+          "Oscorp"
+        ],
+        "series": [
+          {
+            "name": "Enterprise",
+            "values": [
+              [
+                12.5,
+                42
+              ],
+              [
+                9.8,
+                39
+              ],
+              null,
+              [
+                14.1,
+                47
+              ],
+              null,
+              [
+                11.2,
+                44
+              ],
+              [
+                8.9,
+                36
+              ],
+              null,
+              null,
+              null,
+              null,
+              [
+                10.4,
+                40
+              ]
+            ]
+          },
+          {
+            "name": "Mid-market",
+            "values": [
+              null,
+              null,
+              [
+                4.2,
+                31
+              ],
+              null,
+              [
+                5.6,
+                33
+              ],
+              null,
+              null,
+              [
+                3.1,
+                27
+              ],
+              [
+                6.3,
+                35
+              ],
+              [
+                2.4,
+                24
+              ],
+              [
+                4.9,
+                29
+              ],
+              null
+            ]
+          }
+        ],
+        "options": {
+          "axisTitles": {
+            "x": "Seats (thousands)",
+            "y": "Price per seat ($)"
+          }
+        }
+      }
+    },
+    {
+      "title": "Portfolio: two large businesses sit in the attractive quadrant",
+      "chart": {
+        "type": "bubble",
+        "categories": [
+          "Payments",
+          "Lending",
+          "Wealth",
+          "Insurance",
+          "Cards",
+          "FX",
+          "Custody"
+        ],
+        "series": [
+          {
+            "name": "Core",
+            "values": [
+              [
+                8.5,
+                2.1,
+                420
+              ],
+              [
+                3.2,
+                1.4,
+                260
+              ],
+              [
+                6.1,
+                0.6,
+                180
+              ],
+              null,
+              [
+                11.4,
+                1.8,
+                310
+              ],
+              null,
+              null
+            ]
+          },
+          {
+            "name": "Non-core",
+            "values": [
+              null,
+              null,
+              null,
+              [
+                1.8,
+                0.4,
+                90
+              ],
+              null,
+              [
+                4.6,
+                0.9,
+                60
+              ],
+              [
+                2.7,
+                0.3,
+                40
+              ]
+            ]
+          }
+        ],
+        "options": {
+          "zeroBased": true,
+          "sizeLegend": "Revenue ($m)",
+          "axisTitles": {
+            "x": "Market growth (%)",
+            "y": "Relative market share (x)"
+          }
+        }
+      }
+    },
+    {
+      "title": "Vendor assessment: we lead on features, lag on integrations",
+      "chart": {
+        "type": "harvey",
+        "categories": [
+          "Price",
+          "Feature depth",
+          "Customer support",
+          "Integrations",
+          "Security and compliance"
+        ],
+        "series": [
+          {
+            "name": "Us",
+            "values": [
+              3,
+              4,
+              3,
+              1,
+              4
+            ]
+          },
+          {
+            "name": "Competitor A",
+            "values": [
+              4,
+              2,
+              3,
+              3,
+              2
+            ]
+          },
+          {
+            "name": "Competitor B",
+            "values": [
+              2,
+              3,
+              1,
+              4,
+              3
+            ]
+          },
+          {
+            "name": "Open-source alternative",
+            "values": [
+              4,
+              1,
+              0,
+              2,
+              null
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Financial summary: margin expansion continues through 2025",
+      "chart": {
+        "type": "table",
+        "categories": [
+          "2021",
+          "2022",
+          "2023",
+          "2024",
+          "2025E",
+          "CAGR 2021–25"
+        ],
+        "series": [
+          {
+            "name": "Revenue ($m)",
+            "values": [
+              1240.5,
+              1388.2,
+              1561.9,
+              1702.4,
+              1890.7,
+              "11.1%"
+            ]
+          },
+          {
+            "name": "Gross profit ($m)",
+            "values": [
+              496.2,
+              569.2,
+              656,
+              732,
+              832,
+              "13.8%"
+            ]
+          },
+          {
+            "name": "EBITDA ($m)",
+            "values": [
+              148.9,
+              180.5,
+              218.7,
+              255.4,
+              302.5,
+              "19.4%"
+            ]
+          },
+          {
+            "name": "EBITDA margin",
+            "values": [
+              "12.0%",
+              "13.0%",
+              "14.0%",
+              "15.0%",
+              "16.0%",
+              "+4.0 pp"
+            ]
+          },
+          {
+            "name": "Headcount",
+            "values": [
+              3120,
+              3340,
+              3510,
+              3620,
+              3790,
+              "5.0%"
+            ]
+          },
+          {
+            "name": "Revenue per employee ($k)",
+            "values": [
+              397.6,
+              415.6,
+              445,
+              470.3,
+              498.9,
+              "5.8%"
+            ]
+          }
+        ],
+        "options": {
+          "locale": "en-US"
+        }
+      }
+    },
+    {
+      "title": "Transformation roadmap: pilots start in Q1, full roll-out by year end",
+      "chart": {
+        "type": "gantt",
+        "categories": [
+          "Diagnostic",
+          "Design target operating model",
+          "Pilot in two business units",
+          "Steering committee",
+          "Roll-out wave 1",
+          "Roll-out wave 2",
+          "Benefits tracking"
+        ],
+        "series": [
+          {
+            "name": "Start",
+            "values": [
+              "2026-01-05",
+              "2026-02-02",
+              "2026-03-02",
+              null,
+              "2026-05-04",
+              "2026-08-03",
+              "2026-06-01"
+            ]
+          },
+          {
+            "name": "End",
+            "values": [
+              "2026-02-02",
+              "2026-03-30",
+              "2026-05-04",
+              null,
+              "2026-08-03",
+              "2026-11-30",
+              "2026-12-21"
+            ]
+          },
+          {
+            "name": "Milestone",
+            "values": [
+              "2026-02-02",
+              null,
+              "2026-05-04",
+              "2026-03-16",
+              null,
+              "2026-11-30",
+              null
+            ]
+          },
+          {
+            "name": "Decision",
+            "values": [
+              null,
+              null,
+              null,
+              "2026-07-06",
+              null,
+              null,
+              null
+            ]
+          }
+        ],
+        "options": {
+          "shades": [
+            {
+              "from": "2026-07-27",
+              "to": "2026-08-17",
+              "label": "Summer break"
+            }
+          ],
+          "brackets": [
+            {
+              "from": "2026-01-05",
+              "to": "2026-05-04",
+              "label": "Design"
+            },
+            {
+              "from": "2026-05-04",
+              "to": "2026-12-21",
+              "label": "Roll-out"
+            }
+          ],
+          "today": "2026-04-13"
+        }
+      }
+    }
+  ]
+}

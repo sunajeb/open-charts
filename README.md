@@ -125,6 +125,27 @@ README says `open-charts`, or run `npm link` there once to put `open-charts` on 
 The [user guide](docs/USER-GUIDE.md) covers the datasheet, every option, hidden labels and
 troubleshooting.
 
+## Office.js add-in (Windows, web, Mac)
+
+A second, web-based add-in runs wherever PowerPoint runs Office add-ins (Windows, the web, Mac): a
+task pane with the same datasheet, the chart engine running inside the pane (no Node, no macros, no
+data leaves the computer). It shares the `.ppam` add-in's tag contract, so a chart made by either
+add-in, by the command line or by the web editor can be edited by the other.
+
+```sh
+npm install
+npm run build:officejs      # dist/officejs: task pane, engine bundle, manifest.xml, fonts
+npm run officejs:cert       # once: a certificate for https://localhost:4175 — trust it as printed
+npm run officejs:serve      # keep running while you use the add-in
+npm run officejs:sideload   # Mac: copies the manifest into PowerPoint's add-in folder; restart PowerPoint
+```
+
+Then **Home › open-charts** opens the pane: **Insert on slide** draws the chart on the current slide;
+select an open-charts chart and the pane loads its data, **Apply to slide** replaces it in place,
+**Revert** puts back the previous version, and a banner offers **Re-layout to new size** after a
+resize. Sideloading on Windows and the web, and how charts are drawn on PowerPoints with fewer API
+features, are in the [user guide](docs/USER-GUIDE.md#officejs-add-in-windows-web-mac).
+
 ## The editor
 
 ```sh
@@ -151,6 +172,12 @@ node --experimental-strip-types --no-warnings src/cli.ts examples/deck.json -o o
 | `  --strict` | Exit code 1 if any label had to be hidden (the deck is still written). |
 | `  --report report.json` | Writes the layout issues per slide as JSON. |
 | `  --font Arial.ttf --bold-font "Arial Bold.ttf"` | Measure text with these font files. |
+| `  --style style.json` | Apply a style file: a client deck's fonts, colours, number defaults and element styles ([style files](docs/DATA-FORMAT.md#style-files)). |
+| `open-charts fill <template.pptx> <data.json> [-o out.pptx]` | Fills your own template: shapes named `chart:<name>` become charts laid out in that shape's frame, `{{name}}` in any text becomes a value; slides can be picked, reordered and repeated per item. Untouched parts stay byte-identical ([fill a template](docs/USER-GUIDE.md#fill-a-template)). |
+| `  --dry-run` | Reports every slot, frame and missing value; writes nothing. |
+| `  --strict` | Exit code 1 on any missing value, chart error or layout issue. |
+| `  --each items.json` | One deck per item of a JSON array, its values over the data's; put a field in `-o`, e.g. `-o "out/{client}.pptx"`. |
+| `  --style style.json`, `--report report.json`, `--font` | As for build. |
 | `open-charts inspect <deck.pptx> [--json]` | Lists the open-charts charts in a deck: frame, type, sizes. |
 | `open-charts import <deck.pptx> [-o deck.json]` | Recovers the deck JSON from the charts in a .pptx. |
 | `open-charts serve [--port 4173]` | Starts the web editor. |
@@ -228,6 +255,8 @@ npm run e2e             # editor end-to-end in Chromium (npm install; npx playwr
 npm run goldens         # examples → .pptx → LibreOffice PDF → PNG, diffed against test/goldens/<platform>/
 npm run e2e:powerpoint  # macOS + PowerPoint: insert/update every chart type through the add-in
 npm run bench           # layout and start-up times against the performance budgets
+npm run build:officejs  # Office.js add-in bundle; test/officejs.test.ts and test/e2e/officejs.spec.ts test it
+npm run officejs:live   # macOS + PowerPoint: the Office.js pane's self-test in real PowerPoint
 ```
 
 `npm run goldens` needs `soffice` (LibreOffice) and `pdftoppm` (poppler). Baselines are per platform
@@ -237,4 +266,4 @@ tests and E2E on every PR, goldens nightly.
 
 ## Licence and provenance
 
-Apache-2.0. Built from public chart-design conventions, published algorithms (Heckbert and Talbot et al. for axis ticks, largest-remainder rounding, Liang–Barsky clipping), the open OOXML standard and study of how existing charting tools behave. All code is original; none is copied from a commercial product. `vendor/opentype.module.js` is opentype.js (MIT).
+Apache-2.0. Built from public chart-design conventions, published algorithms (Heckbert and Talbot et al. for axis ticks, largest-remainder rounding, Liang–Barsky clipping), the open OOXML standard and study of how existing charting tools behave. All code is original; none is copied from a commercial product. `vendor/opentype.module.js` is opentype.js (MIT). `vendor/fonts/LiberationSans-{Regular,Bold}.ttf` are the Liberation Sans 2.1.5 fonts (SIL Open Font License 1.1, `vendor/fonts/LiberationSans.LICENSE`), used by the Office.js add-in to measure text with Arial's widths.
