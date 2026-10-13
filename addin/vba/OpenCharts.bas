@@ -47,10 +47,11 @@ Private gEngineStarted As Boolean
 Private gEventsOk As Boolean
 ' Re-entrancy guard: drawing changes the selection, which raises the event again.
 Private gBusy As Boolean
-' True while gBusy is held by the automatic selection-change work (not a user action); a click that
-' arrives then is queued in gPending and run as soon as that work finishes, never refused.
+' True while gBusy is held by the automatic selection-change work (not a user action). A click that
+' arrives then (PowerPoint delivers it while that work waits on the engine) runs at once and sets
+' gAbortAuto; the automatic work then stops without drawing. A user action is never refused or queued.
 Private gAutoBusy As Boolean
-Private gPending As String
+Private gAbortAuto As Boolean
 ' Set by the automation entry points: messages are logged instead of shown in a dialog.
 Private gSilent As Boolean
 Private gLastMessage As String
@@ -186,6 +187,7 @@ Public Sub OnSelectionChange()
     If gBusy Then Exit Sub
     gBusy = True
     gAutoBusy = True
+    gAbortAuto = False
     On Error Resume Next
     CheckResized
     AgendaAutoCheck
@@ -199,13 +201,8 @@ Public Sub OnSelectionChange()
     End If
     InvalidateDirections
     gAutoBusy = False
+    gAbortAuto = False
     gBusy = False
-    If gPending <> "" Then
-        Dim pending As String
-        pending = gPending
-        gPending = ""
-        Dispatch pending
-    End If
 End Sub
 
 ' Reads the selected chart's type and direction (from its OC_SPEC) for the direction buttons.
@@ -590,9 +587,10 @@ Private Sub Dispatch(ByVal id As String)
     ' PowerPoint can deliver a click (or an AppleScript call) while an earlier chart is still being
     ' laid out: the bridge is busy then, so say so instead of failing.
     If gBusy Then
-        ' Background selection work: run this click right after it. A user action in progress: say so.
-        If gAutoBusy Then gPending = id: Exit Sub
-        Tell "open-charts is still updating a chart. Try again in a moment.": Exit Sub
+        ' Background selection work: this click wins; that work stops without drawing. A user action
+        ' in progress: say so.
+        If Not gAutoBusy Then Tell "open-charts is still updating a chart. Try again in a moment.": Exit Sub
+        gAbortAuto = True
     End If
     On Error GoTo Failed
     gBusy = True
@@ -937,6 +935,8 @@ Private Function Relayout(ByVal old As Object, ByVal force As Boolean) As Object
     Phase "read", tp
     response = Engine(request)
     If response = "" Then Exit Function
+    ' The automatic check gives way to a user action that arrived while it waited on the engine.
+    If Not force And gAbortAuto Then Exit Function
     Set Relayout = ReplaceChart(old, response)
 End Function
 
@@ -1105,6 +1105,7 @@ Private Sub CheckResized()
     ' A resized chart changes its own scale: its same-scale partners follow (after the loop, which
     ' still holds the shapes the re-layout replaces).
     For Each g In groups
+        If gAbortAuto Then Exit For
         SyncGroup sld, Split(g, vbTab)(0), CLng(Split(g, vbTab)(1))
     Next g
 End Sub
@@ -2326,6 +2327,7 @@ Private Sub AgendaAutoCheck()
     End If
     If sig = gAgendaSig And InStr(sig, "|edited|") = 0 Then Exit Sub
     response = Engine(AgendaRequest("update"))
+    If gAbortAuto Then Exit Sub ' a user action arrived meanwhile; check again on the next selection
     If response <> "" Then ApplyAgenda response, ""
     gAgendaSig = AgendaSignature()
     Report "AGENDA auto-update"
