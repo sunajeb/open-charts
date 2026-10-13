@@ -399,8 +399,19 @@ ghost, controller end to end with a stand-in helper (coalesced ghosts, one apply
 click, double-click reset, hide). Live: `tools/e2e-handles-live.ts` (zoom 50/75/120 %, window moved,
 CGEvent gap drag, two-click label select + drag).
 
-**Live result:** not run yet — PowerPoint was in use by the owner and other agents
-(`/private/tmp/open-charts-ppt.lock` held) for the rest of this session.
+**Live result (PowerPoint for Mac, 2026-10-13, `tools/e2e-handles-live.ts`): Pass.**
+
+| Check | Result |
+|---|---|
+| Chart selected → overlay shown, click-through (`ignoresMouse` true) away from handles | Pass |
+| `PointsToScreenPixelsX/Y` mapping at zoom 50 / 75 / 120 % | factor 0.4999 / 0.7498 / 1.1937 (points, not pixels, on this Retina Mac) |
+| Window moved by (40, 30) pt | view offset moved by (40.0, 30.0) |
+| CGEvent drag on the gap handle (12 pt left) | `HANDLES gap -> Gap 110%`; `APPLY … done (463 ms, layout 4 ms, macro 402 ms)`; OC_SPEC read back `options.gap` 1.1 |
+| Two clicks select a value label (its box becomes a handle), drag it | `APPLY … done (687 ms)`; OC_SPEC `overrides["label:value:s0:c0"].pin` {x 0.1436, y 0.7893} |
+
+Conclusion: PowerPoint for Mac's `PointsToScreenPixelsX/Y` is reliable for this (whole-pixel corners,
+one uniform factor), so the window-bounds + zoom fallback was not needed. Layout per drag frame stays
+under 5 ms; the commit costs one ApplyEdit (0.4–0.7 s), during which the ghost stands in for the chart.
 
 **Limits:** keyboard zoom (⌘+/⌘−) is not noticed until the next click; no handles yet for CAGR /
 difference arrows (no position option), legend, rotation or axis minimum; Windows has none.

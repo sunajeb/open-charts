@@ -118,7 +118,7 @@ await reselect();
 const after = await until((x) => !!x.view && !!before.view && Math.abs(x.view.ox - before.view.ox) > 5);
 check(!!after.view && !!before.view && Math.abs(after.view.ox - before.view.ox - 40) < 3 && Math.abs(after.view.oy - before.view.oy - 30) < 3,
   `window moved by (40, 30): view moved by (${((after.view?.ox ?? 0) - (before.view?.ox ?? 0)).toFixed(1)}, ${((after.view?.oy ?? 0) - (before.view?.oy ?? 0)).toFixed(1)})`);
-ppt(`set bounds of document window 1 to {${b0.join(', ')}}`);
+try { ppt(`set bounds of document window 1 to {${b0.join(", ")}}`); } catch (err) { say(`  (window not moved back: ${(err as Error).message.trim()})`); }
 sleep(600);
 await reselect();
 s = await until((x) => !!x.handles?.some((h) => h.id === 'gap'));
