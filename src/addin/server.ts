@@ -4,8 +4,9 @@
 //   GET  /api/addin/ping   liveness
 //   POST /api/addin/quit   stop (install restarts it with the new engine)
 // When the editor applies a session (docs/ux-editor.md), it tells PowerPoint to re-lay out the
-// chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro via AppleScript
-// and records the outcome on the session ("drawn" or "error" with a message) for the editor to show.
+// chart: VBA on the Mac cannot poll, so the server runs the add-in's ApplyEdit macro through its
+// long-lived AppleScript helper (runner.ts) and records the outcome on the session ("drawn" or
+// "error" with a message) for the editor to show.
 //
 // The server belongs to the PowerPoint that started it (the bridge spawns it): macOS attributes the
 // server, and so every osascript it runs, to that PowerPoint process. Once that PowerPoint has quit,
@@ -13,9 +14,8 @@
 // freezes it (no reply, ApplyEdit never runs). So a server that outlived its PowerPoint never sends
 // one: it answers the new PowerPoint's ping and engine calls with 503 and exits, and the bridge
 // starts a fresh server from the new PowerPoint.
-import { execFile, execFileSync, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs';
+import { execFileSync, spawn } from 'node:child_process';
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -23,6 +23,7 @@ import { getSession, serve, setSession, type Session } from '../server.ts';
 import { createMeasurer } from '../fonts.ts';
 import type { Measurer } from '../core/index.ts';
 import { contextOf, handleRequest, layoutForApply, parseRequest, rememberContext, type Sessions } from './engine.ts';
+import { macroRunner, type MacroResult } from './runner.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
@@ -131,39 +132,6 @@ export const RESTARTED_MESSAGE = 'PowerPoint was restarted after this editor win
 export const APPLY_TIMEOUT_MS = 20_000;
 
 /**
- * The AppleScript that runs ApplyEdit(session id, context, response) with its arguments, and prints
- * what the macro answers. It never starts PowerPoint (a `tell` would): a closed PowerPoint has no
- * chart to update.
- */
-export const applyScript = (prefix: string) => `on run argv
-if application "Microsoft PowerPoint" is not running then error "PowerPoint is not running." number -600
-tell application "Microsoft PowerPoint" to return run VB macro macro name "${prefix}_ApplyEdit" list of parameters {item 1 of argv, item 2 of argv, item 3 of argv}
-end run`;
-
-/**
- * The apply script compiled for add-in build `prefix` (osascript then skips compiling it, which loads
- * PowerPoint's dictionary). Named by the script's own text, so a changed script is never run stale.
- */
-export const compiledApplyScript = (prefix: string, home = addinHome()) =>
-  join(home, `apply-${createHash('sha1').update(applyScript(prefix)).digest('hex').slice(0, 16)}.scpt`);
-
-/** Compiles the apply script for the installed add-in in the background (server start); drops other builds'. */
-export function precompileApply(home = addinHome()) {
-  let prefix = '';
-  try { prefix = JSON.parse(readFileSync(join(home, 'addin.json'), 'utf8')).prefix; } catch { return; }
-  const file = compiledApplyScript(prefix, home);
-  try {
-    for (const f of readdirSync(home)) if (/^apply-.*\.scpt$/.test(f) && join(home, f) !== file) rmSync(join(home, f), { force: true });
-  } catch { /* nothing to tidy */ }
-  if (!prefix || existsSync(file)) return;
-  const tmp = `${file}.${process.pid}.tmp`;
-  execFile('osacompile', ['-o', tmp, '-e', applyScript(prefix)], { timeout: 30_000 }, (err) => {
-    if (err) { rmSync(tmp, { force: true, recursive: true }); return; } // Apply compiles the source each time instead
-    try { renameSync(tmp, file); } catch { /* another server won */ }
-  });
-}
-
-/**
  * ApplyEdit's answer: log lines (SYNC …, APPLIED …), and the chart's context ("CONTEXT", tab for
  * newline): after drawing, the context of the new chart; without an APPLIED line, the chart's
  * context did not match the one the response was laid out for, so lay it out again for this one.
@@ -187,7 +155,7 @@ export function parseApplyAnswer(out: string): { lines: string[]; context?: stri
 /** Seconds since local midnight, as VBA's Timer counts. */
 const sinceMidnight = (ms: number) => { const d = new Date(ms); return (ms - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 1000; };
 
-/** What the user should be told when `run VB macro` failed (osascript's error, or a timeout). */
+/** What the user should be told when `run VB macro` failed (the Apple event's error, or a timeout). */
 export function applyErrorMessage(err: { message: string; killed?: boolean }): string {
   const text = err.message;
   if (err.killed || /-1712\b|timed out/i.test(text)) {
@@ -201,11 +169,10 @@ export function applyErrorMessage(err: { message: string; killed?: boolean }): s
   return `PowerPoint could not update the chart (${why.trim()}). Click the chart once, then Apply again.`;
 }
 
-/** Runs an AppleScript with arguments: what it printed, or the error. */
-type Run = (script: string, timeoutMs: number, args: string[]) => Promise<{ message: string; killed?: boolean } | string | undefined>;
-const osascriptRun: Run = (script, timeoutMs, args) =>
-  new Promise((resolve) => execFile('osascript', [...(script.endsWith('.scpt') ? [script] : ['-e', script]), ...args], { timeout: timeoutMs, maxBuffer: 1 << 20 }, (err, out, stderr) =>
-    resolve(err ? { message: `${err.message}\n${stderr}`, killed: err.killed } : out)));
+/** Runs a macro of the add-in in PowerPoint (`run VB macro`): its return value, or the error. */
+export type Run = (macro: string, args: string[], timeoutMs: number) => Promise<MacroResult>;
+const helper = macroRunner();
+const helperRun: Run = (macro, args, timeoutMs) => helper.run(macro, args, timeoutMs);
 
 /** Lays an applied session's chart out for a chart context (layoutForApply with the server's measurer). */
 export type Prepare = (s: Session, context: string) => Promise<string>;
@@ -220,7 +187,7 @@ export type Prepare = (s: Session, context: string) => Promise<string>;
  * layout for it. If the macro failed, timed out or found no chart, the session becomes "error" with
  * what to do. A newer Apply or a Cancel meanwhile is left alone.
  */
-export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run = osascriptRun, outlived = () => false, prepare?: Prepare): Promise<void> {
+export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run = helperRun, outlived = () => false, prepare?: Prepare): Promise<void> {
   const ours = () => {
     const now = getSession(s.id);
     return now && ((now.state === 'applied' && now.rev === s.rev) || (now.state === 'open' && now.rev === s.rev + 1)) ? now : undefined;
@@ -237,8 +204,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
     return fail(RESTARTED_MESSAGE);
   }
   const t = Date.now();
-  const compiled = compiledApplyScript(prefix, home);
-  const script = existsSync(compiled) ? compiled : applyScript(prefix);
+  const macro = `${prefix}_ApplyEdit`;
   let layoutMs = 0;
   const lay = async (context: string | undefined) => {
     if (context === undefined || !prepare) return '';
@@ -250,26 +216,26 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
   let response = await lay(context);
   if (response) settle();
   let sent = Date.now();
-  let result = await run(script, APPLY_TIMEOUT_MS, [s.id, context ?? '', response]);
-  let answer = typeof result === 'string' ? parseApplyAnswer(result) : undefined;
+  let result = await run(macro, [s.id, context ?? '', response], APPLY_TIMEOUT_MS);
+  let answer = 'out' in result ? parseApplyAnswer(result.out) : undefined;
   if (answer && !answer.applied && answer.context !== undefined && prepare) {
     // The chart is not where (or as) it was when the response was laid out: lay it out for now.
     context = answer.context;
     response = await lay(context);
     if (response) settle();
     sent = Date.now();
-    result = await run(script, APPLY_TIMEOUT_MS, [s.id, '*', response]);
-    answer = typeof result === 'string' ? parseApplyAnswer(result) : undefined;
+    result = await run(macro, [s.id, '*', response], APPLY_TIMEOUT_MS);
+    answer = 'out' in result ? parseApplyAnswer(result.out) : undefined;
   }
   const back = Date.now(), ms = back - t;
-  // Where the time went: until the macro started (osascript, Apple event), in it, and back.
+  // Where the time went: until the macro started (the Apple event), in it, and back.
   const [t0, t1] = answer?.timer ?? [];
   const parts = t0 !== undefined && t1 !== undefined && t1 >= t0
     ? `, to macro ${Math.round((t0 - sinceMidnight(sent)) * 1000)} ms, macro ${Math.round((t1 - t0) * 1000)} ms, back ${Math.round((sinceMidnight(back) - t1) * 1000)} ms`
     : '';
-  if (result && typeof result === 'object') {
-    log(`APPLY ${s.id} failed after ${ms} ms: ${result.killed ? 'timed out' : result.message}`, home);
-    return fail(applyErrorMessage(result));
+  if ('error' in result) {
+    log(`APPLY ${s.id} failed after ${ms} ms: ${result.error.killed ? 'timed out' : result.error.message}`, home);
+    return fail(applyErrorMessage(result.error));
   }
   for (const line of answer?.lines ?? []) log(line, home);
   if (answer?.applied && answer.context !== undefined) rememberContext(s.id, answer.context);
@@ -299,7 +265,7 @@ function timedSessions(sessions: Sessions): Sessions & { ms: number } {
  * PowerPoint's ping and engine calls get 503, so the bridge starts a fresh server, and `retire` stops
  * this one.
  */
-export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = () => false, retire = () => process.exit(0)) {
+export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = () => false, retire = () => process.exit(0), onEdit = () => {}) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
     const url = req.url ?? '';
     if ((url === '/api/addin/ping' || url === '/api/addin/run') && outlived()) {
@@ -321,6 +287,7 @@ export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = ()
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(out);
       const ms = performance.now() - t0;
       if (request.op !== 'types') log(`ENGINE ${request.op} ${Math.round(ms)} ms (sessions ${Math.round(timed.ms)} ms, layout ${Math.round(ms - timed.ms)} ms)`);
+      if (request.op === 'edit') onEdit();
       return true;
     }
     if (req.method === 'POST' && url === '/api/addin/quit') {
@@ -351,9 +318,16 @@ export function serveAddin(port = ADDIN_PORT) {
   const owner = powerPointPid();
   const outlived = () => outlivedPowerPoint(owner);
   log(`SERVER started (pid ${process.pid}, PowerPoint ${owner ?? 'not running'})`);
-  precompileApply();
+  helper.warm(); // starts the AppleScript helper (no Apple event yet), so the first Apply does not wait for it
   const retire = () => { log(`SERVER retired: PowerPoint ${owner} has quit, a new one is running`); process.exit(0); };
-  const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`), outlived, retire);
+  // Edit data: the user is about to Apply, so open the helper's connection to PowerPoint now (one
+  // read-only Apple event; the first one costs up to seconds while the editor's browser starts).
+  const connect = () => {
+    if (outlived()) return;
+    const t = Date.now();
+    void helper.connect(10_000).then((r) => log(`HELPER ${'error' in r ? `not connected: ${r.error.message}` : r.out} (${Date.now() - t} ms)`));
+  };
+  const routes = addinRoutes(m, httpSessions(`http://127.0.0.1:${port}`), outlived, retire, connect);
   return serve(port, {}, {
     routes: (req, res) => { idle(); return routes(req, res); },
     onSession: (s) => { if (s.state === 'applied') void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); },

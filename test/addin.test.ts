@@ -9,7 +9,8 @@ import { createMeasurer } from '../src/fonts.ts';
 import { flattenPath } from '../src/core/path.ts';
 import { escapeField, parseResponse, shapeRecord, SHAPE_COLUMNS, unescapeField } from '../src/addin/format.ts';
 import { contextOf, DEFAULT_FRAME, handleRequest, layoutForApply, parseRequest, resolveFrame, sceneBounds, specKey } from '../src/addin/engine.ts';
-import { addinRoutes, applyErrorMessage, applyInPowerPoint, applyScript, compiledApplyScript, editorPage, outlivedPowerPoint, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
+import { addinRoutes, applyErrorMessage, applyInPowerPoint, editorPage, outlivedPowerPoint, parseApplyAnswer, RESTARTED_MESSAGE } from '../src/addin/server.ts';
+import { HELPER_JXA, macroRunner } from '../src/addin/runner.ts';
 import { getSession, setSession, type Session } from '../src/server.ts';
 import type { Sessions } from '../src/addin/engine.ts';
 import { buildAddin, ADDIN_CT, VBA_REL, UI_REL, UI_NS } from '../src/addin/package.ts';
@@ -291,7 +292,7 @@ test('launcher: installed open-charts command runs the CLI; messages name a comm
 test('Apply in PowerPoint records the outcome on the session: drawn, or an error that says what to do', async () => {
   const home = mkdtempSync(join(tmpdir(), 'oc-apply-'));
   const chart = { type: 'stacked', categories: ['a'], series: [{ name: 'S', values: [1] }] };
-  const scripts: string[] = [];
+  const macros: string[] = [];
   const argv: string[][] = [];
   try {
     // Not installed: no AppleScript, a clear error.
@@ -304,27 +305,18 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     // The macro draws the chart: the engine settles the session ("open"), and once the macro has
     // returned the server says "drawn", never earlier, while PowerPoint is still drawing.
     s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async (script, _ms, args) => {
-      scripts.push(script); argv.push(args);
+    await applyInPowerPoint(s, home, async (macro, args) => {
+      macros.push(macro); argv.push(args);
       setSession('ap1', { state: 'open' });
-      return undefined;
+      return { out: '' };
     });
     assert.deepEqual([getSession('ap1')!.state, getSession('ap1')!.message], ['drawn', undefined]);
-    assert.equal(scripts[0], applyScript('oc123'));
-    assert.match(scripts[0], /^on run argv\nif application "Microsoft PowerPoint" is not running then error/, 'never starts PowerPoint');
-    assert.match(scripts[0], /return run VB macro macro name "oc123_ApplyEdit" list of parameters \{item 1 of argv, item 2 of argv, item 3 of argv\}/);
+    assert.deepEqual(macros, ['oc123_ApplyEdit']);
     assert.deepEqual(argv[0], ['ap1', '', ''], 'no layout of its own without prepare');
-    // Once the server has compiled the script for this build, osascript runs that file.
-    writeFileSync(compiledApplyScript('oc123', home), '');
-    s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async (script) => { scripts.push(script); setSession('ap1', { state: 'open' }); return undefined; });
-    assert.equal(scripts.at(-1), compiledApplyScript('oc123', home));
-    assert.notEqual(compiledApplyScript('oc123', home), compiledApplyScript('oc124', home));
-    rmSync(compiledApplyScript('oc123', home));
 
     // The macro ran but drew nothing (no chart found).
     s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async () => undefined);
+    await applyInPowerPoint(s, home, async () => ({ out: '' }));
     assert.equal(getSession('ap1')!.state, 'error');
     assert.match(getSession('ap1')!.message!, /could not find the chart/);
 
@@ -339,19 +331,19 @@ test('Apply in PowerPoint records the outcome on the session: drawn, or an error
     for (const [err, re] of cases) {
       assert.match(applyErrorMessage(err), re);
       s = setSession('ap1', { chart, state: 'applied' });
-      await applyInPowerPoint(s, home, async () => err);
+      await applyInPowerPoint(s, home, async () => ({ error: err }));
       assert.equal(getSession('ap1')!.state, 'error');
       assert.match(getSession('ap1')!.message!, re);
     }
 
     // Laid out, then the call failed (e.g. timed out while drawing): error, not drawn.
     s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async () => { setSession('ap1', { state: 'open' }); return { message: 'x', killed: true }; });
+    await applyInPowerPoint(s, home, async () => { setSession('ap1', { state: 'open' }); return { error: { message: 'x', killed: true } }; });
     assert.equal(getSession('ap1')!.state, 'error');
 
     // A newer Apply (or a Cancel) while this one ran is not overwritten.
     s = setSession('ap1', { chart, state: 'applied' });
-    await applyInPowerPoint(s, home, async () => { setSession('ap1', { state: 'cancelled' }); return { message: 'x', killed: true }; });
+    await applyInPowerPoint(s, home, async () => { setSession('ap1', { state: 'cancelled' }); return { error: { message: 'x', killed: true } }; });
     assert.equal(getSession('ap1')!.state, 'cancelled');
     assert.match(readFileSync(join(home, 'addin.log'), 'utf8'), /APPLY ap1 failed after \d+ ms: timed out/);
   } finally {
@@ -387,10 +379,10 @@ test('Apply: the server lays the chart out for its context and ApplyEdit only dr
     const line = (c: string) => `CONTEXT\t${c.replace(/\n/g, '\t')}`;
     // 1. The context is as expected: one call with the layout; settled while PowerPoint draws, then drawn.
     let s = setSession(id, { chart: edited, state: 'applied' });
-    await applyInPowerPoint(s, home, async (_script, _ms, args) => {
+    await applyInPowerPoint(s, home, async (_macro, args) => {
       calls.push(args);
       assert.equal(getSession(id)!.state, 'open', 'settled before drawing: a same-data chart keeps its data');
-      return `SYNC g 1 of 1 charts\nAPPLIED ${id} OK (200 ms) engine 0 ms, draw 190 ms\n${line(moved)}\n`;
+      return { out: `SYNC g 1 of 1 charts\nAPPLIED ${id} OK (200 ms) engine 0 ms, draw 190 ms\n${line(moved)}\n` };
     }, () => false, prepare);
     assert.deepEqual(calls.map((a) => a.slice(0, 2)), [[id, context]]);
     assert.equal(calls[0][2], viaVba);
@@ -401,9 +393,9 @@ test('Apply: the server lays the chart out for its context and ApplyEdit only dr
     // 2. The chart was moved back meanwhile: ApplyEdit answers its context, the server lays out again.
     calls.length = 0;
     s = setSession(id, { chart: edited, state: 'applied' });
-    await applyInPowerPoint(s, home, async (_script, _ms, args) => {
+    await applyInPowerPoint(s, home, async (_macro, args) => {
       calls.push(args);
-      return args[1] === '*' ? `APPLIED ${id} OK (210 ms)\n${line(context)}` : line(context);
+      return { out: args[1] === '*' ? `APPLIED ${id} OK (210 ms)\n${line(context)}` : line(context) };
     }, () => false, prepare);
     assert.deepEqual(calls.map((a) => a.slice(0, 2)), [[id, moved], [id, '*']]);
     assert.equal(calls[1][2], viaVba);
@@ -412,7 +404,7 @@ test('Apply: the server lays the chart out for its context and ApplyEdit only dr
     // 3. No chart, or drawing failed: an error that says what to do.
     for (const answer of [`APPLIED ${id} no chart`, `APPLIED ${id} failed: boom`]) {
       s = setSession(id, { chart: edited, state: 'applied' });
-      await applyInPowerPoint(s, home, async () => answer, () => false, prepare);
+      await applyInPowerPoint(s, home, async () => ({ out: answer }), () => false, prepare);
       assert.equal(getSession(id)!.state, 'error');
       assert.match(getSession(id)!.message!, /could not find the chart/);
     }
@@ -420,6 +412,28 @@ test('Apply: the server lays the chart out for its context and ApplyEdit only dr
     rmSync(home, { recursive: true, force: true });
   }
   assert.deepEqual(parseApplyAnswer('CONTEXT\ta\tb\t\nAPPLIED x OK (1 ms)\n'), { lines: ['APPLIED x OK (1 ms)'], context: 'a\nb\n', applied: 'APPLIED x OK (1 ms)' });
+});
+
+test('the AppleScript helper: one request per line, never starts PowerPoint, exits with the server', { skip: process.platform !== 'darwin' }, async () => {
+  assert.match(HELPER_JXA, /if \(!ppt\.running\(\)\) reply\(\{ error: 'execution error: PowerPoint is not running\. \(-600\)' \}\)/);
+  assert.match(HELPER_JXA, /runVBMacro\(\{ macroName: req\.macro, listOfParameters: req\.args \}\)/);
+  const runner = macroRunner();
+  assert.equal(await runner.ping(30_000), true, 'answers without an Apple event');
+  assert.equal(await runner.ping(30_000), true, 'and again: one helper for many requests');
+  runner.stop(); // stdin closes: the helper exits instead of spinning on end of input
+  // A fake helper that never answers: the request times out and a fresh helper takes the next one.
+  const dir = mkdtempSync(join(tmpdir(), 'oc-runner-'));
+  try {
+    const n = join(dir, 'n');
+    writeFileSync(n, '0');
+    const slow = macroRunner('/bin/sh', ['-c', `c=$(cat ${JSON.stringify(n)}); echo $((c+1)) > ${JSON.stringify(n)}; if [ "$c" = 0 ]; then exec sleep 30; else read l; echo '{"out":"pong"}'; fi`]);
+    const r = await slow.run('m', [], 200);
+    assert.ok('error' in r && r.error.killed);
+    assert.equal(await slow.ping(5000), true);
+    slow.stop();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a server that outlived the PowerPoint that started it never sends Apple events and hands over', async () => {
@@ -455,4 +469,15 @@ test('a server that outlived the PowerPoint that started it never sends Apple ev
   assert.deepEqual(await call(true, 'POST', '/api/addin/run'), { handled: true, code: 503, retired: true });
   assert.deepEqual(await call(false, 'GET', '/api/addin/ping'), { handled: true, code: 200, retired: false });
   assert.deepEqual(await call(true, 'GET', '/api/session/x'), { handled: false, code: 0, retired: false });
+
+  // Edit data (and only that) tells the server to open its connection to PowerPoint for the Apply.
+  const s = sampleFor('stacked');
+  assert.ok('spec' in s);
+  let edits = 0;
+  const routes = addinRoutes(() => m, fakeSessions().sessions, () => false, () => {}, () => { edits++; });
+  const res = { writeHead: () => ({ end: () => undefined }) };
+  for (const body of ['types', `edit\n\n48,96,864,408\n48,96,864,408\n${JSON.stringify(s.spec)}`]) {
+    await routes(Object.assign((async function* () { yield Buffer.from(body); })(), { method: 'POST', url: '/api/addin/run' }) as never, res as never);
+  }
+  assert.equal(edits, 1);
 });
