@@ -1,7 +1,7 @@
 {
   "$schema": "../../schema/style.schema.json",
   "name": "Brand (theme-following)",
-  "description": "Series in the presentation's accent colours, so a template fill takes the client theme; teal decorations and solid axis lines.",
+  "description": "Series in the presentation's accent colours, so a template fill takes the client theme; accent-coloured totals and decorations, solid axis lines.",
   "font": "Arial",
   "fontSize": 12,
   "text": "tx1",
@@ -9,10 +9,11 @@
   "axis": "A6A6A6",
   "palette": ["accent1", "accent2", "accent3", "accent4", "accent5", "accent6"],
   "theme": { "accent1": "0F4C5C", "accent2": "2A9D8F", "accent3": "8AB17D", "accent4": "E9C46A", "accent5": "F4A261", "accent6": "E76F51", "dk2": "0F4C5C" },
-  "labels": { "total": "accent1", "decoration": "accent1" },
-  "lines": {
-    "axis": { "color": "tx1", "width": 0.75 },
-    "gridline": { "color": "D9D9D9", "width": 0.5 },
-    "decoration": { "color": "accent1", "width": 1 }
+  "elements": {
+    "label:total:*": { "color": "accent1" },
+    "axis": { "line": "tx1", "lineWidth": 0.75 },
+    "gridline:*": { "line": "D9D9D9", "lineWidth": 0.5 },
+    "arrow:*": { "line": "accent1", "color": "accent1", "outline": "accent1" },
+    "valueline:*": { "line": "accent1", "color": "accent1" }
   }
 }

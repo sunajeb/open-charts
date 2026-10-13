@@ -3,8 +3,8 @@
 // (format.ts) that VBA turns into native shapes.
 //
 // Request, one field per line:
-//   1  op       insert | update | relayout | edit | types
-//   2  arg      gallery item (insert) or edit-session id (update, optional)
+//   1  op       insert | update | relayout | edit | detach | types
+//   2  arg      gallery item (insert), edit-session id (update, optional) or element role (detach)
 //   3  frame    "x,y,w,h" pt: target frame (insert) or the chart's OC_FRAME tag
 //   4  bounds   "x,y,w,h" pt: the group's current bounds on the slide (update, relayout)
 //   then, optional, one "key=value" per line:
@@ -13,6 +13,10 @@
 //                     contrast is decided on the colours PowerPoint will show
 //      scale=N        same-scale group: the smallest own scale (OC_SCALE, pt per unit) of the
 //                     other charts in this chart's group on the slide
+//      base=JSON      the chart's OC_BASE tag (update, relayout): its formatting as last drawn
+//      native=JSON    what its shapes look like now: [{role, kind, props}] (core/overrides.ts
+//                     RenderedEntry); with base, formatting changed in PowerPoint since is kept as
+//                     overrides (mergeNativeEdits) instead of being drawn over
 //   (edit sends the same lines 3–4 and params, so the server can lay an Apply out by itself:
 //    layoutForApply)
 //   5… spec     the chart's OC_SPEC tag, reassembled (update, relayout, edit); always starts with "{"
@@ -20,8 +24,11 @@
 // update   re-lays the chart out where it now is, with the applied edit session if there is one
 // relayout the same, but answers "N" (nothing to do) when neither the frame nor the data changed
 // edit     opens the chart in the editor (an edit session, docs/ux-editor.md)
+// detach   converts one label to plain text ("Convert to plain text"): its text as drawn now is
+//          frozen in the spec (custom content, `detach: true`), so data edits no longer rewrite it;
+//          it stays in the chart group and moves with the chart
 import { createHash } from 'node:crypto';
-import { defaultStyle, layoutChart, THEME_SLOTS, type ChartSpec, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
+import { defaultStyle, detachElement, kindOf, layoutChart, mergeNativeEdits, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
 import { chartContent } from '../deck.ts';
 import { shapeName } from '../render/pptx.ts';
 import { parseFrame } from '../render/tags.ts';
@@ -36,6 +43,9 @@ export interface AddinRequest {
   theme?: Partial<ThemeColors>;
   /** Same-scale group: the smallest own scale of the other charts in the group (from `scale=`). */
   ptPerUnit?: number;
+  /** The chart's OC_BASE and its shapes as they are now (`base=`, `native=`): native edits to keep. */
+  base?: RenderedMap;
+  native?: RenderedEntry[];
   /**
    * Lines 3 up to the spec as sent (frame, bounds, theme=, scale=), each ending in a newline: what the
    * layout depends on besides the data. VBA compares it with the chart's own to reuse a layout.
@@ -79,7 +89,10 @@ export function parseRequest(text: string): AddinRequest {
     params[lines[i].slice(0, at)] = lines[i].slice(at + 1).trim();
   }
   const scale = Number(params.scale);
-  const context = lines.length > 2 ? lines.slice(2, i).map((l) => `${l}\n`).join('') : '';
+  // base= / native= describe the shapes, not the layout's context.
+  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native)=/.test(l)).map((l) => `${l}\n`).join('') : '';
+  const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
+  const base = json(params.base), native = json(params.native);
   return {
     op: (lines[0] ?? '').trim(),
     arg: (lines[1] ?? '').trim(),
@@ -89,6 +102,7 @@ export function parseRequest(text: string): AddinRequest {
     ...(params.theme ? { theme: parseTheme(params.theme) } : {}),
     ...(params.scale && scale > 0 && Number.isFinite(scale) ? { ptPerUnit: scale } : {}),
     ...(context ? { context } : {}),
+    ...(base && typeof base === 'object' && !Array.isArray(base) && Array.isArray(native) ? { base, native } : {}),
   };
 }
 
@@ -147,9 +161,18 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         // chart on that chart, but never for the automatic re-layout of another chart with the same data.
         const pending = session?.state === 'applied' || (session?.state === 'error' && req.op === 'update');
         const edited = pending && session!.chart && typeof session!.chart === 'object';
-        const { chart, style } = edited ? splitSpec(session!.chart as ChartSpec & { style?: Partial<Style> }) : readSpec(req.spec);
+        const read = edited ? splitSpec(session!.chart as ChartSpec & { style?: Partial<Style> }) : readSpec(req.spec);
+        const { style } = read;
+        let { chart } = read;
+        // Formatting changed with PowerPoint's own tools since the last layout becomes overrides.
+        let kept = false;
+        if (!edited && req.base && req.native) {
+          const merged = mergeNativeEdits(chart, req.base, renderedOf(req.native));
+          chart = merged.spec;
+          kept = merged.changes.length > 0;
+        }
         const frame = resolveFrame(chart, style, req.frame, req.bounds, m, env);
-        if (req.op === 'relayout' && !edited && req.frame && sameFrame(frame, req.frame)) return `${header()}\n${record('N')}\n`;
+        if (req.op === 'relayout' && !edited && !kept && req.frame && sameFrame(frame, req.frame)) return `${header()}\n${record('N')}\n`;
         const out = respond(chart, style, frame, m, env);
         if (edited) await sessions?.settle?.(id);
         return out;
@@ -162,6 +185,18 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         await sessions.open(id, style ? { ...chart, style } : chart, `${typeLabel(chart.type)} chart`);
         if (req.context) rememberContext(id, req.context, req.spec);
         return `${header()}\n${record('I', id)}\n`;
+      }
+      case 'detach': {
+        if (!req.spec) return error(SELECT_FIRST);
+        const role = req.arg;
+        if (kindOf(role) !== 'label') return error('Select one label of the chart, then convert it to plain text.');
+        const { chart, style } = readSpec(req.spec);
+        const frame = resolveFrame(chart, style, req.frame, req.bounds, m, env);
+        const before = layout(chart, style, frame, m, env);
+        if (!before.roles?.includes(role)) return error('This label is not drawn any more; update the chart and try again.');
+        const spec = detachElement(chart, before, role);
+        if (!spec) return error('This label is not drawn any more; update the chart and try again.');
+        return respond(spec, style, frame, m, env);
       }
       case 'types':
         return [header(), ...galleryItems().map((g) => record('M', g.id, 'spec' in sampleFor(g.id) ? 'yes' : 'no'))].join('\n') + '\n';

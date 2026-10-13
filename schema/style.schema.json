@@ -20,8 +20,7 @@
     "negative": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/negative" },
     "theme": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/theme" },
     "numbers": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/numbers" },
-    "labels": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/labels" },
-    "lines": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/lines" },
+    "elements": { "$ref": "https://open-charts.dev/schema/chart/1.json#/$defs/style/properties/elements" },
     "types": {
       "type": "object",
       "additionalProperties": false,

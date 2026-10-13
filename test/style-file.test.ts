@@ -31,11 +31,12 @@ test('style files: the example files are valid', () => {
 
 test('style files: unknown keys, bad values and unknown chart types are listed with paths', () => {
   const errors = validateStyleFile({
-    name: 'x', colour: 'red', palette: [], fontSize: 200, labels: { value: 'red', price: '000000' },
-    lines: { axis: { width: 20, dash: 'yes' }, frame: {} }, types: { line: { palette: ['nope'] }, radar: {} },
+    name: 'x', colour: 'red', palette: [], fontSize: 200,
+    elements: { 'gridline:*': { lineWidth: 40, dash: 'yes', fill: '000000' }, 'frame:*': {}, 'label:value:s0:c0': { pin: { x: 0.5, y: 0.5 } } },
+    types: { line: { palette: ['nope'] }, radar: {} },
   });
   const paths = errors.map((e) => e.path).sort();
-  assert.deepEqual(paths, ['/colour', '/fontSize', '/labels/price', '/labels/value', '/lines/axis/dash', '/lines/axis/width', '/lines/frame', '/palette', '/types/line/palette/0', '/types/radar'].sort());
+  assert.deepEqual(paths, ['/colour', '/elements/frame:*', '/elements/gridline:*/dash', '/elements/gridline:*/fill', '/elements/gridline:*/lineWidth', '/elements/label:value:s0:c0/pin', '/fontSize', '/palette', '/types/line/palette/0', '/types/radar'].sort());
 });
 
 test('style files: untrusted input is size-limited and sanitised', () => {
@@ -51,8 +52,8 @@ test('style files: untrusted input is size-limited and sanitised', () => {
 });
 
 test('style files: layering merges nested keys one level deep; types override the file per chart type', () => {
-  const merged = mergeStyles({ lines: { axis: { color: '111111', width: 1 } }, labels: { total: 'accent1' } }, { lines: { axis: { width: 2 } }, labels: { value: '222222' } });
-  assert.deepEqual(merged, { lines: { axis: { color: '111111', width: 2 } }, labels: { total: 'accent1', value: '222222' } });
+  const merged = mergeStyles({ elements: { axis: { line: '111111', lineWidth: 1 }, 'label:total:*': { color: 'accent1' } }, theme: { accent1: '000000' } }, { elements: { axis: { lineWidth: 2 } }, theme: { accent2: '111111' } });
+  assert.deepEqual(merged, { elements: { axis: { line: '111111', lineWidth: 2 }, 'label:total:*': { color: 'accent1' } }, theme: { accent1: '000000', accent2: '111111' } });
   assert.deepEqual(styleFor(ember, 'line').palette, ['8C2D19', '5B5B5B', 'D9542B', 'BFBFBF']);
   assert.deepEqual(styleFor(ember, 'stacked').palette, ember.palette);
   assert.equal(styleFor(ember, 'line').name, undefined, 'the envelope is not a style key');
@@ -68,25 +69,32 @@ test('style files: schema/style.schema.json lists every style key and the file k
   assert.deepEqual(Object.keys(schema.properties).sort(), [...STYLE_KEYS, ...STYLE_FILE_KEYS].sort());
 });
 
-test('labels and lines: recolour by role, keep contrast labels, restyle axis / gridline / decoration lines', () => {
+test('style.elements: default element styles in the overrides vocabulary; a chart\'s own overrides win per property', () => {
   const spec: ChartSpec = {
     type: 'stacked', categories: ['2022', '2023', '2024'],
     series: [{ name: 'A', values: [20, 30, 47] }, { name: 'B', values: [4, 6, 9] }],
     options: { cagr: { from: 0, to: 2 }, valueAxis: true },
   };
-  const plain = layoutChart(spec, CHART_FRAME, m);
-  const styled = layoutChart({ ...spec, style: { labels: { total: 'C00000', category: '00B050', decoration: '7030A0' }, lines: { axis: { color: '0070C0', width: 2 }, decoration: { color: '7030A0', width: 1.5, dash: true } } } }, CHART_FRAME, m);
+  const elements = {
+    'label:total:*': { color: 'C00000' }, 'label:category:*': { color: '00B050' },
+    axis: { line: '0070C0', lineWidth: 2 }, 'arrow:*': { line: '7030A0', lineWidth: 1.5, dash: 'dash' as const, color: '7030A0' },
+  };
+  const styled = layoutChart({ ...spec, style: { elements } }, CHART_FRAME, m);
   const at = (s: Scene, re: RegExp) => s.shapes.filter((_, i) => re.test(s.roles![i]));
   assert.ok(at(styled, /^label:total/).every((t) => (t as TextShape).color === 'C00000'));
   assert.ok(at(styled, /^label:category/).every((t) => (t as TextShape).color === '00B050'));
-  const axisLines = at(styled, /^axis/).filter((s) => s.kind === 'line') as LineShape[];
-  assert.ok(axisLines.length && axisLines.every((l) => l.color === '0070C0' && l.width === 2));
+  const axis = styled.shapes[styled.roles!.indexOf('axis')] as LineShape;
+  assert.equal(axis.color, '0070C0');
+  assert.equal(axis.width, 2);
   const arrow = at(styled, /^arrow:cagr/);
-  assert.ok(arrow.some((s) => s.kind === 'line' && s.color === '7030A0' && s.dash === true && s.width === 1.5));
+  assert.ok(arrow.some((s) => s.kind === 'line' && s.color === '7030A0' && !!s.dash && s.width === 1.5), JSON.stringify(arrow.filter((s) => s.kind === 'line')));
   assert.ok(arrow.some((s) => s.kind === 'text' && s.color === '7030A0'), 'the CAGR bubble text');
-  // Value labels inside dark bars were chosen for contrast: unchanged.
-  const values = (s: Scene) => at(s, /^label:value/).map((t) => (t as TextShape).color);
-  assert.deepEqual(values(styled), values(plain));
+  // The chart's own overrides win, property by property; style defaults never warn when unmatched.
+  const both = layoutChart({ ...spec, style: { elements: { ...elements, 'bar:s9:*': { fill: '000000' } } }, overrides: { 'label:total:c1': { bold: true }, 'label:total:*': { color: '123456' } } }, CHART_FRAME, m);
+  const t1 = both.shapes[both.roles!.indexOf('label:total:c1')] as TextShape;
+  assert.equal(t1.color, '123456');
+  assert.equal(t1.bold, true);
+  assert.equal(both.warnings, undefined);
 });
 
 test('switching styles changes appearance only: same roles and geometry for every chart type, other colours', () => {

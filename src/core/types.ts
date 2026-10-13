@@ -1,6 +1,8 @@
 // All geometry is in points (1/72 inch). Origin is the slide's top-left corner.
 import type { Scale, Unit } from './numbers.ts';
+import type { Overrides } from './overrides.ts';
 export type { Scale, Unit } from './numbers.ts';
+export type { Overrides, ElementStyle, ContentField, LabelField, NumberField } from './overrides.ts';
 
 export type ChartType = 'stacked' | 'clustered' | 'percent' | 'waterfall' | 'mekko' | 'line'
   | 'area' | 'area100' | 'pie' | 'doughnut' | 'harvey'
@@ -151,6 +153,12 @@ export interface ChartSpec {
   options?: ChartOptions;
   /** Style overrides for this chart (over the deck's style). */
   style?: Partial<Style>;
+  /**
+   * Per-element formatting: role (`label:value:s1:c2`) or selector (`label:value:s1:*`, `bar:*:c2`,
+   * `label:category:*`) → ElementStyle. Exact roles win over series / category selectors, which win
+   * over kind selectors (core/overrides.ts, DATA-FORMAT.md "Overrides").
+   */
+  overrides?: Overrides;
 }
 
 /**
@@ -173,14 +181,13 @@ export interface Style {
   theme?: Partial<Record<'accent1' | 'accent2' | 'accent3' | 'accent4' | 'accent5' | 'accent6' | 'dk1' | 'lt1' | 'dk2' | 'lt2', string>>;
   /** Number defaults for every chart; a chart's own options win. */
   numbers?: Pick<ChartOptions, 'locale' | 'decimals' | 'scale'>;
-  /** Label colours by kind (appearance only; see core/look.ts). Labels coloured for contrast keep theirs. */
-  labels?: Partial<Record<'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration', string>>;
-  /** Line styles by kind (appearance only; see core/look.ts). */
-  lines?: Partial<Record<'axis' | 'gridline' | 'connector' | 'leader' | 'decoration', LineLook>>;
+  /**
+   * Default element styles: role or selector → ElementStyle, the same vocabulary as a chart's
+   * `overrides` (DATA-FORMAT.md "Overrides"), e.g. {"gridline:*": {"line": "D9D9D9", "dash": "dot"}}.
+   * A chart's own overrides win, property by property. `pin` and `detach` are per element only.
+   */
+  elements?: Overrides;
 }
-
-/** A line style: colour (hex or theme colour), width in points, dashed or solid. Every key optional. */
-export interface LineLook { color?: string; width?: number; dash?: boolean }
 
 export interface Frame { x: number; y: number; w: number; h: number }
 
@@ -194,6 +201,10 @@ export interface RectShape {
   ellipse?: boolean;
   /** Preset outline drawn in the box. Default 'rect'. */
   geom?: 'rect' | 'ellipse' | 'diamond' | 'roundRect' | 'triangle';
+  /** Dashed ('dot': dotted) outline (an override). */
+  dash?: boolean | 'dot';
+  /** OOXML preset pattern in `fill` on the background (an override). */
+  pattern?: string;
 }
 
 /**
@@ -213,7 +224,10 @@ export interface PathShape {
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
-  dash?: boolean;
+  /** Dashed outline; 'dot': dotted. */
+  dash?: boolean | 'dot';
+  /** OOXML preset pattern in `fill` on the background (an override). */
+  pattern?: string;
 }
 
 export interface LineShape {
@@ -221,8 +235,11 @@ export interface LineShape {
   x1: number; y1: number; x2: number; y2: number;
   color: string;
   width: number;
-  dash?: boolean;
+  /** Dashed; 'dot': dotted. */
+  dash?: boolean | 'dot';
   arrowEnd?: boolean;
+  /** Arrowhead at the start (an override). */
+  arrowStart?: boolean;
 }
 
 export interface TextShape {
@@ -239,7 +256,18 @@ export interface TextShape {
   /** Optional box behind the text (e.g. CAGR bubble). */
   fill?: string;
   stroke?: string;
+  /** Width of the box's outline (an override; default 0.75). */
+  strokeWidth?: number;
   rounded?: boolean;
+  /** Font face, when it differs from the chart's (an override). */
+  font?: string;
+  /**
+   * Text direction (an override): -90 = turned 90° left (reads bottom to top), 90 = turned 90° right.
+   * x y w h are then the turned text's footprint on the slide, not the unrotated box.
+   */
+  rotate?: -90 | 90;
+  /** Placed by hand (an override's `pin`): collisions never hide it. */
+  pinned?: boolean;
   /** Coarse label kind (kept for compatibility; `Scene.roles` is the precise role). */
   role?: 'value' | 'total' | 'category' | 'series' | 'axis' | 'decoration' | 'title';
 }
@@ -264,6 +292,8 @@ export interface Scene {
   hidden: string[];
   /** Value scale of charts with a value axis (same-scale groups, `layoutGroup`). */
   valueScale?: ValueScale;
+  /** Non-fatal notes about the spec, e.g. an override that matches nothing after a data edit. */
+  warnings?: string[];
 }
 
 /**

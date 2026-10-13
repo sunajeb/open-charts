@@ -6,8 +6,8 @@ import { resolveColor, resolveStyle, themeOf } from './theme.ts';
 import { appliesTo, prepareSpec } from './spec.ts';
 import { resolveCollisions } from './resolve.ts';
 import { restoreRoles, visibleSeries } from './visible.ts';
-import { applyLooks } from './look.ts';
 import { minimumSize, placeholder, TooSmall } from './minsize.ts';
+import { compileOverrides, unmatched, type OverrideCtx } from './overrides.ts';
 import { layoutColumns } from './charts/column.ts';
 import { layoutWaterfall } from './charts/waterfall.ts';
 import { layoutMekko } from './charts/mekko.ts';
@@ -25,6 +25,12 @@ export * from './types.ts';
 export { measurerFromFonts, measurerFromMetrics, fontMetrics, lineHeightFactor, wrap } from './text.ts';
 export type { Measurer, FontMetrics } from './text.ts';
 export { checkScene } from './quality.ts';
+export {
+  LABEL_FIELDS, ELEMENT_PROPERTIES, ELEMENT_STYLE_KEYS, ELEMENT_KINDS, ROLE_KINDS, kindOf, propertiesFor,
+  compileOverrides, matches as roleMatches, specificity, detachElement, unpinElement, remapOverrides, PATTERNS,
+  baseOf, mergeNativeEdits, rendered as renderedOf, sceneEntries, colorName,
+} from './overrides.ts';
+export type { ElementKind, ElementProperty, PropertyInfo, Dash, Arrowheads, MarkerStyle, Pattern, RenderedProps, RenderedMap, RenderedEntry } from './overrides.ts';
 export { minimumSize, TooSmall } from './minsize.ts';
 export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';
@@ -36,7 +42,7 @@ export type { SpecError, OptionInfo, OptionKey } from './spec.ts';
 export { formatValue, applyFormat, formatNumber, LOCALES, pickScale } from './numbers.ts';
 export type { NumberStyle, Locale } from './numbers.ts';
 export { parseCategoryDate, years360, cagrYears } from './dates.ts';
-export { applyLooks, LABEL_KINDS, LINE_KINDS, LINE_WIDTH } from './look.ts';
+export { LINK_SLOTS, isElementColor, resolveElementColor, parseThemeColor, tintHex, colorTheme } from './theme.ts';
 export { THEME_SLOTS, MAPPED_SLOTS, COLOR_NAMES, DEFAULT_THEME, isColor, isColorName, themeOf, resolveColor, resolveStyle, colorHex, colorSlot } from './theme.ts';
 export type { ThemeSlot, ThemeColors, ColorName } from './theme.ts';
 
@@ -99,13 +105,24 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
   // Hidden series (optional rows) are left out here; roles name the spec's series again at the end.
   const { spec: s, style: st, index, notes } = visibleSeries(resolved, resolveStyle(merged));
   style = st;
+  // Overrides name series by their index in the spec; the chart types see visible indices.
+  // The style's default element styles sit under the chart's own overrides, property by property.
+  const own = compileOverrides(prepared.overrides);
+  const defaults = compileOverrides(merged.elements);
+  const lookup = (role: string) => { const d = defaults(role), o = own(role); return d && o ? { ...d, ...o } : d ?? o; };
+  const seen = new Set<string>();
+  const toSpec = (role: string) => (index.every((i, k) => i === k) ? role : role.replace(/(^|:)s(\d+)(?=:|$)/g, (_, pre, k) => `${pre}s${index[+k] ?? k}`));
+  const any = (o?: object) => !!o && Object.keys(o).length > 0;
+  const ov: OverrideCtx | undefined = any(prepared.overrides) || any(merged.elements)
+    ? { theme, get: (role) => { const r = toSpec(role); seen.add(r); return lookup(r); } }
+    : undefined;
   const min = minimumSize(s);
   // Lay out at the frame, or — when it is too small — find the size to ask for: at least the type's
   // minimum, grown by what the content says it needs (a table's columns, a category axis).
   let size = { w: Math.max(frame.w, min.w), h: Math.max(frame.h, min.h) };
   let why: string | undefined;
   for (let k = 0; k < 6; k++) {
-    const ctx = makeCtx(s, style, { ...frame, ...size }, m, hints);
+    const ctx = makeCtx(s, style, { ...frame, ...size }, m, hints, ov);
     try {
       layouts[s.type](ctx);
     } catch (e) {
@@ -118,9 +135,11 @@ export function layoutChart(spec: ChartSpec, frame: Frame, m: Measurer, style: S
     if (ctx.roles.length !== ctx.shapes.length) throw new Error('internal: every shape needs a role');
     ctx.hidden.push(...resolveCollisions(ctx.shapes, ctx.roles, frame, m), ...notes);
     restoreRoles(ctx.roles, index);
-    const scene: Scene = { frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}) };
-    applyLooks(scene, style); // appearance only, after every placement decision
-    return scene;
+    const warnings = any(prepared.overrides) ? unmatched(prepared.overrides, seen, prepared) : [];
+    return {
+      frame, shapes: ctx.shapes, roles: ctx.roles, hidden: ctx.hidden, ...(ctx.valueScale ? { valueScale: ctx.valueScale } : {}),
+      ...(warnings.length ? { warnings } : {}),
+    };
   }
   return placeholder(s, frame, size, m, style, why);
 }

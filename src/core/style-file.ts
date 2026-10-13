@@ -1,7 +1,7 @@
 // Style files: a client deck's look as one JSON file (`--style style.json` on build and fill). A style
-// file is a style (the same keys as `style` in a deck) plus a name and per-chart-type overrides
-// under `types`. It changes appearance only: fonts, colours, label colours, line styles and number
-// defaults. Style files are treated as untrusted input: size-limited, every key allowed by name,
+// file is a style (the same keys as `style` in a deck) plus a name and per-chart-type styles under
+// `types`: fonts, colours, number defaults and default element styles (`elements`, the overrides
+// vocabulary). Style files are treated as untrusted input: size-limited, every key allowed by name,
 // every value checked, before anything reads them.
 import type { ChartSpec, Style } from './types.ts';
 import { CHART_TYPES, validateStyle, type SpecError } from './spec.ts';
@@ -68,11 +68,11 @@ export function parseStyleFile(text: string, name = 'style file'): StyleFile {
   return v as StyleFile;
 }
 
-const NESTED = ['theme', 'numbers', 'labels'] as const;
+const NESTED = ['theme', 'numbers'] as const;
 
 /**
- * Layers styles, later wins. Nested objects merge one level deeper (`theme`, `numbers`, `labels`, and
- * each line kind of `lines`), so an override can change one label colour or one line's width.
+ * Layers styles, later wins. `theme` and `numbers` merge one level deeper, and `elements` per key
+ * (each key's properties merge), so an override can change one colour or one line's width.
  */
 export function mergeStyles(...styles: (Partial<Style> | undefined)[]): Partial<Style> {
   const out: Partial<Style> = {};
@@ -81,10 +81,10 @@ export function mergeStyles(...styles: (Partial<Style> | undefined)[]): Partial<
     for (const [k, v] of Object.entries(st) as [keyof Style, never][]) {
       if (v === undefined) continue;
       if ((NESTED as readonly string[]).includes(k)) (out as Record<string, unknown>)[k] = { ...(out[k] as object), ...(v as object) };
-      else if (k === 'lines') {
-        const lines: Record<string, object> = { ...out.lines };
-        for (const [lk, look] of Object.entries(v as object)) lines[lk] = { ...lines[lk], ...look };
-        out.lines = lines;
+      else if (k === 'elements') {
+        const el: Record<string, object> = { ...out.elements };
+        for (const [ek, es] of Object.entries(v as object)) el[ek] = { ...el[ek], ...es };
+        out.elements = el;
       } else (out as Record<string, unknown>)[k] = v;
     }
   }
