@@ -43,6 +43,27 @@ tab on the ribbon, before Home, with one group, **Charts**:
 
 Edit data and Update chart are greyed out unless an open-charts chart is selected.
 
+Next to it, the **Chart tools** group holds the commands that change a chart without touching its
+data. Each one is greyed out unless it applies to what is selected:
+
+| Control | What it does |
+|---|---|
+| **Totals** | Shows or hides the totals above the columns (stacked, 100%, Mekko, Mekko XY, area, combination, doughnut). |
+| **CAGR arrow** | Adds a compound annual growth arrow from the first to the last column, or between two columns you select first (Shift-click a segment of each). Click again to remove it; with two other columns selected, it moves there. Stacked and 100% charts. |
+| **Difference arrow** | The same for the arrow showing the difference between two column totals. |
+| **Same scale** | With two or more charts selected (Shift-click), puts them on one scale: equal values are drawn equally tall in all of them. See [Two charts on a slide, same scale](#two-charts-on-a-slide-same-scale). |
+| **Remove from same scale** | The selected charts go back to their own scale. |
+| **Convert to plain text** | Select one label of the chart (click the chart, then the label), then click: the label keeps the text it shows now, and data edits no longer change it. It stays in the chart and moves with it. |
+| **Reset label position** | Puts the selected label back where open-charts places it after you moved it, or every moved label when the whole chart is selected. |
+
+Formatting you changed with PowerPoint's own tools is kept by these commands, as by Update chart.
+
+**Right-click.** The same commands, plus Edit data and Update chart, are added to PowerPoint's
+right-click menu on an open-charts chart (and on its pieces, or on several charts selected together),
+showing only the ones that apply. This uses the right-click menu extension of Office add-ins, which
+PowerPoint for Windows shows; PowerPoint for Mac does not (see [Undo and the right-click menu on a
+Mac](#undo-and-the-right-click-menu-on-a-mac)): there, use the ribbon.
+
 ### Insert, edit, apply, resize
 
 1. **Insert.** Click a slide in Normal view, then **Insert chart** and pick a type. If the slide has
@@ -595,8 +616,14 @@ see [DATA-FORMAT.md › scaleGroup](DATA-FORMAT.md#scalegroup)): the chart with 
 its size keeps its scale, and the others draw one unit exactly as long, leaving room above their
 columns. Stacked, clustered, waterfall, line, area and combination charts can share a scale.
 
-In PowerPoint the group stays consistent: **Update chart**, **Apply** in the editor and resizing one
-chart of the group re-lay out the other charts of the group on that slide as well. From the command
+In PowerPoint, select the charts (click one, Shift-click the others) and click **Same scale** in the
+**Chart tools** group: they get one scale group (stored in each chart's data, so it travels with the
+deck) and are laid out again at once. If one of them already belongs to a group, the others join
+that group. **Remove from same scale** takes the selected charts out; the charts left in the group
+are laid out again at their own common scale.
+
+The group stays consistent: **Update chart**, **Apply** in the editor, the Chart tools commands and
+resizing one chart of the group re-lay out the other charts of the group on that slide as well. From the command
 line, a slide can hold several charts (`"charts": [...]`); without explicit frames they share the
 chart area side by side.
 
