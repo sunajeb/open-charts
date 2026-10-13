@@ -205,7 +205,13 @@ property table, overrides merge, toolbar placement, routes end to end), `test/e2
 (compact layout, debounce, coalescing, Esc revert, ⌘↵, page reuse, invalid cell, toolbar page),
 `test/popup-helper.test.ts` (the real helper, opt-in).
 
-**Live in PowerPoint:** LIVE_RESULT
+**Live in PowerPoint:** not run yet: PowerPoint was in use (`/private/tmp/open-charts-ppt.lock` held)
+for the whole session. To run it: `node --experimental-strip-types --no-warnings tools/e2e-popup-live.ts`
+(installs this build, inserts a chart, Edit data → times the pop-up from the macro call to the server's
+`POPUP shown` line → types 77 with System Events → checks the live `APPLY … done` → Escape → checks the
+revert; quits PowerPoint). Still to confirm live: PowerPoint for Mac's `PointsToScreenPixelsX/Y` (if it
+answers nothing useful the pop-up goes to the right edge of PowerPoint's window), typing into the
+non-activating panel while PowerPoint stays the active app, and the toolbar's selection events.
 
 ## Bugs
 
