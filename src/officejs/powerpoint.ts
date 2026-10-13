@@ -4,7 +4,7 @@
 // exportAsBase64 (1.8). Batching rule (docs/plan/03 §4.2): never sync inside a loop; insert = 2
 // syncs, update = 3.
 import type { Frame } from '../core/types.ts';
-import type { Box, HostCaps, Op } from './plan.ts';
+import type { Box, HostCaps, LineStyle, Op } from './plan.ts';
 import type { Tags } from '../render/tags.ts';
 import { THEME_SLOTS, type ThemeColors } from '../core/theme.ts';
 
@@ -119,18 +119,18 @@ function addOp(shapes: PP, op: Op): PP {
     font.name = op.text.font; font.size = op.text.size; font.bold = op.text.bold; font.color = op.text.color;
     tf.textRange.paragraphFormat.horizontalAlignment = op.text.align;
   }
-  if (op.kind !== 'text' && op.rotation) s.rotation = op.rotation;
+  if (op.rotation) s.rotation = op.rotation;
   if (op.kind === 'geom' && op.adjustments) op.adjustments.forEach((v, i) => s.adjustments.set(i, v));
   if (op.role) s.tags.add('OC_ROLE', op.role);
   return s;
 }
 
-function applyLine(s: PP, line: { color: string; weight: number; dash?: boolean } | null) {
+function applyLine(s: PP, line: LineStyle | null) {
   if (!line) { s.lineFormat.visible = false; return; }
   s.lineFormat.visible = true;
   s.lineFormat.color = line.color;
   s.lineFormat.weight = line.weight;
-  s.lineFormat.dashStyle = line.dash ? 'Dash' : 'Solid';
+  s.lineFormat.dashStyle = line.dash ?? 'Solid';
 }
 
 export interface DrawChart {

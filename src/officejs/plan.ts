@@ -33,7 +33,8 @@ export function hostCaps(isSet: (version: string) => boolean): HostCaps {
 }
 
 export interface Box { left: number; top: number; width: number; height: number }
-export interface LineStyle { color: string; weight: number; dash?: boolean }
+/** `dash`: PowerPoint JS ShapeLineDashStyle ('Dash' for the writer's prstDash dash, 'SystemDot' for sysDot). */
+export interface LineStyle { color: string; weight: number; dash?: 'Dash' | 'SystemDot' }
 export interface TextStyle {
   text: string; font: string; size: number; bold: boolean; color: string;
   align: 'Left' | 'Center' | 'Right'; valign: 'Top' | 'Middle' | 'Bottom';
@@ -43,13 +44,15 @@ export interface TextStyle {
 export type Op =
   | { kind: 'geom'; geom: string; box: Box; fill: string | null; line: LineStyle | null; rotation?: number; adjustments?: number[]; text?: TextStyle; role?: string; name: string }
   | { kind: 'line'; box: Box; line: LineStyle; rotation?: number; role?: string; name: string }
-  | { kind: 'text'; box: Box; fill: string | null; line: LineStyle | null; text: TextStyle; role?: string; name: string };
+  | { kind: 'text'; box: Box; fill: string | null; line: LineStyle | null; rotation?: number; text: TextStyle; role?: string; name: string };
 
 export type Plan = { path: 'B'; ops: Op[] } | { path: 'A'; reason: string };
 
 const r2 = (v: number) => Math.round(v * 1000) / 1000;
 const box = (x: number, y: number, w: number, h: number): Box => ({ left: r2(x), top: r2(y), width: r2(w), height: r2(h) });
 const norm = (deg: number) => r2(((deg % 360) + 360) % 360);
+const dashOf = (d?: boolean | 'dot') => (d === 'dot' ? { dash: 'SystemDot' as const } : d ? { dash: 'Dash' as const } : {});
+const noPattern = (s: { pattern?: string }, role?: string) => { if (s.pattern) throw new Unsupported(`"${role ?? 'shape'}" has a pattern fill, which PowerPoint JS cannot set`); };
 
 /**
  * A scene colour ("1F3A5F", "1F3A5F@accent1") as "#RRGGBB". PowerPoint JS sets RGB only, so theme
@@ -94,14 +97,15 @@ function shapeOps(s: Shape, caps: HostCaps, font: string, hex: Hex, role: string
 const GEOM: Record<string, string> = { rect: 'Rectangle', ellipse: 'Ellipse', diamond: 'Diamond', roundRect: 'RoundRectangle', triangle: 'Triangle' };
 
 function rectOp(s: RectShape, hex: Hex, role: string | undefined, name: string): Op {
+  noPattern(s, role);
   return {
     kind: 'geom', geom: GEOM[rectGeom(s)], box: box(s.x, s.y, s.w, s.h), fill: hex(s.fill),
-    line: s.stroke ? { color: hex(s.stroke), weight: s.strokeWidth ?? 0.75 } : null, role, name,
+    line: s.stroke ? { color: hex(s.stroke), weight: s.strokeWidth ?? 0.75, ...dashOf(s.dash) } : null, role, name,
   };
 }
 
 function lineOps(s: LineShape, caps: HostCaps, hex: Hex, role: string | undefined, name: string): Op[] {
-  const line: LineStyle = { color: hex(s.color), weight: s.width, ...(s.dash ? { dash: true } : {}) };
+  const line: LineStyle = { color: hex(s.color), weight: s.width, ...dashOf(s.dash) };
   const dx = s.x2 - s.x1, dy = s.y2 - s.y1;
   const out: Op[] = [];
   if (dx * dy >= 0) {
@@ -116,6 +120,7 @@ function lineOps(s: LineShape, caps: HostCaps, hex: Hex, role: string | undefine
     out.push({ kind: 'line', box: box(mx - len / 2, my, len, 0), line, rotation: norm((Math.atan2(dy, dx) * 180) / Math.PI), role, name });
   }
   if (s.arrowEnd) out.push(arrowHead(s, caps, line.color, role, name));
+  if (s.arrowStart) out.push(arrowHead({ ...s, x1: s.x2, y1: s.y2, x2: s.x1, y2: s.y1 }, caps, line.color, role, `${name} start`));
   return out;
 }
 
@@ -137,17 +142,26 @@ function arrowHead(s: LineShape, caps: HostCaps, color: string, role: string | u
 const ALIGN = { left: 'Left', center: 'Center', right: 'Right' } as const;
 const VALIGN = { top: 'Top', middle: 'Middle', bottom: 'Bottom' } as const;
 
-function textOp(t: TextShape, caps: HostCaps, font: string, hex: Hex, role: string | undefined, name: string): Op {
-  const text: TextStyle = { text: t.text, font, size: t.size, bold: !!t.bold, color: hex(t.color), align: ALIGN[t.align], valign: VALIGN[t.valign] };
+function textOp(t: TextShape, caps: HostCaps, chartFont: string, hex: Hex, role: string | undefined, name: string): Op {
+  // "+mj-lt" / "+mn-lt" (the theme's fonts) are DrawingML names; PowerPoint JS takes a family name.
+  if (t.font?.startsWith('+')) throw new Unsupported(`"${role ?? 'label'}" uses a theme font, which PowerPoint JS cannot name`);
+  const text: TextStyle = { text: t.text, font: t.font ?? chartFont, size: t.size, bold: !!t.bold, color: hex(t.color), align: ALIGN[t.align], valign: VALIGN[t.valign] };
   const fill = t.fill ? hex(t.fill) : null;
-  const line = t.stroke ? { color: hex(t.stroke), weight: 0.75 } : null;
-  const b = box(t.x, t.y, t.w, t.h);
+  const line = t.stroke ? { color: hex(t.stroke), weight: t.strokeWidth ?? 0.75 } : null;
+  let b = box(t.x, t.y, t.w, t.h);
+  let rotation: number | undefined;
+  if (t.rotate) {
+    // Turned text (vert270 / vert in the writer): the unturned box, centred on the footprint, rotated.
+    if (!caps.rotation) throw new Unsupported('turned text needs Shape.rotation (PowerPointApi 1.10)');
+    b = box(t.x + t.w / 2 - t.h / 2, t.y + t.h / 2 - t.w / 2, t.h, t.w);
+    rotation = t.rotate === -90 ? 270 : 90;
+  }
   if (t.rounded) {
     // CAGR bubble: the writer's roundRect has adj 50000 (fully round ends); the adjustment needs 1.10,
     // without it the preset's default corner is used (docs/plan/03 §4.1 fallback).
-    return { kind: 'geom', geom: 'RoundRectangle', box: b, fill, line, ...(caps.rotation ? { adjustments: [0.5] } : {}), text, role, name };
+    return { kind: 'geom', geom: 'RoundRectangle', box: b, fill, line, ...(caps.rotation ? { adjustments: [0.5] } : {}), ...(rotation ? { rotation } : {}), text, role, name };
   }
-  return { kind: 'text', box: b, fill, line, text, role, name };
+  return { kind: 'text', box: b, fill, line, ...(rotation ? { rotation } : {}), text, role, name };
 }
 
 const near = (a: number, b: number, eps = 0.01) => Math.abs(a - b) <= eps;
@@ -167,8 +181,9 @@ function clockwise(a: Arc): [number, number] {
  * 3 o'clock, ring thickness as a fraction of the shape's size.
  */
 function pathOp(s: PathShape, caps: HostCaps, hex: Hex, role: string | undefined, name: string): Op {
+  noPattern(s, role);
   const fill = s.fill ? hex(s.fill) : null;
-  const line: LineStyle | null = s.stroke ? { color: hex(s.stroke), weight: s.strokeWidth ?? 0.75, ...(s.dash ? { dash: true } : {}) } : null;
+  const line: LineStyle | null = s.stroke ? { color: hex(s.stroke), weight: s.strokeWidth ?? 0.75, ...dashOf(s.dash) } : null;
   const c = s.commands;
   const base = { kind: 'geom' as const, fill, line, role, name };
   const circle = (a: Arc) => box(a.cx - a.r, a.cy - a.r, 2 * a.r, 2 * a.r);

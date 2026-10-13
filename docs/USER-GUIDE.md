@@ -153,6 +153,12 @@ The pane's first line in its log (`ready`) lists the API versions your PowerPoin
 are fixed colours, so after changing the deck's theme select the chart and Apply again. Charts drawn
 through a re-inserted or new slide keep real theme colours.
 
+**Your own formatting.** Apply redraws the chart from its data and its overrides (`overrides` in the
+spec). Formatting you changed on the slide with PowerPoint's own tools (a bar's colour, a label's
+size) is not read back by the pane yet and is replaced; the `.ppam` add-in keeps such edits.
+Element overrides the pane cannot draw as shapes (pattern fills, theme fonts) send the chart through
+the re-inserted slide.
+
 **Fonts.** Text is measured with the bundled Liberation Sans, which has Arial's widths, so Arial
 charts fit exactly. Charts in another font are measured as if they were Arial; labels may be a little
 tighter or looser than planned.

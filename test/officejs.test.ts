@@ -80,7 +80,7 @@ test('rects, lines and text map onto presets, boxes and text formatting', () => 
   ], ['bar:s0:c0', 'marker:s0:c1', 'axis', 'label:value:s0:c0', 'bubble:cagr']));
   assert.deepEqual(ops[0], { kind: 'geom', geom: 'Rectangle', box: { left: 10, top: 20, width: 30, height: 40 }, fill: '#1F3A5F', line: { color: '#FFFFFF', weight: 1 }, role: 'bar:s0:c0', name: 'Bar s0 c0' });
   assert.equal((ops[1] as { geom: string }).geom, 'Diamond');
-  assert.deepEqual(ops[2], { kind: 'line', box: { left: 10, top: 10, width: 40, height: 0 }, line: { color: '#7F7F7F', weight: 0.75, dash: true }, role: 'axis', name: 'Axis' });
+  assert.deepEqual(ops[2], { kind: 'line', box: { left: 10, top: 10, width: 40, height: 0 }, line: { color: '#7F7F7F', weight: 0.75, dash: 'Dash' }, role: 'axis', name: 'Axis' });
   assert.deepEqual(ops[3], { kind: 'text', box: { left: 5, top: 6, width: 40, height: 14 }, fill: null, line: null, role: 'label:value:s0:c0', name: 'Label value s0 c0',
     text: { text: 'a\nb', font: 'Arial', size: 12, bold: true, color: '#222222', align: 'Right', valign: 'Bottom' } });
   assert.equal(ops[4].kind, 'geom');
@@ -219,6 +219,29 @@ test('manifest: PowerPoint task pane, one ribbon button, PowerPointApi 1.4 floor
   // Element order the schema requires.
   const order = app.children.map((c) => c.name);
   assert.deepEqual(order, ['Id', 'Version', 'ProviderName', 'DefaultLocale', 'DisplayName', 'Description', 'IconUrl', 'HighResolutionIconUrl', 'SupportUrl', 'AppDomains', 'Hosts', 'Requirements', 'DefaultSettings', 'Permissions', 'VersionOverrides']);
+});
+
+test('element overrides: dotted lines, start arrowheads, turned text; patterns and theme fonts need Path A', () => {
+  const [dotted, head0, head1] = opsOf(scene([{ kind: 'line', x1: 0, y1: 10, x2: 40, y2: 10, color: '222222', width: 1, dash: 'dot', arrowEnd: true, arrowStart: true }]));
+  assert.deepEqual((dotted as { line: object }).line, { color: '#222222', weight: 1, dash: 'SystemDot' });
+  assert.equal((head0 as { rotation: number }).rotation, 90); // end: pointing right
+  assert.equal((head1 as { rotation: number }).rotation, 270); // start: pointing left
+  assert.deepEqual(head1.box, { left: 0, top: 8.5, width: 3, height: 3 });
+  // Turned 90° left: the unturned 40 × 12 box, centred on the 12 × 40 footprint, rotated 270°.
+  const [turned] = opsOf(scene([{ kind: 'text', x: 10, y: 20, w: 12, h: 40, text: 'Revenue', size: 10, color: '222222', align: 'center', valign: 'middle', rotate: -90 }]));
+  assert.deepEqual([turned.box, (turned as { rotation: number }).rotation], [{ left: -4, top: 34, width: 40, height: 12 }, 270]);
+  assert.equal(planScene(scene([{ kind: 'text', x: 10, y: 20, w: 12, h: 40, text: 'R', size: 10, color: '222222', align: 'center', valign: 'middle', rotate: 90 }]), V18, 'Arial').path, 'A');
+  assert.equal(planScene(scene([{ kind: 'rect', x: 0, y: 0, w: 5, h: 5, fill: '222222', pattern: 'ltUpDiag' }]), ALL, 'Arial').path, 'A');
+  assert.equal(planScene(scene([{ kind: 'text', x: 0, y: 0, w: 5, h: 5, text: 'x', size: 10, color: '222222', align: 'left', valign: 'top', font: '+mj-lt' }]), ALL, 'Arial').path, 'A');
+  const [own] = opsOf(scene([{ kind: 'text', x: 0, y: 0, w: 5, h: 5, text: 'x', size: 10, color: '222222', align: 'left', valign: 'top', font: 'Georgia', stroke: '000000', strokeWidth: 2 }]));
+  assert.deepEqual([(own as { text: { font: string } }).text.font, (own as { line: object }).line], ['Georgia', { color: '#000000', weight: 2 }]);
+});
+
+test('Path B groups carry the same tags as CLI charts, OC_BASE included', () => {
+  const b = buildChart(samples.stacked!, CHART_FRAME, m);
+  const keys = (b.content.tags ?? []).map(([k]) => k);
+  for (const k of ['OC_V', 'OC_ENGINE', 'OC_FRAME', 'OC_FONT']) assert.ok(keys.includes(k), k);
+  assert.ok(keys.some((k) => k.startsWith('OC_BASE')), 'OC_BASE');
 });
 
 test('build:officejs bundles the engine for the browser (no Node built-ins) and the office-mode pane', async () => {
