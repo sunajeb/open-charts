@@ -24,7 +24,10 @@ function Step([string]$what) { if ($DryRun) { Write-Host "[dry run] $what" } els
 
 Step 'Stopping the open-charts engine (if running)'
 if (-not $DryRun) {
-  try { Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://127.0.0.1:4174/api/addin/quit' -TimeoutSec 2 | Out-Null } catch { }
+  $headers = @{}
+  $tokenFile = Join-Path $EngineDir 'token'
+  if ((Test-Path -LiteralPath $tokenFile) -and ((Get-Content -LiteralPath $tokenFile -TotalCount 1) -match '^X-OC-Token: ([0-9a-f]{64})')) { $headers['X-OC-Token'] = $Matches[1] }
+  try { Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://127.0.0.1:4174/api/addin/quit' -Headers $headers -TimeoutSec 2 | Out-Null } catch { }
   Start-Sleep -Milliseconds 500
   Get-Process -Name 'open-charts' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | Stop-Process -Force -ErrorAction SilentlyContinue
 }

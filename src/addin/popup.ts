@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addinHome } from './launcher.ts';
 import { openUrl } from './win.ts';
+import { withToken } from './token.ts';
 
 export interface Rect { x: number; y: number; w: number; h: number }
 export interface ScreenInfo { frame: Rect; visible: Rect; scale?: number }
@@ -147,10 +148,12 @@ export function keepSaved(saved: Rect, screens: ScreenInfo[]): Rect {
   return s ? clampInto({ ...saved, w, h }, s.visible) : { ...saved, w, h };
 }
 
-/** The pop-up page for an edit session. */
-export const popupUrl = (base: string, id: string) => `${base}/?session=${encodeURIComponent(id)}&popup=1`;
+/** The pop-up page for an edit session (the server's token in the fragment: src/addin/token.ts). */
+export const popupUrl = (base: string, id: string, token?: string) => withToken(`${base}/?session=${encodeURIComponent(id)}&popup=1`, token);
 /** The page the Mac helper preloads (no session yet: it waits for ocPopupOpen). */
-export const preloadUrl = (base: string) => `${base}/?popup=1`;
+export const preloadUrl = (base: string, token?: string) => withToken(`${base}/?popup=1`, token);
+/** The element toolbar's page. */
+export const toolbarUrl = (base: string, token?: string) => withToken(`${base}/toolbar`, token);
 
 // ---- Windows: Edge app mode ---------------------------------------------------------------------
 
@@ -219,7 +222,7 @@ const toRect = (a: unknown): Rect | undefined =>
  * i.e. with the server). `exe` undefined = not built/installed: show() resolves undefined and the
  * caller falls back to the browser.
  */
-export function popupHelper(base: string, exe: string | undefined, log: (line: string) => void = () => {}): PopupHelper {
+export function popupHelper(base: string, exe: string | undefined, log: (line: string) => void = () => {}, token?: string): PopupHelper {
   let child: ChildProcess | undefined;
   let buffer = '';
   const waiters: Array<{ event: string; resolve: (m: Msg | undefined) => void; timer: NodeJS.Timeout }> = [];
@@ -260,8 +263,8 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
     c.unref();
     (c.stdout as unknown as { unref?: () => void }).unref?.();
     child = c;
-    send({ cmd: 'load', panel: 'datasheet', url: preloadUrl(base) });
-    send({ cmd: 'load', panel: 'toolbar', url: `${base}/toolbar` });
+    send({ cmd: 'load', panel: 'datasheet', url: preloadUrl(base, token) });
+    send({ cmd: 'load', panel: 'toolbar', url: toolbarUrl(base, token) });
     return true;
   };
   const helper: PopupHelper = {
@@ -287,7 +290,7 @@ export function popupHelper(base: string, exe: string | undefined, log: (line: s
       if (!info) return undefined;
       const frame = info.saved ? keepSaved(info.saved, info.screens) : placePopup(chartRect(where, info.windows, info.screens), info.windows, info.screens, opts.size);
       const answer = expect('shown', 6000);
-      send({ cmd: 'show', panel: 'datasheet', id, url: popupUrl(base2, id), frame: [frame.x, frame.y, frame.w, frame.h], focus: opts.focus !== false });
+      send({ cmd: 'show', panel: 'datasheet', id, url: popupUrl(base2, id, token), frame: [frame.x, frame.y, frame.w, frame.h], focus: opts.focus !== false });
       return answer;
     },
     hide(panel = 'datasheet') { send({ cmd: 'hide', panel }); },
@@ -319,6 +322,10 @@ export interface OpenPopupDeps {
   browser?: (url: string) => void;
   exists?: (path: string) => boolean;
   log?: (line: string) => void;
+  /** Diagnostic lines (verbose setting only). */
+  debug?: (line: string) => void;
+  /** The add-in server's token, for the page's URL fragment. */
+  token?: string;
   /** Windows: Edge's profile folder for pop-ups. */
   profile?: string;
   env?: NodeJS.ProcessEnv;
@@ -348,7 +355,7 @@ export async function openPopup(base: string, id: string, where: ChartWhere | un
     const t = Date.now();
     const shown = await deps.helper.show(base, id, where).catch(() => undefined);
     if (shown) {
-      log(`POPUP shown in ${Date.now() - t} ms (page ${shown.ready ? 'ready' : 'not ready'} after ${String(shown.ms)} ms)`);
+      (deps.debug ?? log)(`POPUP shown in ${Date.now() - t} ms (page ${shown.ready ? 'ready' : 'not ready'} after ${String(shown.ms)} ms)`);
       return 'helper';
     }
     log('POPUP helper did not answer: opening the editor in the browser');
@@ -361,9 +368,9 @@ export async function openPopup(base: string, id: string, where: ChartWhere | un
     const screens: ScreenInfo[] = chart ? [{ frame: { x: -1e5, y: -1e5, w: 2e5, h: 2e5 }, visible: { x: 0, y: 0, w: 1e5, h: 1e5 } }] : [];
     const rect = placePopup(chart, [], screens);
     const profile = deps.profile ?? join(addinHome(), 'edge-popup');
-    if (edge && (deps.launch ?? defaultLaunch)(edge, edgeArgs(popupUrl(base, id), rect, profile))) return 'edge';
+    if (edge && (deps.launch ?? defaultLaunch)(edge, edgeArgs(popupUrl(base, id, deps.token), rect, profile))) return 'edge';
     log('POPUP Edge not found: opening the editor in the browser');
   }
-  browser(`${base}/?session=${encodeURIComponent(id)}`);
+  browser(withToken(`${base}/?session=${encodeURIComponent(id)}`, deps.token));
   return 'browser';
 }

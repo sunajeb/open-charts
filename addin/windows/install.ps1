@@ -13,6 +13,8 @@
     2. copies open-charts.exe (the engine, no Node needed) to %LOCALAPPDATA%\open-charts,
     3. copies open-charts.ppam to %APPDATA%\Microsoft\AddIns (PowerPoint's add-ins folder),
     4. removes the "downloaded from the internet" mark from both (Office blocks macros in marked files),
+       and creates the engine's secret token (%LOCALAPPDATA%\open-charts\token, kept across installs:
+       the local server answers only callers that can read it),
     5. registers the add-in to load with PowerPoint:
          HKCU\Software\Microsoft\Office\16.0\PowerPoint\AddIns\open-charts  Path, AutoLoad=1
     6. makes sure the add-ins folder is a trusted location for PowerPoint (HKCU, unless your
@@ -40,6 +42,7 @@ $AddInKey = Join-Path $OfficeKey 'AddIns\open-charts'
 $TrustKey = Join-Path $OfficeKey 'Security\Trusted Locations\open-charts'
 $exe = Join-Path $EngineDir 'open-charts.exe'
 $ppam = Join-Path $AddInsDir 'open-charts.ppam'
+$tokenFile = Join-Path $EngineDir 'token'
 
 function Step([string]$what) { if ($DryRun) { Write-Host "[dry run] $what" } else { Write-Host $what } }
 function Fail([string]$why) { Write-Host ''; Write-Host "open-charts was not installed: $why" -ForegroundColor Red; exit 1 }
@@ -53,7 +56,12 @@ if (-not $prefix) { Fail "addin.json in $Source has no callback prefix." }
 # 1. Stop a running engine: Windows does not let a running exe be overwritten.
 Step 'Stopping a running open-charts engine (if any)'
 if (-not $DryRun) {
-  try { Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://127.0.0.1:4174/api/addin/quit' -TimeoutSec 2 | Out-Null } catch { }
+  $headers = @{}
+  if (Test-Path -LiteralPath $tokenFile) {
+    $line = (Get-Content -LiteralPath $tokenFile -TotalCount 1)
+    if ($line -match '^X-OC-Token: ([0-9a-f]{64})') { $headers['X-OC-Token'] = $Matches[1] }
+  }
+  try { Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://127.0.0.1:4174/api/addin/quit' -Headers $headers -TimeoutSec 2 | Out-Null } catch { }
   for ($i = 0; $i -lt 25; $i++) {
     $running = @(Get-Process -Name 'open-charts' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe })
     if ($running.Count -eq 0) { break }
@@ -79,6 +87,17 @@ if (-not $DryRun) {
   }
   Get-ChildItem -LiteralPath $EngineDir -File | Unblock-File
   Unblock-File -LiteralPath $ppam
+  # The engine's token (src/addin/token.ts): 32 random bytes as hex, in the header line VBA sends.
+  # %LOCALAPPDATA% is readable by this user only; an existing token is kept.
+  $valid = (Test-Path -LiteralPath $tokenFile) -and ((Get-Content -LiteralPath $tokenFile -TotalCount 1) -match '^X-OC-Token: [0-9a-f]{64}$')
+  if (-not $valid) {
+    $bytes = New-Object byte[] 32
+    $rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+    $rng.GetBytes($bytes)
+    $rng.Dispose()
+    $hex = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+    [IO.File]::WriteAllText($tokenFile, "X-OC-Token: $hex`n", (New-Object System.Text.UTF8Encoding($false)))
+  }
   $config = [ordered]@{ prefix = $prefix; engine = $exe; ppam = $ppam }
   [IO.File]::WriteAllText((Join-Path $EngineDir 'addin.json'), ((ConvertTo-Json -InputObject $config) + "`n"))
 }

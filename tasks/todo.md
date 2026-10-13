@@ -14,9 +14,9 @@ Rules for this plan
       and public-manual wording
 - [ ] A2 Git history still contains the removed notes — decide: rewrite history + force-push (owner decision, Q1)
 - [ ] A3 Commit the click-handling fix (user click during background selection work runs at once)
-- [ ] A4 Security: local engine server accepts only requests carrying a per-install secret token and a
+- [x] A4 Security: local engine server accepts only requests carrying a per-install secret token and a
       loopback Host/Origin; editor/pop-up/toolbar/VBA/Office.js pass the token; tests for rejection
-- [ ] A5 Remove developer-only leftovers from the product (test macros hidden from the ribbon, debug logs off by default)
+- [x] A5 Remove developer-only leftovers from the product (test macros hidden from the ribbon, debug logs off by default)
 
 ## B. Any font
 - [ ] B1 Font resolver: theme fonts (+mn-lt/+mj-lt) → real family from the deck; family → font files on

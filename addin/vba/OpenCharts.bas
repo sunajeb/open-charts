@@ -32,6 +32,9 @@ Private Const DIRECTIONS As String = ""
 ' Windows: the engine's local server (127.0.0.1 only) and where install.ps1 puts the engine.
 Private Const ENGINE_URL As String = "http://127.0.0.1:4174/api/addin/"
 Private Const ENGINE_EXE As String = "\open-charts\open-charts.exe"
+' The server's per-install token ("X-OC-Token: <hex>", src/addin/token.ts) and the user's settings.
+Private Const TOKEN_FILE As String = "\open-charts\token"
+Private Const SETTINGS_FILE As String = "\open-charts\settings.json"
 Private Const WIN_REINSTALL As String = "Run install.ps1 from the open-charts-win folder again (README, Install on Windows), then restart PowerPoint."
 #If VBA7 Then
 Private Declare PtrSafe Sub Sleep Lib "kernel32" (ByVal dwMilliseconds As Long)
@@ -54,6 +57,8 @@ Private gAutoBusy As Boolean
 Private gAbortAuto As Boolean
 ' Set by the automation entry points: messages are logged instead of shown in a dialog.
 Private gSilent As Boolean
+' The user turned verbose logging on (`open-charts addin verbose on`): Verbose lines are logged too.
+Private gVerbose As Boolean
 Private gLastMessage As String
 ' The chart last opened with Edit data, so Apply in the editor can update it in place.
 Private gEditShape As Object
@@ -102,7 +107,9 @@ Private Sub StartEngine()
     On Error Resume Next
 #If Mac Then
     ignored = AppleScriptTask(SCRIPT_FILE, "startServer", "")
+    gVerbose = (ignored = "OK verbose")
 #Else
+    gVerbose = InStr(Replace(WinReadText(Environ("LOCALAPPDATA") & SETTINGS_FILE), " ", ""), """verbose"":true") > 0
     WinStartServer 0
 #End If
 End Sub
@@ -334,6 +341,8 @@ Private Function ViewLine(ByVal chart As Object) As String
     Err.Clear
 End Function
 
+' ---- Entry points of the add-in server (run VB macro / COM Run; not on the ribbon) --------
+
 ' The selection report now (the add-in server re-measures the chart on screen after a scroll, zoom
 ' or window move: the drag handles hid themselves until then). Never shows a message.
 Public Function OCPREFIX_SelectionInfo() As String
@@ -341,21 +350,6 @@ Public Function OCPREFIX_SelectionInfo() As String
     On Error Resume Next
     OCPREFIX_SelectionInfo = SelectionRequest(sig)
 End Function
-
-' ---- Automation entry points (AppleScript "run VB macro", the add-in server, tests) ---------
-
-' Runs one control id without dialogs, e.g. "chart_stacked", "btnUpdate". The outcome is logged
-' by the bridge script (~/Library/Application Support/open-charts/addin.log).
-Public Sub OCPREFIX_Run(ByVal controlId As String)
-    Dim t As Single
-    gSilent = True
-    gLastMessage = ""
-    t = Timer
-    ResetTiming
-    Dispatch controlId
-    Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage) & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
-    gSilent = False
-End Sub
 
 ' The editor applied an edit session: the add-in server has laid the chart out with the new data for
 ' `context` (ChartContext: frame, bounds, theme, same-scale group) and passes the response, so this
@@ -457,129 +451,6 @@ End Function
 Private Function ContextLine(ByVal context As String) As String
     ContextLine = "CONTEXT" & vbTab & Replace(context, vbLf, vbTab)
 End Function
-
-' Selects the n-th open-charts chart on the active slide (1-based), or nothing for "0" (as a
-' click on an empty part of the slide), for scripted tests.
-Public Sub OCPREFIX_SelectChart(ByVal n As String)
-    Dim shp As Object, k As Long
-    On Error GoTo Failed
-    If n = "0" Then ActiveWindow.Selection.Unselect: Exit Sub
-    For Each shp In ActiveWindow.View.Slide.Shapes
-        If IsChart(shp) Then
-            k = k + 1
-            If k = CLng(Val(n)) Then shp.Select: Exit Sub
-        End If
-    Next shp
-Failed:
-End Sub
-
-' Selects several charts of the active slide, e.g. "1,2" (as Shift-click would), for scripted tests.
-Public Sub OCPREFIX_SelectCharts(ByVal list As String)
-    Dim shp As Object, k As Long, first As Boolean
-    On Error GoTo Failed
-    first = True
-    For Each shp In ActiveWindow.View.Slide.Shapes
-        If IsChart(shp) Then
-            k = k + 1
-            If InStr("," & list & ",", "," & k & ",") > 0 Then shp.Select IIf(first, -1, 0): first = False
-        End If
-    Next shp
-Failed:
-End Sub
-
-' Selects the piece with OC_ROLE `role` of the n-th chart (as clicking into the group would), for
-' scripted tests.
-Public Sub OCPREFIX_SelectRole(ByVal n As String, ByVal role As String)
-    Dim shp As Object, k As Long, i As Long
-    On Error GoTo Failed
-    For Each shp In ActiveWindow.View.Slide.Shapes
-        If IsChart(shp) Then
-            k = k + 1
-            If k = CLng(Val(n)) Then
-                ' From no selection: selecting a piece of the group that is selected already selects nothing on a Mac.
-                ActiveWindow.Selection.Unselect
-                For i = 1 To shp.GroupItems.Count
-                    If TagValue(shp.GroupItems(i), "OC_ROLE") = role Then shp.GroupItems(i).Select: Exit Sub
-                Next i
-            End If
-        End If
-    Next shp
-Failed:
-End Sub
-
-' Logs where the n-th chart is on screen ("WHERE screen=left,top,right,bottom"), and which
-' right-click items and ribbon commands apply to the selection ("APPLIES btnTotals btnCagr ..."),
-' for scripted tests.
-Public Sub OCPREFIX_Probe(ByVal n As String)
-    Dim shp As Object, k As Long, c As Variant, out As String
-    On Error Resume Next
-    For Each shp In ActiveWindow.View.Slide.Shapes
-        If IsChart(shp) Then
-            k = k + 1
-            If k = CLng(Val(n)) Then Report "WHERE " & Replace(ScreenLines(shp), vbLf, " ")
-        End If
-    Next shp
-    For Each c In Array("btnEditData", "btnUpdate", "btnTotals", "btnCagr", "btnDifference", "btnSameScale", "btnUnscale", "btnPlainText", "btnResetLabel")
-        If CommandApplies(CStr(c)) Then out = out & " " & c
-    Next c
-    Report "APPLIES" & out
-    Report "VISIBLECALLS " & gVisibleCalls
-End Sub
-
-' Resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.
-Public Sub OCPREFIX_ResizeChart(ByVal n As String, ByVal factor As String)
-    Dim shp As Object, k As Long
-    On Error GoTo Failed
-    For Each shp In ActiveWindow.View.Slide.Shapes
-        If IsChart(shp) Then
-            k = k + 1
-            If k = CLng(Val(n)) Then
-                shp.LockAspectRatio = 0
-                shp.Width = shp.Width * Val(factor)
-                shp.Height = shp.Height * Val(factor)
-                Exit Sub
-            End If
-        End If
-    Next shp
-Failed:
-End Sub
-
-' Exports the active presentation to `dest` outside PowerPoint's sandbox: kind "pptx" saves a
-' copy, "png" one image per slide (slide1.png ...). PowerPoint writes into its sandbox temp
-' folder and the bridge copies the result out.
-Public Sub OCPREFIX_ExportCopy(ByVal dest As String, ByVal kind As String)
-    Dim tmp As String, i As Long
-    On Error GoTo Failed
-#If Mac Then
-    tmp = Environ("TMPDIR")
-    If Right$(tmp, 1) <> "/" Then tmp = tmp & "/"
-    If kind = "png" Then
-        tmp = tmp & "open-charts-png"
-        If Dir(tmp, vbDirectory) = "" Then MkDir tmp
-        For i = 1 To ActivePresentation.Slides.Count
-            ActivePresentation.Slides(i).Export tmp & "/slide" & i & ".png", "PNG", 1920, 1080
-        Next i
-    Else
-        tmp = tmp & "open-charts-export.pptx"
-        ActivePresentation.SaveCopyAs tmp ' format follows the .pptx extension
-    End If
-    Report "EXPORT " & AppleScriptTask(SCRIPT_FILE, "copyOut", tmp & vbTab & dest)
-#Else
-    ' No sandbox on Windows: write straight to dest.
-    If kind = "png" Then
-        If Dir(dest, vbDirectory) = "" Then MkDir dest
-        For i = 1 To ActivePresentation.Slides.Count
-            ActivePresentation.Slides(i).Export dest & "\slide" & i & ".png", "PNG", 1920, 1080
-        Next i
-    Else
-        ActivePresentation.SaveCopyAs dest
-    End If
-    Report "EXPORT OK " & dest
-#End If
-    Exit Sub
-Failed:
-    Report "EXPORT failed: " & Err.Description
-End Sub
 
 ' ---- Dispatcher ------------------------------------------------------------------------------
 
@@ -724,16 +595,6 @@ Private Sub ConvertToPlainText()
     If response = "" Then Exit Sub
     Set chart = ReplaceChart(chart, response)
     If Not chart Is Nothing Then chart.Select
-End Sub
-
-' Scripted tests: convert the label with role `role` of the selected chart to plain text.
-Public Sub OCPREFIX_ConvertToPlainText(ByVal role As String)
-    Dim chart As Object, response As String
-    Set chart = FindSelectedChart()
-    If chart Is Nothing Then Report "PLAINTEXT failed: no chart selected": Exit Sub
-    response = Engine("detach" & vbLf & role & vbLf & ChartContext(chart) & SpecOf(chart))
-    If response <> "" Then Set chart = ReplaceChart(chart, response)
-    Report "PLAINTEXT " & IIf(chart Is Nothing, "failed: " & gLastMessage, "OK")
 End Sub
 
 ' ---- Chart commands (ribbon "Chart tools" group, right-click menus) ----------------------------
@@ -1183,6 +1044,11 @@ Private Sub Report(ByVal text As String)
 #End If
 End Sub
 
+' A diagnostic line: logged only with verbose logging on (results and errors use Report).
+Private Sub Verbose(ByVal text As String)
+    If gVerbose Then Report text
+End Sub
+
 Private Sub Tell(ByVal text As String)
     gLastMessage = text
     If gSilent Then Exit Sub
@@ -1229,8 +1095,9 @@ Private Function WinStartServer(ByVal waitMs As Long) As Boolean
     Loop
 End Function
 
-' One call to the server: GET for "ping", else POST of body (sent as UTF-8). ok is True on 200; the
-' result is then the response, otherwise what went wrong. Never through a proxy.
+' One call to the server: GET for "ping", else POST of body (sent as UTF-8) with the install's token
+' (the server refuses calls without it). ok is True on 200; the result is then the response,
+' otherwise what went wrong. Never through a proxy.
 Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeoutMs As Long, ByRef ok As Boolean) As String
     Dim http As Object
     ok = False
@@ -1246,6 +1113,7 @@ Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeo
     Else
         http.Open "POST", ENGINE_URL & path, False
         http.setRequestHeader "Content-Type", "text/plain; charset=utf-8"
+        http.setRequestHeader "X-OC-Token", WinToken()
         http.send body
     End If
     If http.Status = 200 Then
@@ -1257,6 +1125,30 @@ Private Function WinHttp(ByVal path As String, ByVal body As String, ByVal timeo
     Exit Function
 Failed:
     WinHttp = Err.Description
+End Function
+
+' The install's token: the file holds "X-OC-Token: <hex>" ("" when it is missing).
+Private Function WinToken() As String
+    Dim t As String
+    t = Replace(Replace(WinReadText(Environ("LOCALAPPDATA") & TOKEN_FILE), vbCr, ""), vbLf, "")
+    If Left$(t, 12) = "X-OC-Token: " Then WinToken = Trim$(Mid$(t, 13))
+End Function
+
+' A small text file's contents ("" when it cannot be read).
+Private Function WinReadText(ByVal path As String) As String
+    Dim f As Integer
+    On Error GoTo Failed
+    If Dir(path) = "" Then Exit Function
+    f = FreeFile
+    Open path For Binary Access Read As #f
+    WinReadText = Space$(LOF(f))
+    Get #f, , WinReadText
+    Close #f
+    Exit Function
+Failed:
+    WinReadText = ""
+    On Error Resume Next
+    If f <> 0 Then Close #f
 End Function
 
 ' Appends one line to %LOCALAPPDATA%\open-charts\addin.log, as the Mac bridge's logLine does.
@@ -2330,7 +2222,7 @@ Private Sub AgendaAutoCheck()
     If gAbortAuto Then Exit Sub ' a user action arrived meanwhile; check again on the next selection
     If response <> "" Then ApplyAgenda response, ""
     gAgendaSig = AgendaSignature()
-    Report "AGENDA auto-update"
+    Verbose "AGENDA auto-update"
 End Sub
 
 ' A field of a request line: \ tab CR LF escaped as the engine reads them (format.ts unescapeField).
@@ -2342,9 +2234,158 @@ Private Function HexOf(ByVal c As Long) As String
     HexOf = Right$("0" & Hex$(c And 255), 2) & Right$("0" & Hex$((c \ 256) And 255), 2) & Right$("0" & Hex$((c \ 65536) And 255), 2)
 End Function
 
-' ---- Agenda test entry points (scripted live tests; no dialogs) -------------------------------
+' ---- TEST ONLY: entry points for the scripted live tests (tools/e2e-*.ts) ----------------------
+' Called by name through AppleScript "run VB macro" or COM Application.Run; Public only for that.
+' No ribbon control, menu item or other code of the add-in calls them (test/addin.test.ts),
+' they take arguments (so PowerPoint's Macros dialog does not list them) and never show a dialog.
 
-' Types `text` over chapter `title`'s heading on slide n and sets its text level (0 = unchanged).
+' Test only: runs one control id without dialogs, e.g. "chart_stacked", "btnUpdate". The outcome is logged
+' by the bridge script (~/Library/Application Support/open-charts/addin.log).
+Public Sub OCPREFIX_Run(ByVal controlId As String)
+    Dim t As Single
+    gSilent = True
+    gLastMessage = ""
+    t = Timer
+    ResetTiming
+    Dispatch controlId
+    Report "RESULT " & controlId & " " & IIf(gLastMessage = "", "OK", gLastMessage) & " (" & Format$((Timer - t) * 1000, "0") & " ms)" & Timing()
+    gSilent = False
+End Sub
+
+' Test only: selects the n-th open-charts chart on the active slide (1-based), or nothing for "0" (as a
+' click on an empty part of the slide), for scripted tests.
+Public Sub OCPREFIX_SelectChart(ByVal n As String)
+    Dim shp As Object, k As Long
+    On Error GoTo Failed
+    If n = "0" Then ActiveWindow.Selection.Unselect: Exit Sub
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then shp.Select: Exit Sub
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Test only: selects several charts of the active slide, e.g. "1,2" (as Shift-click would), for scripted tests.
+Public Sub OCPREFIX_SelectCharts(ByVal list As String)
+    Dim shp As Object, k As Long, first As Boolean
+    On Error GoTo Failed
+    first = True
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If InStr("," & list & ",", "," & k & ",") > 0 Then shp.Select IIf(first, -1, 0): first = False
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Test only: selects the piece with OC_ROLE `role` of the n-th chart (as clicking into the group would), for
+' scripted tests.
+Public Sub OCPREFIX_SelectRole(ByVal n As String, ByVal role As String)
+    Dim shp As Object, k As Long, i As Long
+    On Error GoTo Failed
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then
+                ' From no selection: selecting a piece of the group that is selected already selects nothing on a Mac.
+                ActiveWindow.Selection.Unselect
+                For i = 1 To shp.GroupItems.Count
+                    If TagValue(shp.GroupItems(i), "OC_ROLE") = role Then shp.GroupItems(i).Select: Exit Sub
+                Next i
+            End If
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Test only: logs where the n-th chart is on screen ("WHERE screen=left,top,right,bottom"), and which
+' right-click items and ribbon commands apply to the selection ("APPLIES btnTotals btnCagr ..."),
+' for scripted tests.
+Public Sub OCPREFIX_Probe(ByVal n As String)
+    Dim shp As Object, k As Long, c As Variant, out As String
+    On Error Resume Next
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then Report "WHERE " & Replace(ScreenLines(shp), vbLf, " ")
+        End If
+    Next shp
+    For Each c In Array("btnEditData", "btnUpdate", "btnTotals", "btnCagr", "btnDifference", "btnSameScale", "btnUnscale", "btnPlainText", "btnResetLabel")
+        If CommandApplies(CStr(c)) Then out = out & " " & c
+    Next c
+    Report "APPLIES" & out
+    Report "VISIBLECALLS " & gVisibleCalls
+End Sub
+
+' Test only: resizes the n-th chart on the active slide by a factor, as a user dragging a corner would.
+Public Sub OCPREFIX_ResizeChart(ByVal n As String, ByVal factor As String)
+    Dim shp As Object, k As Long
+    On Error GoTo Failed
+    For Each shp In ActiveWindow.View.Slide.Shapes
+        If IsChart(shp) Then
+            k = k + 1
+            If k = CLng(Val(n)) Then
+                shp.LockAspectRatio = 0
+                shp.Width = shp.Width * Val(factor)
+                shp.Height = shp.Height * Val(factor)
+                Exit Sub
+            End If
+        End If
+    Next shp
+Failed:
+End Sub
+
+' Test only: exports the active presentation to `dest` outside PowerPoint's sandbox: kind "pptx" saves a
+' copy, "png" one image per slide (slide1.png ...). PowerPoint writes into its sandbox temp
+' folder and the bridge copies the result out.
+Public Sub OCPREFIX_ExportCopy(ByVal dest As String, ByVal kind As String)
+    Dim tmp As String, i As Long
+    On Error GoTo Failed
+#If Mac Then
+    tmp = Environ("TMPDIR")
+    If Right$(tmp, 1) <> "/" Then tmp = tmp & "/"
+    If kind = "png" Then
+        tmp = tmp & "open-charts-png"
+        If Dir(tmp, vbDirectory) = "" Then MkDir tmp
+        For i = 1 To ActivePresentation.Slides.Count
+            ActivePresentation.Slides(i).Export tmp & "/slide" & i & ".png", "PNG", 1920, 1080
+        Next i
+    Else
+        tmp = tmp & "open-charts-export.pptx"
+        ActivePresentation.SaveCopyAs tmp ' format follows the .pptx extension
+    End If
+    Report "EXPORT " & AppleScriptTask(SCRIPT_FILE, "copyOut", tmp & vbTab & dest)
+#Else
+    ' No sandbox on Windows: write straight to dest.
+    If kind = "png" Then
+        If Dir(dest, vbDirectory) = "" Then MkDir dest
+        For i = 1 To ActivePresentation.Slides.Count
+            ActivePresentation.Slides(i).Export dest & "\slide" & i & ".png", "PNG", 1920, 1080
+        Next i
+    Else
+        ActivePresentation.SaveCopyAs dest
+    End If
+    Report "EXPORT OK " & dest
+#End If
+    Exit Sub
+Failed:
+    Report "EXPORT failed: " & Err.Description
+End Sub
+
+' Test only: converts the label with role `role` of the selected chart to plain text.
+Public Sub OCPREFIX_ConvertToPlainText(ByVal role As String)
+    Dim chart As Object, response As String
+    Set chart = FindSelectedChart()
+    If chart Is Nothing Then Report "PLAINTEXT failed: no chart selected": Exit Sub
+    response = Engine("detach" & vbLf & role & vbLf & ChartContext(chart) & SpecOf(chart))
+    If response <> "" Then Set chart = ReplaceChart(chart, response)
+    Report "PLAINTEXT " & IIf(chart Is Nothing, "failed: " & gLastMessage, "OK")
+End Sub
+
+' Test only: types `text` over chapter `title`'s heading on slide n and sets its text level (0 = unchanged).
 Public Sub OCPREFIX_AgendaEdit(ByVal n As String, ByVal heading As String, ByVal newText As String, ByVal level As String)
     Dim grp As Object, k As Long, tr As Object
     On Error GoTo Failed
@@ -2362,7 +2403,7 @@ Failed:
     Report "AGENDAEDIT failed: no heading """ & heading & """ on slide " & n
 End Sub
 
-' Goes to slide n and selects the heading `title` there ("" = select nothing), as a click would.
+' Test only: goes to slide n and selects the heading `title` there ("" = select nothing), as a click would.
 Public Sub OCPREFIX_AgendaSelect(ByVal n As String, ByVal heading As String)
     Dim grp As Object, k As Long
     On Error Resume Next
@@ -2375,7 +2416,7 @@ Public Sub OCPREFIX_AgendaSelect(ByVal n As String, ByVal heading As String)
     Next k
 End Sub
 
-' Slide sorter operations: "move" from to, "duplicate" n, "delete" n, "none"; then the selection
+' Test only: slide sorter operations: "move" from to, "duplicate" n, "delete" n, "none"; then the selection
 ' change PowerPoint raises (the automatic update).
 Public Sub OCPREFIX_AgendaSorter(ByVal op As String, ByVal a As String, ByVal b As String)
     On Error GoTo Failed
@@ -2394,7 +2435,7 @@ Failed:
     Report "SORTER " & op & " failed: " & Err.Description
 End Sub
 
-' Lists every slide for the test log: n, kind, hidden, the agenda headings (">" per level, "*" current).
+' Test only: lists every slide for the test log: n, kind, hidden, the agenda headings (">" per level, "*" current).
 Public Sub OCPREFIX_AgendaDump(ByVal withIndents As String)
     Dim sld As Object, grp As Object, k As Long, out As String, row As String, role As String, tr As Object
     For Each sld In ActivePresentation.Slides

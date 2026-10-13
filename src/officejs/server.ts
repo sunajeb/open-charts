@@ -4,13 +4,16 @@
 //   POST /api/log   one line per event (ready, insert, apply, errors), appended to officejs.log
 //   GET  /api/log   the lines so far (used by the live check, tools/officejs-live.ts)
 //   GET  /api/selftest  {run:true} once when started with --selftest (the live check), else false
-// Without a certificate it serves plain http (tests, Office on the web through a tunnel).
+// Without a certificate it serves plain http (tests, Office on the web through a tunnel: name the
+// tunnel's host with --allow-host, since only requests addressed to this server are answered;
+// src/guard.ts).
 import { createServer as createHttps } from 'node:https';
 import { createServer as createHttp, type IncomingMessage, type ServerResponse } from 'node:http';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { addinHome } from '../addin/launcher.ts';
+import { refusal } from '../guard.ts';
 
 export const OFFICEJS_PORT = 4175;
 export const certDir = (home = addinHome()) => join(home, 'officejs-cert');
@@ -27,12 +30,17 @@ export interface OfficeServerOptions { root: string; port?: number; host?: strin
   /** Receives each slide the self-test exports (base64 .pptx, POST /api/selftest/slide). */
   onSlide?: (b64: string) => void;
   /** Receives each log line as it arrives. */
-  onLog?: (line: string) => void }
+  onLog?: (line: string) => void;
+  /** Host names besides localhost/127.0.0.1 this server answers to (a tunnel). */
+  allowHosts?: string[] }
 
 export function serveOfficeJs(opts: OfficeServerOptions) {
   const lines: string[] = [];
   let selftest = !!opts.selftest;
+  const guard = { port: () => (server.address() as { port: number } | null)?.port ?? port, scheme: opts.tls ? 'https' as const : 'http' as const, hosts: opts.allowHosts };
   const handler = async (req: IncomingMessage, res: ServerResponse) => {
+    const why = refusal(req, guard);
+    if (why) { req.resume(); res.writeHead(403, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' }).end(`open-charts: request refused (${why})`); return; }
     const url = new URL(req.url ?? '/', 'http://x');
     if (url.pathname === '/api/selftest') {
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ run: selftest }));
@@ -89,5 +97,6 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const tls = process.argv.includes('--http') ? null : devTls();
   if (!tls && !process.argv.includes('--http')) { console.error('No dev certificate. Run: npm run officejs:cert   (or pass --http)'); process.exit(1); }
   mkdirSync(addinHome(), { recursive: true });
-  serveOfficeJs({ root, port: Number(arg('--port') ?? OFFICEJS_PORT), tls, log: logFile(), selftest: process.argv.includes('--selftest') });
+  const allowHosts = process.argv.flatMap((a, i) => (a === '--allow-host' && process.argv[i + 1] ? [process.argv[i + 1]] : []));
+  serveOfficeJs({ root, port: Number(arg('--port') ?? OFFICEJS_PORT), tls, log: logFile(), selftest: process.argv.includes('--selftest'), allowHosts });
 }

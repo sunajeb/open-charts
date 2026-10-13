@@ -5,6 +5,8 @@ import { buildDeck, type DeckSpec } from './deck.ts';
 import { editorSpec } from './core/spec.ts';
 import { DEFAULT_THEME, defaultStyle } from './core/index.ts';
 import { editorGallery } from './addin/registry.ts';
+import { refusal } from './guard.ts';
+import { withTokenBoot } from './addin/token.ts';
 
 const EDITOR = new URL('./web/editor.html', import.meta.url);
 
@@ -80,26 +82,45 @@ export interface ServeOptions {
    * for that outcome before it says the slide was updated.
    */
   confirmsApply?: boolean;
+  /**
+   * The add-in server's per-install token (src/addin/token.ts): every request but the public ones
+   * (the editor page; `isPublic`) must carry it. Host and Origin are checked either way (src/guard.ts).
+   */
+  token?: string;
+  /** More requests that need no token (the add-in's toolbar page and ping). */
+  isPublic?: (req: IncomingMessage) => boolean;
 }
+
+/** The editor page (GET /, /index.html, with any query string): static, no session data in it. */
+export const isEditorPage = (req: IncomingMessage) => req.method === 'GET' && /^\/(index\.html)?(\?|$)/.test(req.url ?? '');
 
 export function serve(port: number, fonts: { font?: string; bold?: string } = {}, opts: ServeOptions = {}) {
   const m = createMeasurer(fonts.font, fonts.bold);
   const view = (s: Session): Session => (opts.confirmsApply ? { ...s, confirms: true } : s);
+  const guard = {
+    port: () => (server.address() as { port: number } | null)?.port ?? port,
+    token: opts.token,
+    isPublic: (req: IncomingMessage) => isEditorPage(req) || (opts.isPublic?.(req) ?? false),
+  };
   const server = createServer(async (req, res) => {
     try {
+      const why = refusal(req, guard);
+      if (why) {
+        req.resume();
+        res.writeHead(403, { 'content-type': 'application/json', connection: 'close' }).end(JSON.stringify({ error: `open-charts: request refused (${why})` }));
+        return;
+      }
       if (opts.routes && (await opts.routes(req, res))) return;
-      if (req.method === 'GET' && /^\/(index\.html)?(\?|$)/.test(req.url ?? '')) {
+      if (isEditorPage(req)) {
         res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
-        res.end(editorHtml());
+        res.end(opts.token ? withTokenBoot(editorHtml()) : editorHtml());
         return;
       }
       const sm = req.url?.match(/^\/api\/session\/([^/?]+)$/);
       if (sm) {
         const id = decodeURIComponent(sm[1]);
-        const cors = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' };
-        if (req.method === 'OPTIONS') { res.writeHead(204, cors).end(); return; }
-        if (!SESSION_ID.test(id)) { res.writeHead(400, { ...cors, 'content-type': 'application/json' }).end(JSON.stringify({ error: 'session id must be 1–64 letters, digits, - or _' })); return; }
-        const json = (code: number, v: unknown) => res.writeHead(code, { ...cors, 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(v));
+        if (!SESSION_ID.test(id)) { res.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'session id must be 1–64 letters, digits, - or _' })); return; }
+        const json = (code: number, v: unknown) => res.writeHead(code, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify(v));
         if (req.method === 'GET') {
           const s = sessions.get(id);
           if (s) json(200, view(s)); else json(404, { error: `no edit session "${id}"` });
@@ -129,7 +150,7 @@ export function serve(port: number, fonts: { font?: string; bold?: string } = {}
       }
       res.writeHead(404).end('Not found');
     } catch (err) {
-      res.writeHead(400, { 'content-type': 'application/json', ...(req.url?.startsWith('/api/session/') ? { 'access-control-allow-origin': '*' } : {}) });
+      res.writeHead(400, { 'content-type': 'application/json' });
       res.end(JSON.stringify({ error: (err as Error).message }));
     }
   });

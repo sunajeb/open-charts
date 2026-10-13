@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { addinHome } from '../../src/addin/server.ts';
+import { tokenHeaders } from '../../src/addin/token.ts';
 import { readCharts, type SlideInfo } from '../../src/ooxml/pptx-read.ts';
 import { LiveTimeout } from './core.ts';
 
@@ -233,12 +234,12 @@ export class PowerPoint {
   // ---- the add-in's local server (Edit data sessions) ----
 
   async session(id: string): Promise<{ state: string; rev: number; message?: string; chart?: any } | undefined> {
-    return fetch(`${SERVER}/api/session/${id}`, { signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : undefined), () => undefined);
+    return fetch(`${SERVER}/api/session/${id}`, { headers: tokenHeaders(), signal: AbortSignal.timeout(5000) }).then((r) => (r.ok ? r.json() : undefined), () => undefined);
   }
 
   async post(id: string, body: unknown): Promise<{ rev: number }> {
     // A pooled keep-alive socket may have been closed by the server meanwhile: retry once.
-    const send = () => fetch(`${SERVER}/api/session/${id}`, { method: 'POST', body: JSON.stringify(body), signal: AbortSignal.timeout(5000) });
+    const send = () => fetch(`${SERVER}/api/session/${id}`, { method: 'POST', headers: tokenHeaders(), body: JSON.stringify(body), signal: AbortSignal.timeout(5000) });
     return (await (await send().catch(send)).json()) as { rev: number };
   }
 

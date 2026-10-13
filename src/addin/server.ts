@@ -16,7 +16,7 @@
 // one: it answers the new PowerPoint's ping and engine calls with 503 and exits, and the bridge
 // starts a fresh server from the new PowerPoint.
 import { execFileSync, spawn } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { addinHome, reinstallCommand } from './launcher.ts';
 import { join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -29,14 +29,49 @@ import { openUrl, powershellRunner, selfCommand } from './win.ts';
 import { helperPath, openPopup, popupHelper, type ChartWhere } from './popup.ts';
 import { toolbarRoutes } from './toolbar.ts';
 import { handlesController } from './handles.ts';
+import { ensureToken, readToken, tokenHeaders, withToken } from './token.ts';
 
 export const ADDIN_PORT = 4174;
 const BASE = `http://127.0.0.1:${ADDIN_PORT}`;
 const CLI = new URL('../cli.ts', import.meta.url);
-const EDITOR = new URL('../web/editor.html', import.meta.url);
 
 export { addinHome };
 
+/**
+ * Settings the user may change in <home>/settings.json (`open-charts addin verbose on|off`):
+ *   verbose  also log timings and the pop-up/toolbar/drag-handle steps (off: results and errors only)
+ */
+export interface Settings { verbose?: boolean }
+let settingsCache: { at: number; home: string; value: Settings } | undefined;
+export function settings(home = addinHome()): Settings {
+  const now = Date.now();
+  if (settingsCache && settingsCache.home === home && now - settingsCache.at < 2000) return settingsCache.value;
+  let value: Settings = {};
+  try { value = JSON.parse(readFileSync(join(home, 'settings.json'), 'utf8')) ?? {}; } catch { /* none: defaults */ }
+  settingsCache = { at: now, home, value };
+  return value;
+}
+export function saveSettings(change: Settings, home = addinHome()) {
+  mkdirSync(home, { recursive: true });
+  const next = { ...settings(home), ...change };
+  writeFileSync(join(home, 'settings.json'), `${JSON.stringify(next, null, 2)}\n`);
+  settingsCache = undefined;
+  return next;
+}
+
+/** Verbose logging on until the returned function is called (live test tools read those lines). */
+export function verboseUntilRestored(home = addinHome()): () => void {
+  const was = settings(home).verbose;
+  saveSettings({ verbose: true }, home);
+  return () => { try { saveSettings({ verbose: was }, home); } catch { /* best effort */ } };
+}
+
+/** A diagnostic line (timings, steps): logged only with the verbose setting on. */
+export function debug(line: string, home = addinHome()) {
+  if (settings(home).verbose) log(line, home);
+}
+
+/** A result or error line: always logged. */
 export function log(line: string, home = addinHome()) {
   try {
     mkdirSync(home, { recursive: true });
@@ -68,54 +103,22 @@ export function httpSessions(base = BASE, open: OpenEditor = (url) => openUrl(ur
   return {
     async get(id) {
       try {
-        const r = await fetch(`${base}/api/session/${id}`, { signal: AbortSignal.timeout(2000) });
+        const r = await fetch(`${base}/api/session/${id}`, { headers: tokenHeaders(), signal: AbortSignal.timeout(2000) });
         return r.ok ? ((await r.json()) as Session) : undefined;
       } catch { return undefined; }
     },
     async open(id, chart, title, where) {
       if (!(await ensureServer(base))) throw new Error('The open-charts editor could not be started.');
-      const r = await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ chart, title, state: 'open' }) });
+      const r = await fetch(`${base}/api/session/${id}`, { method: 'POST', headers: tokenHeaders(), body: JSON.stringify({ chart, title, state: 'open' }) });
       if (!r.ok) throw new Error(`The editor refused the chart: ${await r.text()}`);
-      open(`http://localhost:${ADDIN_PORT}/?session=${id}`, id, where);
+      open(withToken(`${base}/?session=${id}`, readToken()), id, where);
     },
     async settle(id) {
       try {
-        await fetch(`${base}/api/session/${id}`, { method: 'POST', body: JSON.stringify({ state: 'open' }), signal: AbortSignal.timeout(2000) });
+        await fetch(`${base}/api/session/${id}`, { method: 'POST', headers: tokenHeaders(), body: JSON.stringify({ state: 'open' }), signal: AbortSignal.timeout(2000) });
       } catch { /* the chart is drawn either way */ }
     },
   };
-}
-
-/**
- * The editor in src/web supports `?session=<id>` once it fetches /api/session itself. Until then
- * (older editor), the page is preloaded with the chart and posts each change back as an Apply.
- */
-export function editorPage(id: string, chart: unknown): string | undefined {
-  const html = readFileSync(EDITOR, 'utf8');
-  if (html.includes('/api/session/')) return undefined;
-  const { style, ...spec } = chart as { style?: unknown };
-  const deck = style ? { style, slides: [{ chart: spec }] } : { slides: [{ chart: spec }] };
-  const store = /const STORE = '([^']+)'/.exec(html)?.[1] ?? 'open-charts-deck-v1';
-  const boot = `<script>(function () {
-  var id = ${JSON.stringify(id)}, store = ${JSON.stringify(store)}, last = null, timer = 0;
-  try { localStorage.setItem(store, ${JSON.stringify(JSON.stringify(deck)).replace(/</g, '\\u003c')}); } catch (e) {}
-  setInterval(function () {
-    var d = null;
-    try { d = localStorage.getItem(store); } catch (e) {}
-    if (!d || d === last) return;
-    var first = last === null;
-    last = d;
-    if (first) return;
-    clearTimeout(timer);
-    timer = setTimeout(function () {
-      var deck = JSON.parse(d), chart = deck.slides && deck.slides[0] && deck.slides[0].chart;
-      if (deck.style) chart.style = deck.style;
-      fetch('/api/session/' + id, { method: 'POST', body: JSON.stringify({ chart: chart, state: 'applied' }) });
-    }, 600);
-  }, 300);
-})();</script>`;
-  const at = html.indexOf('<script');
-  return at < 0 ? html + boot : html.slice(0, at) + boot + html.slice(at);
 }
 
 /** PowerPoint's process id while it is running (pgrep: no Apple event, no permission prompt). */
@@ -252,7 +255,7 @@ export async function applyInPowerPoint(s: Session, home = addinHome(), run: Run
     log(`APPLY ${s.id} failed after ${ms} ms: ${result.error.killed ? 'timed out' : result.error.message}`, home);
     return fail(applyErrorMessage(result.error));
   }
-  for (const line of answer?.lines ?? []) log(line, home);
+  for (const line of answer?.lines ?? []) (/failed|error/i.test(line) ? log : debug)(line, home);
   if (answer?.applied && answer.context !== undefined) rememberContext(s.id, answer.context);
   const now = ours();
   // An older add-in (no answer) settles through the engine instead: "open" means it drew.
@@ -314,7 +317,7 @@ export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = ()
       const out = await handleRequest(request, m(), timed);
       res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end(out);
       const ms = performance.now() - t0;
-      if (request.op !== 'types') log(`ENGINE ${request.op} ${Math.round(ms)} ms (sessions ${Math.round(timed.ms)} ms, layout ${Math.round(ms - timed.ms)} ms)`);
+      if (request.op !== 'types') debug(`ENGINE ${request.op} ${Math.round(ms)} ms (sessions ${Math.round(timed.ms)} ms, layout ${Math.round(ms - timed.ms)} ms)`);
       if (request.op === 'edit') onEdit();
       return true;
     }
@@ -323,17 +326,13 @@ export function addinRoutes(m: () => Measurer, sessions: Sessions, outlived = ()
       setImmediate(() => process.exit(0));
       return true;
     }
-    const s = /^\/\?session=([0-9A-Za-z_-]+)$/.exec(url);
-    if (req.method === 'GET' && s) {
-      const session = await sessions.get(s[1]);
-      const page = session && editorPage(s[1], session.chart);
-      if (!page) return false; // the editor handles sessions itself (or shows "not found")
-      res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }).end(page);
-      return true;
-    }
     return false;
   };
 }
+
+/** What needs no token on the add-in server: liveness, and the toolbar page (static; its calls carry the token). */
+export const isPublicAddinRequest = (req: IncomingMessage) =>
+  req.method === 'GET' && (req.url === '/api/addin/ping' || /^\/toolbar(\?|$)/.test(req.url ?? ''));
 
 /** `open-charts addin serve`: the add-in's server. Exits after an idle hour. */
 export function serveAddin(port = ADDIN_PORT) {
@@ -353,14 +352,15 @@ export function serveAddin(port = ADDIN_PORT) {
   const connect = () => {
     if (outlived()) return;
     const t = Date.now();
-    void helper.connect(10_000).then((r) => log(`HELPER ${'error' in r ? `not connected: ${r.error.message}` : r.out} (${Date.now() - t} ms)`));
+    void helper.connect(10_000).then((r) => ('error' in r ? log : debug)(`HELPER ${'error' in r ? `not connected: ${r.error.message}` : r.out} (${Date.now() - t} ms)`));
   };
   // Edit data opens the pop-up next to the chart (Mac: the resident helper, page preloaded now;
   // Windows: Edge app mode), or the default browser if that fails.
   const base = `http://127.0.0.1:${port}`;
-  const popup = popupHelper(base, process.platform === 'darwin' ? helperPath() : undefined, log);
-  if (process.platform === 'darwin' && popup.warm()) log('POPUP helper started');
-  const showEditor: OpenEditor = (_url, id, where) => { void openPopup(base, id, where, { helper: popup, log }); };
+  const token = ensureToken();
+  const popup = popupHelper(base, process.platform === 'darwin' ? helperPath() : undefined, log, token);
+  if (process.platform === 'darwin' && popup.warm()) debug('POPUP helper started');
+  const showEditor: OpenEditor = (_url, id, where) => { void openPopup(base, id, where, { helper: popup, log, debug, token }); };
   const routes = addinRoutes(m, httpSessions(base, showEditor), outlived, retire, connect);
   const applyNow = (s: Session) => { void applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())); };
   // Drag handles over the selected chart (Mac helper overlay → live layout → Apply on mouse-up).
@@ -369,11 +369,12 @@ export function serveAddin(port = ADDIN_PORT) {
     measurer: m,
     apply: (s) => applyInPowerPoint(s, undefined, undefined, outlived, (a, context) => layoutForApply(a, context, m())),
     measure: () => selectionNow(outlived),
-    log,
+    log: debug,
+    warn: log,
   });
   popup.onEvent?.((msg) => handles.event(msg));
   // The element mini toolbar (selection → toolbar panel → per-element overrides → Apply).
-  const toolbar = toolbarRoutes({ base, helper: popup, apply: applyNow, log, onSelect: (r) => { void handles.select(r); } });
+  const toolbar = toolbarRoutes({ base, token, helper: popup, apply: applyNow, log: debug, onSelect: (r) => { void handles.select(r); } });
   return serve(port, {}, {
     routes: async (req, res) => {
       idle();
@@ -385,12 +386,14 @@ export function serveAddin(port = ADDIN_PORT) {
     },
     onSession: (s) => { if (s.state === 'applied') applyNow(s); },
     confirmsApply: true,
+    token,
+    isPublic: isPublicAddinRequest,
   });
 }
 
 /** Stops a running add-in server (after an install, so the next call loads the new engine). */
 export async function stopServer(base = BASE) {
-  try { await fetch(`${base}/api/addin/quit`, { method: 'POST', signal: AbortSignal.timeout(1000) }); } catch { /* not running */ }
+  try { await fetch(`${base}/api/addin/quit`, { method: 'POST', headers: tokenHeaders(), signal: AbortSignal.timeout(1000) }); } catch { /* not running */ }
 }
 
 export const installed = (home = addinHome()) => existsSync(join(home, 'addin.json'));

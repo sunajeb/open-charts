@@ -13,6 +13,7 @@ Install steps are in the [README](../README.md#install-on-windows). Troubleshoot
 |---|---|---|
 | Engine | Node + the TypeScript sources (`~/Library/Application Support/open-charts/engine`) | `open-charts.exe`: Node and the engine bundled into one file, so the PC needs no Node (`%LOCALAPPDATA%\open-charts`) |
 | VBA → engine | `AppleScriptTask` → bridge script → `curl` to the local server (or a one-off `node`) | `MSXML2.ServerXMLHTTP` POST to `http://127.0.0.1:4174/api/addin/run`, set to bypass any proxy |
+| Server token | `~/Library/Application Support/open-charts/token` (mode 600), sent by `curl -H @file` | `%LOCALAPPDATA%\open-charts\token`, created by `install.ps1`, read by the VBA and sent as `X-OC-Token` |
 | Starting the engine | the bridge runs `node … addin serve` in the background | VBA runs `open-charts.exe addin serve` with `Shell …, vbHide` (no console window), then waits up to 20 s for it to answer |
 | Apply from the editor | the server runs `ApplyEdit` through one long-lived `osascript` (JavaScript for Automation) | the server runs `ApplyEdit` through one long-lived Windows PowerShell process that calls `Application.Run` over COM (`GetActiveObject`: it never starts PowerPoint) |
 | Edit data window | the resident pop-up helper (`OpenChartsPopup.app`), next to the chart | Microsoft Edge in app mode (a window without tabs or address bar) next to the chart; the default browser if Edge is missing |
@@ -96,6 +97,13 @@ request, the editor page and quit.
   to allow.
 - **Proxies.** All traffic stays on `127.0.0.1`. The VBA tells `ServerXMLHTTP` to connect directly,
   so a WinHTTP proxy setting does not get in the way.
+- **Local server security.** The engine's server answers only callers that send the per-install
+  token from `%LOCALAPPDATA%\open-charts\token` (32 random bytes; `install.ps1` creates it and keeps
+  it on reinstall; `uninstall.ps1` removes the folder with it), and only requests addressed to
+  `127.0.0.1`/`localhost` that come from no other web site. A web page in the user's browser cannot
+  drive PowerPoint or read the charts being edited. Details: [ux-editor.md](ux-editor.md), Security.
+- **Log.** `%LOCALAPPDATA%\open-charts\addin.log` gets results and errors. For timings too, run
+  `open-charts.exe addin verbose on` (and `off` afterwards).
 - **Antivirus.** The first start of a new `open-charts.exe` can take a few seconds while it is
   scanned. The add-in waits up to 20 s. After that the server stays up and each call is fast.
 

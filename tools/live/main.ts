@@ -39,9 +39,12 @@ async function main(argv: string[]): Promise<number> {
   const { buildAddin } = await import('../../src/addin/package.ts');
   const pp = new PowerPoint();
   let release = () => {};
+  let restoreVerbose = () => {};
   const started = new Date();
   try {
     release = acquireLock();
+    // The scenarios read the add-in log's step lines, which are written only with verbose logging on.
+    restoreVerbose = (await import('../../src/addin/server.ts')).verboseUntilRestored();
     pp.wasRunning = pp.running();
     const openDocs = pp.openDocuments();
     preflight({ running: pp.wasRunning, openDocs, allowOpenDocs: o.allowOpenDocs });
@@ -50,7 +53,7 @@ async function main(argv: string[]): Promise<number> {
       throw new Refused(`The installed add-in is ${installedPrefix() ? 'not this build' : 'missing'}: run with --install.`);
     }
     // Leave PowerPoint as found, also on Ctrl+C.
-    const cleanUp = () => { pp.closeOwned(); pp.quit(); release(); };
+    const cleanUp = () => { pp.closeOwned(); pp.quit(); restoreVerbose(); release(); };
     process.once('SIGINT', () => { console.error('\nInterrupted: closing what the run opened.'); try { cleanUp(); } finally { process.exit(130); } });
 
     const shared = new Map<string, unknown>();
@@ -86,6 +89,7 @@ async function main(argv: string[]): Promise<number> {
     pp.deadline = Infinity;
     pp.closeOwned();
     pp.quit(); // no-op unless the run started PowerPoint and it is still running
+    restoreVerbose();
     release();
   }
 }
