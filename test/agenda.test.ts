@@ -424,3 +424,17 @@ test('add-in response: a new chapter slide, then S records with the heading\'s t
   assert.ok(upd.tags.some(([k]) => k === 'OC_AGENDA') && !upd.tags.some(([k]) => k === 'OC_V'), 'an agenda is not a chart');
   assert.equal(parseResponse(await handleRequest(parseRequest(['agenda', 'bogus', '0,0,960,540', '', ''].join('\n')), m)).messages.length, 1);
 });
+
+test('ribbon: an Agenda group in the open-charts tab; every agenda button reaches AgendaCommand', async () => {
+  const { buildAddin, AGENDA_BUTTONS, AGENDA_MENU } = await import('../src/addin/package.ts');
+  const { ribbon, source } = buildAddin();
+  assert.match(ribbon, /<tab id="tabOpenCharts"[\s\S]*<group id="grpCharts"[\s\S]*<group id="grpAgenda" label="Agenda"[\s\S]*<\/tab>/);
+  const ids = [...AGENDA_BUTTONS.map((b) => b[0]), ...AGENDA_MENU.map((b) => b[0])];
+  assert.deepEqual(ids.sort(), ['Chapter', 'Down', 'Indent', 'InsertHidden', 'Join', 'Outdent', 'Placeholder', 'RemoveHidden', 'Split', 'Toc', 'Up', 'Update'].sort());
+  for (const id of ids) {
+    assert.match(ribbon, new RegExp(`id="btnAgenda${id}"[^>]*onAction=`));
+    if (id !== 'Update') assert.match(source, new RegExp(`Case "${id}"|, "${id}"`), `VBA handles ${id}`);
+  }
+  assert.match(source, /ElseIf Left\$\(id, 9\) = "btnAgenda" Then\s+AgendaCommand Mid\$\(id, 10\)/);
+  assert.match(source, /CheckResized\s+AgendaAutoCheck/, 'selection changes run the automatic agenda update');
+});

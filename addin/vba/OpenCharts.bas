@@ -42,6 +42,8 @@ Private gPhaseMs As Collection
 ' While ApplyEdit runs, Report collects lines for its answer instead of logging them itself.
 Private gCollect As Boolean
 Private gCollected As String
+' The deck as the automatic agenda update last saw it (AgendaSignature).
+Private gAgendaSig As String
 
 ' ---- Loading --------------------------------------------------------------------------------
 
@@ -99,6 +101,7 @@ Public Sub OnSelectionChange()
     gBusy = True
     On Error Resume Next
     CheckResized
+    AgendaAutoCheck
     If Not gRibbon Is Nothing Then
         gRibbon.InvalidateControl "btnEditData"
         gRibbon.InvalidateControl "btnUpdate"
@@ -268,6 +271,8 @@ Private Sub Dispatch(ByVal id As String)
         UpdateChart
     ElseIf id = "btnEditData" Then
         EditData
+    ElseIf Left$(id, 9) = "btnAgenda" Then
+        AgendaCommand Mid$(id, 10)
     ElseIf id = "btnPlainText" Then
         ConvertToPlainText
     Else
@@ -1212,3 +1217,517 @@ Private Function Unescape(ByVal s As String) As String
     Loop
     Unescape = out
 End Function
+
+' ---- Agenda ---------------------------------------------------------------------------------
+' Agenda slides start chapters (docs/USER-GUIDE.md "Agenda"). This sends the engine a snapshot of
+' the deck (src/addin/agenda.ts: D, L and H lines) and applies its answer: per agenda slide a new
+' agenda element (or only its tags), its chapter id and hidden state (P records), and the slides
+' to insert, move or delete (X records). Slides are found by their tags: OC_KIND, OC_CHAPTER,
+' OC_SPLIT; the element by OC_AGENDA, each heading by OC_ROLE "chapter:<id>".
+
+Private Const AGENDA_LAYOUT As String = "open-charts agenda"
+Private Const AGENDA_TITLE As String = "Agenda"
+
+Private Sub AgendaCommand(ByVal cmd As String)
+    Dim sld As Object, engineCmd As String, response As String, newId As String, moved As Boolean
+    Select Case cmd
+        Case "Placeholder"
+            AgendaPlaceholder
+            Exit Sub
+        Case "Split", "Join"
+            Set sld = CurrentSlide()
+            If sld Is Nothing Then Exit Sub
+            If cmd = "Join" And TagValue(sld, "OC_SPLIT") <> "1" Then
+                Tell "This slide does not start an agenda section. Go to the slide with the agenda split (the marker above the slide) and click Join Agendas there."
+                Exit Sub
+            End If
+            SetSplit sld, cmd = "Split"
+            engineCmd = "update"
+        Case "Chapter": engineCmd = "chapter"
+        Case "Toc": engineCmd = "toc"
+        Case "Up": engineCmd = "up"
+        Case "Down": engineCmd = "down"
+        Case "Indent": engineCmd = "indent"
+        Case "Outdent": engineCmd = "outdent"
+        Case "RemoveHidden": engineCmd = "removeHidden"
+        Case "InsertHidden": engineCmd = "insertHidden"
+        Case Else: engineCmd = "update"
+    End Select
+    response = Engine(AgendaRequest(engineCmd))
+    If response = "" Then Exit Sub
+    moved = ApplyAgenda(response, newId)
+    ' After slides were inserted or moved, every agenda slide is laid out again.
+    If moved Then
+        response = Engine(AgendaRequest("update"))
+        If response <> "" Then ApplyAgenda response, ""
+    End If
+    If newId <> "" Then SelectHeading newId
+    gAgendaSig = AgendaSignature()
+End Sub
+
+' The request: command, slide size, the layout's agenda placeholder, theme, then the snapshot.
+Private Function AgendaRequest(ByVal cmd As String) As String
+    Dim pres As Object, themeText As String
+    Set pres = ActivePresentation
+    If pres.Slides.Count > 0 Then themeText = ThemeLine(pres.Slides(1))
+    AgendaRequest = "agenda" & vbLf & cmd & vbLf & "0,0," & Fmt(pres.PageSetup.SlideWidth) & "," & Fmt(pres.PageSetup.SlideHeight) & vbLf & _
+        PlaceholderFrame() & vbLf & themeText & AgendaSnapshot()
+End Function
+
+Private Function AgendaSnapshot() As String
+    Dim pres As Object, sld As Object, grp As Object, i As Long, cur As Long, parts() As String
+    Dim bounds As String, json As String, hash As String
+    Set pres = ActivePresentation
+    cur = CurrentSlideIndex()
+    ReDim parts(0 To pres.Slides.Count)
+    parts(0) = "D" & vbTab & cur & vbTab & Esc(SelectedHeadingChapter())
+    For i = 1 To pres.Slides.Count
+        Set sld = pres.Slides(i)
+        Set grp = AgendaGroup(sld)
+        bounds = "": json = "": hash = ""
+        If Not grp Is Nothing Then
+            bounds = Fmt(grp.Left) & "," & Fmt(grp.Top) & "," & Fmt(grp.Width) & "," & Fmt(grp.Height)
+            json = TagValue(grp, "OC_AGENDA"): hash = TagValue(grp, "OC_HASH")
+        End If
+        parts(i) = "L" & vbTab & i & vbTab & Esc(TagValue(sld, "OC_KIND")) & vbTab & Esc(TagValue(sld, "OC_CHAPTER")) & vbTab & _
+            IIf(TagValue(sld, "OC_SPLIT") = "1", "1", "0") & vbTab & IIf(sld.SlideShowTransition.Hidden, "1", "0") & vbTab & _
+            bounds & vbTab & Esc(json) & vbTab & Esc(hash)
+        If Not grp Is Nothing Then parts(i) = parts(i) & HeadingLines(grp, i, i = cur)
+    Next i
+    AgendaSnapshot = Join(parts, vbLf)
+End Function
+
+' H lines for the headings of an agenda element as they are now (text, text level; format too on
+' the current slide, where a restyle is looked for).
+Private Function HeadingLines(ByVal grp As Object, ByVal n As Long, ByVal withStyle As Boolean) As String
+    Dim k As Long, shp As Object, role As String, tr As Object, ch As Object, out As String, st As String
+    On Error Resume Next
+    For k = 1 To grp.GroupItems.Count
+        Set shp = grp.GroupItems(k)
+        role = TagValue(shp, "OC_ROLE")
+        If Left$(role, 8) = "chapter:" Then
+            Set tr = shp.TextFrame2.TextRange
+            out = out & vbLf & "H" & vbTab & n & vbTab & Esc(Mid$(role, 9)) & vbTab & Esc(HeadingText(tr)) & vbTab & tr.Paragraphs(1).ParagraphFormat.IndentLevel
+            If withStyle Then
+                Set ch = tr.Characters(1, 1)
+                st = vbTab & IIf(shp.Fill.Visible, HexOf(shp.Fill.ForeColor.RGB), "") & vbTab & IIf(shp.Line.Visible, HexOf(shp.Line.ForeColor.RGB), "")
+                st = st & vbTab & HexOf(ch.Font.Fill.ForeColor.RGB) & vbTab & IIf(ch.Font.Bold, "1", "0") & vbTab & Fmt(ch.Font.Size)
+                out = out & st
+            End If
+        End If
+    Next k
+    HeadingLines = out
+End Function
+
+Private Function HeadingText(ByVal tr As Object) As String
+    HeadingText = Trim$(Replace(Replace(Replace(tr.Text, vbCr, " "), vbLf, " "), Chr$(11), " "))
+End Function
+
+' Applies P records (in order), then X records: new and move slides (returns True: lay out again),
+' then deletes. newId: the chapter of a slide inserted by Chapter, to select its heading.
+Private Function ApplyAgenda(ByVal response As String, ByRef newId As String) As Boolean
+    Dim lines() As String, f() As String, i As Long, records As String, cur() As String, haveP As Boolean
+    Dim structural As Collection, x As Variant
+    lines = Split(response, vbLf)
+    Set structural = New Collection
+    For i = 0 To UBound(lines)
+        If lines(i) <> "" Then
+            f = Split(lines(i), vbTab)
+            Select Case f(0)
+                Case "P"
+                    If haveP Then ApplySlide cur, records
+                    cur = f: records = "": haveP = True
+                Case "G", "F", "T", "S"
+                    records = records & lines(i) & vbLf
+                Case "X"
+                    structural.Add lines(i)
+                Case "M"
+                    Tell Unescape(f(1))
+                Case "E"
+                    Tell Unescape(f(1))
+                    Exit Function
+            End Select
+        End If
+    Next i
+    If haveP Then ApplySlide cur, records
+    For Each x In structural
+        f = Split(x, vbTab)
+        If f(1) = "new" Then
+            NewAgendaSlideAt CLng(f(2)), f(3), Unescape(f(4)), CLng(f(5))
+            If f(3) = "chapter" And newId = "" Then newId = Unescape(f(4))
+            ApplyAgenda = True
+        ElseIf f(1) = "move" Then
+            ActivePresentation.Slides.Range(SlideNumbers(CLng(f(2)), CLng(f(3)))).MoveTo CLng(f(4))
+            ApplyAgenda = True
+        End If
+    Next x
+    For Each x In structural
+        f = Split(x, vbTab)
+        If f(1) = "delete" Then ActivePresentation.Slides(CLng(f(2))).Delete
+    Next x
+End Function
+
+Private Function SlideNumbers(ByVal from As Long, ByVal count As Long) As Variant
+    Dim a() As Variant, k As Long
+    ReDim a(0 To count - 1)
+    For k = 0 To count - 1
+        a(k) = from + k
+    Next k
+    SlideNumbers = a
+End Function
+
+' One P record: slide tags, hidden state, and the new element (drawn where the old one was in the
+' stacking order) or the old element's new tags.
+Private Sub ApplySlide(f() As String, ByVal records As String)
+    Dim sld As Object, old As Object, grp As Object, lines() As String, t() As String, i As Long
+    Set sld = ActivePresentation.Slides(CLng(f(1)))
+    If f(2) <> "" Then sld.Tags.Add "OC_CHAPTER", Unescape(f(2))
+    If UBound(f) >= 5 Then
+        If f(5) <> "" Then sld.Tags.Add "OC_KIND", f(5)
+    End If
+    sld.SlideShowTransition.Hidden = IIf(f(3) = "1", -1, 0)
+    Set old = AgendaGroup(sld)
+    If f(4) = "1" Then
+        Set grp = Draw(sld, records)
+        If grp Is Nothing Then Exit Sub
+        If Not old Is Nothing Then
+            Do While grp.ZOrderPosition > old.ZOrderPosition + 1
+                grp.ZOrder 3 ' msoSendBackward
+            Loop
+            old.Delete
+        End If
+    ElseIf Not old Is Nothing Then
+        lines = Split(records, vbLf)
+        For i = 0 To UBound(lines)
+            If Left$(lines(i), 2) = "T" & vbTab Then
+                t = Split(lines(i), vbTab)
+                old.Tags.Add Unescape(t(1)), Unescape(t(2))
+            End If
+        Next i
+    End If
+End Sub
+
+' Inserts an agenda slide so it becomes slide `pos`: a copy of slide `roleModel` (the closest agenda
+' slide: same master, layout and shapes), else a new slide on the "open-charts agenda" layout or a
+' title-only layout.
+Private Sub NewAgendaSlideAt(ByVal pos As Long, ByVal kind As String, ByVal id As String, ByVal roleModel As Long)
+    Dim pres As Object, sld As Object
+    Set pres = ActivePresentation
+    If roleModel > 0 And roleModel <= pres.Slides.Count Then
+        pres.Slides(roleModel).Duplicate.MoveTo pos
+        Set sld = pres.Slides(pos)
+        SetSplit sld, False
+        sld.SlideShowTransition.Hidden = 0
+    Else
+        Set sld = NewAgendaSlide(pos)
+    End If
+    sld.Tags.Add "OC_KIND", kind
+    If id <> "" Then
+        sld.Tags.Add "OC_CHAPTER", id
+    Else
+        On Error Resume Next
+        sld.Tags.Delete "OC_CHAPTER"
+        On Error GoTo 0
+    End If
+    On Error Resume Next
+    ActiveWindow.View.GotoSlide pos
+End Sub
+
+Private Function NewAgendaSlide(ByVal pos As Long) As Object
+    Dim pres As Object, lay As Object, ref As Object, sld As Object, k As Long, shp As Object
+    Set pres = ActivePresentation
+    Set lay = AgendaLayout()
+    If pres.Slides.Count > 0 Then Set ref = pres.Slides(IIf(pos > 1, pos - 1, 1))
+    If lay Is Nothing Then Set lay = TitleOnlyLayout(ref)
+    If lay Is Nothing And Not ref Is Nothing Then Set lay = ref.CustomLayout
+    If lay Is Nothing Then Set lay = pres.SlideMaster.CustomLayouts(1)
+    Set sld = pres.Slides.AddSlide(pos, lay)
+    For k = sld.Shapes.Count To 1 Step -1
+        Set shp = sld.Shapes(k)
+        If shp.Type = 14 Then ' msoPlaceholder
+            If shp.PlaceholderFormat.Type = 1 Or shp.PlaceholderFormat.Type = 3 Then ' title, center title
+                shp.TextFrame.TextRange.Text = AGENDA_TITLE
+            ElseIf shp.HasTextFrame Then
+                If shp.TextFrame.TextRange.Length = 0 Then shp.Delete
+            End If
+        End If
+    Next k
+    If Not sld.Shapes.HasTitle Then
+        ' A layout without a title: a title text box like the CLI writes.
+        Set shp = sld.Shapes.AddTextbox(1, 36, 24, pres.PageSetup.SlideWidth - 72, 44)
+        shp.Name = "Title"
+        With shp.TextFrame2.TextRange
+            .Text = AGENDA_TITLE
+            .Font.Size = 24
+            .Font.Bold = -1
+        End With
+    End If
+    Set NewAgendaSlide = sld
+End Function
+
+' The layout named "open-charts agenda" in any slide master of the presentation, else Nothing.
+Private Function AgendaLayout() As Object
+    Dim d As Object, cl As Object
+    On Error Resume Next
+    For Each d In ActivePresentation.Designs
+        For Each cl In d.SlideMaster.CustomLayouts
+            If cl.Name = AGENDA_LAYOUT Then Set AgendaLayout = cl: Exit Function
+        Next cl
+    Next d
+End Function
+
+Private Function TitleOnlyLayout(ByVal ref As Object) As Object
+    Dim cl As Object, master As Object
+    On Error Resume Next
+    If ref Is Nothing Then Set master = ActivePresentation.SlideMaster Else Set master = ref.Design.SlideMaster
+    For Each cl In master.CustomLayouts
+        If cl.Name = "Title Only" Then Set TitleOnlyLayout = cl: Exit Function
+    Next cl
+End Function
+
+' "x,y,w,h" of the agenda placeholder on the "open-charts agenda" layout, "" if none.
+Private Function PlaceholderFrame() As String
+    Dim lay As Object, shp As Object
+    Set lay = AgendaLayout()
+    If lay Is Nothing Then Exit Function
+    On Error Resume Next
+    For Each shp In lay.Shapes
+        If TagValue(shp, "OC_AGENDA_PH") = "1" Then
+            PlaceholderFrame = Fmt(shp.Left) & "," & Fmt(shp.Top) & "," & Fmt(shp.Width) & "," & Fmt(shp.Height)
+            Exit Function
+        End If
+    Next shp
+End Function
+
+' Agenda Placeholder (Slide Master view): an invisible rectangle on the layout that marks where
+' agenda elements go on agenda slides made from it.
+Private Sub AgendaPlaceholder()
+    Dim lay As Object, shp As Object, w As Single, h As Single
+    On Error Resume Next
+    Set lay = ActiveWindow.View.Slide
+    On Error GoTo 0
+    If lay Is Nothing Then
+        Tell "Agenda Placeholder works on a slide layout: choose View > Slide Master, select the layout named """ & AGENDA_LAYOUT & """, then click Agenda Placeholder again."
+        Exit Sub
+    End If
+    If TypeName(lay) <> "CustomLayout" Then
+        Tell "Agenda Placeholder works on a slide layout: choose View > Slide Master, select the layout named """ & AGENDA_LAYOUT & """, then click Agenda Placeholder again."
+        Exit Sub
+    End If
+    For Each shp In lay.Shapes
+        If TagValue(shp, "OC_AGENDA_PH") = "1" Then shp.Select: Exit Sub
+    Next shp
+    w = ActivePresentation.PageSetup.SlideWidth: h = ActivePresentation.PageSetup.SlideHeight
+    Set shp = lay.Shapes.AddShape(1, w * 0.3, h * 0.3, w * 0.4, h * 0.4)
+    shp.Fill.Visible = 0
+    shp.Line.Visible = 0
+    shp.Name = "Agenda placeholder"
+    shp.Tags.Add "OC_AGENDA_PH", "1"
+    shp.Select
+    If lay.Name <> AGENDA_LAYOUT Then Tell "Agenda placeholder added. Name this layout """ & AGENDA_LAYOUT & """ (exactly) so Chapter uses it."
+End Sub
+
+' Marks (or unmarks) a slide as the start of a new agenda section; the marker sits just above the
+' slide, so it is seen while editing but never in the slide show or a printout.
+Private Sub SetSplit(ByVal sld As Object, ByVal turnOn As Boolean)
+    Dim shp As Object, k As Long
+    For k = sld.Shapes.Count To 1 Step -1
+        If TagValue(sld.Shapes(k), "OC_ROLE") = "agenda:split" Then sld.Shapes(k).Delete
+    Next k
+    If Not turnOn Then
+        On Error Resume Next
+        sld.Tags.Delete "OC_SPLIT"
+        Exit Sub
+    End If
+    sld.Tags.Add "OC_SPLIT", "1"
+    Set shp = sld.Shapes.AddTextbox(1, 0, -24, 220, 18)
+    shp.Name = "Agenda split"
+    shp.Tags.Add "OC_ROLE", "agenda:split"
+    With shp.TextFrame2.TextRange
+        .Text = "Agenda split: a new agenda starts here"
+        .Font.Size = 9
+        .Font.Fill.ForeColor.RGB = RGB(127, 127, 127)
+    End With
+End Sub
+
+Private Function AgendaGroup(ByVal sld As Object) As Object
+    Dim shp As Object
+    For Each shp In sld.Shapes
+        If TagValue(shp, "OC_AGENDA") <> "" Then Set AgendaGroup = shp: Exit Function
+    Next shp
+End Function
+
+Private Function CurrentSlideIndex() As Long
+    On Error Resume Next
+    CurrentSlideIndex = ActiveWindow.View.Slide.SlideIndex
+    If CurrentSlideIndex = 0 Then CurrentSlideIndex = ActiveWindow.Selection.SlideRange(1).SlideIndex
+End Function
+
+' The chapter of the selected heading (a shape of an agenda element, or text in it), else "".
+Private Function SelectedHeadingChapter() As String
+    Dim sel As Object, shp As Object, role As String
+    On Error Resume Next
+    Set sel = ActiveWindow.Selection
+    If sel.Type <> 2 And sel.Type <> 3 Then Exit Function
+    Set shp = sel.ShapeRange(1)
+    If sel.HasChildShapeRange Then Set shp = sel.ChildShapeRange(1)
+    role = TagValue(shp, "OC_ROLE")
+    If Left$(role, 8) = "chapter:" Then SelectedHeadingChapter = Mid$(role, 9)
+End Function
+
+' Selects the text of chapter id's heading on its own agenda slide, ready to type over.
+Private Sub SelectHeading(ByVal id As String)
+    Dim sld As Object, grp As Object, k As Long
+    On Error Resume Next
+    For Each sld In ActivePresentation.Slides
+        If TagValue(sld, "OC_CHAPTER") = id Then
+            ActiveWindow.View.GotoSlide sld.SlideIndex
+            Set grp = AgendaGroup(sld)
+            If grp Is Nothing Then Exit Sub
+            For k = 1 To grp.GroupItems.Count
+                If TagValue(grp.GroupItems(k), "OC_ROLE") = "chapter:" & id Then grp.GroupItems(k).TextFrame2.TextRange.Select: Exit Sub
+            Next k
+        End If
+    Next sld
+End Sub
+
+' What the automatic update watches: each slide's id, kind, chapter and split flag, and whether the
+' current slide's headings differ from what was drawn (OC_SIG: a rename or a new text level).
+Private Function AgendaSignature() As String
+    Dim pres As Object, sld As Object, parts() As String, i As Long, kind As String, anyAgenda As Boolean, grp As Object
+    Set pres = ActivePresentation
+    ReDim parts(0 To pres.Slides.Count)
+    For i = 1 To pres.Slides.Count
+        Set sld = pres.Slides(i)
+        kind = TagValue(sld, "OC_KIND")
+        If kind <> "" Then anyAgenda = True
+        parts(i) = sld.SlideID & ":" & kind & ":" & TagValue(sld, "OC_CHAPTER") & ":" & TagValue(sld, "OC_SPLIT")
+    Next i
+    If Not anyAgenda Then Exit Function
+    On Error Resume Next
+    Set grp = AgendaGroup(ActiveWindow.View.Slide)
+    On Error GoTo 0
+    If Not grp Is Nothing Then
+        If HeadingSig(grp) <> Replace(Replace(TagValue(grp, "OC_SIG"), vbCrLf, vbLf), vbCr, vbLf) Then parts(0) = "edited"
+    End If
+    AgendaSignature = pres.FullName & "|" & Join(parts, "|")
+End Function
+
+' The headings as signature lines: id, text level, text (src/core/agenda.ts headingSignature).
+Private Function HeadingSig(ByVal grp As Object) As String
+    Dim k As Long, shp As Object, role As String, tr As Object, out As String
+    On Error Resume Next
+    For k = 1 To grp.GroupItems.Count
+        Set shp = grp.GroupItems(k)
+        role = TagValue(shp, "OC_ROLE")
+        If Left$(role, 8) = "chapter:" Then
+            Set tr = shp.TextFrame2.TextRange
+            out = out & IIf(out = "", "", vbLf) & Mid$(role, 9) & vbTab & tr.Paragraphs(1).ParagraphFormat.IndentLevel & vbTab & HeadingText(tr)
+        End If
+    Next k
+    HeadingSig = out
+End Function
+
+' Selection changed: if agenda slides were added, duplicated, moved or deleted, or a heading was
+' renamed or nested, update every agenda slide. Never while the user is typing in a heading.
+Private Sub AgendaAutoCheck()
+    Dim sig As String, presName As String, response As String
+    If SelectedHeadingChapter() <> "" Then
+        If ActiveWindow.Selection.Type = 3 Then Exit Sub ' ppSelectionText: still typing
+    End If
+    sig = AgendaSignature()
+    If sig = "" Then gAgendaSig = "": Exit Sub
+    presName = Split(sig, "|")(0)
+    If gAgendaSig = "" Or Split(gAgendaSig & "|", "|")(0) <> presName Then
+        ' First look at this presentation: remember it, unless a heading was edited.
+        gAgendaSig = sig
+        If InStr(sig, "|edited|") = 0 Then Exit Sub
+    End If
+    If sig = gAgendaSig And InStr(sig, "|edited|") = 0 Then Exit Sub
+    response = Engine(AgendaRequest("update"))
+    If response <> "" Then ApplyAgenda response, ""
+    gAgendaSig = AgendaSignature()
+    Report "AGENDA auto-update"
+End Sub
+
+' A field of a request line: \ tab CR LF escaped as the engine reads them (format.ts unescapeField).
+Private Function Esc(ByVal s As String) As String
+    Esc = Replace(Replace(Replace(Replace(s, "\", "\\"), vbTab, "\t"), vbCr, "\r"), vbLf, "\n")
+End Function
+
+Private Function HexOf(ByVal c As Long) As String
+    HexOf = Right$("0" & Hex$(c And 255), 2) & Right$("0" & Hex$((c \ 256) And 255), 2) & Right$("0" & Hex$((c \ 65536) And 255), 2)
+End Function
+
+' ---- Agenda test entry points (scripted live tests; no dialogs) -------------------------------
+
+' Types `text` over chapter `title`'s heading on slide n and sets its text level (0 = unchanged).
+Public Sub OCPREFIX_AgendaEdit(ByVal n As String, ByVal title As String, ByVal text As String, ByVal level As String)
+    Dim grp As Object, k As Long, tr As Object
+    On Error GoTo Failed
+    Set grp = AgendaGroup(ActivePresentation.Slides(CLng(n)))
+    For k = 1 To grp.GroupItems.Count
+        Set tr = grp.GroupItems(k).TextFrame2.TextRange
+        If HeadingText(tr) = title Then
+            If text <> "" Then tr.Text = text
+            If Val(level) > 0 Then tr.Paragraphs(1).ParagraphFormat.IndentLevel = CLng(Val(level))
+            Report "AGENDAEDIT OK"
+            Exit Sub
+        End If
+    Next k
+Failed:
+    Report "AGENDAEDIT failed: no heading """ & title & """ on slide " & n
+End Sub
+
+' Goes to slide n and selects the heading `title` there ("" = select nothing), as a click would.
+Public Sub OCPREFIX_AgendaSelect(ByVal n As String, ByVal title As String)
+    Dim grp As Object, k As Long
+    On Error Resume Next
+    ActiveWindow.View.GotoSlide CLng(n)
+    ActiveWindow.Selection.Unselect
+    If title = "" Then Exit Sub
+    Set grp = AgendaGroup(ActivePresentation.Slides(CLng(n)))
+    For k = 1 To grp.GroupItems.Count
+        If HeadingText(grp.GroupItems(k).TextFrame2.TextRange) = title Then grp.GroupItems(k).Select: Exit Sub
+    Next k
+End Sub
+
+' Slide sorter operations: "move" from to, "duplicate" n, "delete" n, "none"; then the selection
+' change PowerPoint raises (the automatic update).
+Public Sub OCPREFIX_AgendaSorter(ByVal op As String, ByVal a As String, ByVal b As String)
+    On Error GoTo Failed
+    Select Case op
+        Case "move": ActivePresentation.Slides(CLng(a)).MoveTo CLng(b)
+        Case "duplicate": ActivePresentation.Slides(CLng(a)).Duplicate
+        Case "delete": ActivePresentation.Slides(CLng(a)).Delete
+    End Select
+    gSilent = True
+    OnSelectionChange
+    gSilent = False
+    Report "SORTER " & op & " OK"
+    Exit Sub
+Failed:
+    gSilent = False
+    Report "SORTER " & op & " failed: " & Err.Description
+End Sub
+
+' Lists every slide for the test log: n, kind, hidden, the agenda headings (">" per level, "*" current).
+Public Sub OCPREFIX_AgendaDump()
+    Dim sld As Object, grp As Object, k As Long, out As String, row As String, role As String, tr As Object
+    For Each sld In ActivePresentation.Slides
+        row = "SLIDE " & sld.SlideIndex & " " & IIf(TagValue(sld, "OC_KIND") = "", "-", TagValue(sld, "OC_KIND")) & IIf(sld.SlideShowTransition.Hidden, " hidden", "") & IIf(TagValue(sld, "OC_SPLIT") = "1", " split", "")
+        Set grp = AgendaGroup(sld)
+        If Not grp Is Nothing Then
+            row = row & ":"
+            For k = 1 To grp.GroupItems.Count
+                role = TagValue(grp.GroupItems(k), "OC_ROLE")
+                If Left$(role, 8) = "chapter:" Then
+                    Set tr = grp.GroupItems(k).TextFrame2.TextRange
+                    row = row & " " & String$(tr.Paragraphs(1).ParagraphFormat.IndentLevel - 1, ">") & HeadingText(tr) & IIf(Mid$(role, 9) = TagValue(sld, "OC_CHAPTER"), "*", "")
+                End If
+            Next k
+        End If
+        out = out & row & " ;; "
+    Next sld
+    Report "DUMP " & out
+End Sub
