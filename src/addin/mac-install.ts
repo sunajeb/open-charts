@@ -31,10 +31,15 @@ export const uninstallerPath = () => join(homedir(), 'Applications', UNINSTALLER
 /** Tests (and the package build's checks) set this: nothing talks to PowerPoint or launchd. */
 export const handsOff = () => !!process.env.OPEN_CHARTS_NO_POWERPOINT;
 
+/**
+ * Registers and loads the add-in. Unloads it first: a PowerPoint that is already running keeps the
+ * add-in it loaded earlier until it is unloaded, so an update would not take effect until a restart.
+ */
 export function registerScript(ppam: string): string {
   return `tell application "Microsoft PowerPoint"
   set theAddIn to register add in ${JSON.stringify(ppam)}
   set auto load of theAddIn to true
+  set loaded of theAddIn to false
   set loaded of theAddIn to true
 end tell`;
 }

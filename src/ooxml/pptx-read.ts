@@ -1,12 +1,13 @@
 // Reads open-charts objects back out of any .pptx: finds groups carrying tag contract v1, their
 // frames, roles and specs. Powers `open-charts inspect` and `open-charts import`.
 import type { ChartSpec, Frame, Style } from '../core/types.ts';
+import type { ThemeFonts } from '../core/fonts.ts';
 import { THEME_SLOTS, type ThemeColors } from '../core/theme.ts';
 import type { DeckSpec } from '../deck.ts';
 import { TAG_CONTRACT_VERSION, parseFrame, specJson, upper } from '../render/tags.ts';
 import { TITLE_NAME } from '../render/pptx.ts';
 import { unzip, type ZipEntry } from './unzip.ts';
-import { child, findAll, kids, parseXml, path, textOf, type XmlNode } from './xml.ts';
+import { child, decodeEntities, findAll, kids, parseXml, path, textOf, type XmlNode } from './xml.ts';
 
 export type Entries = Map<string, ZipEntry>;
 export interface Rel { id: string; type: string; target: string; external: boolean }
@@ -170,10 +171,7 @@ export function importDeck(bytes: Uint8Array): { deck: DeckSpec; warnings: strin
 
 /** The colours of the deck's theme (its first slide master's), by slot; slots it does not define are left out. */
 export function readThemeColors(bytes: Uint8Array): Partial<ThemeColors> {
-  const entries = unzip(bytes);
-  const master = [...readRels(entries, 'ppt/presentation.xml').values()].find((r) => r.type.endsWith('/slideMaster'));
-  const theme = master && [...readRels(entries, master.target).values()].find((r) => r.type.endsWith('/theme'));
-  const xml = theme && entries.get(theme.target)?.text();
+  const xml = themeXml(bytes);
   const out: Partial<ThemeColors> = {};
   if (!xml) return out;
   const scheme = find1(parseXml(xml), 'a:clrScheme');
@@ -183,4 +181,25 @@ export function readThemeColors(bytes: Uint8Array): Partial<ThemeColors> {
     if (c && /^[0-9A-Fa-f]{6}$/.test(c)) out[k] = c.toUpperCase();
   }
   return out;
+}
+
+/** The deck's theme fonts (headings, body: what +mj-lt / +mn-lt stand for); fonts it does not name are left out. */
+export function readThemeFonts(bytes: Uint8Array): ThemeFonts {
+  const xml = themeXml(bytes);
+  const root = xml ? parseXml(xml) : undefined;
+  const face = (tag: string) => {
+    const el = root && find1(root, tag);
+    const f = el && child(el, 'a:latin')?.attrs.typeface;
+    return f ? decodeEntities(f) : undefined;
+  };
+  const major = face('a:majorFont'), minor = face('a:minorFont');
+  return { ...(major ? { major } : {}), ...(minor ? { minor } : {}) };
+}
+
+/** The XML of the deck's theme (its first slide master's), or undefined. */
+function themeXml(bytes: Uint8Array): string | undefined {
+  const entries = unzip(bytes);
+  const master = [...readRels(entries, 'ppt/presentation.xml').values()].find((r) => r.type.endsWith('/slideMaster'));
+  const theme = master && [...readRels(entries, master.target).values()].find((r) => r.type.endsWith('/theme'));
+  return theme && entries.get(theme.target)?.text();
 }

@@ -10,7 +10,7 @@ import { createMeasurer } from '../src/fonts.ts';
 import { buildDeck, CHART_FRAME, slideCharts, type DeckSpec } from '../src/deck.ts';
 import { sceneToSvg } from '../src/render/svg.ts';
 import { unzip } from '../src/ooxml/unzip.ts';
-import { importDeck, readCharts, readThemeColors } from '../src/ooxml/pptx-read.ts';
+import { importDeck, readCharts, readThemeColors, readThemeFonts } from '../src/ooxml/pptx-read.ts';
 import { parseResponse, shapeRecord } from '../src/addin/format.ts';
 import { handleRequest, parseRequest } from '../src/addin/engine.ts';
 
@@ -74,6 +74,11 @@ test('theme: the writer emits schemeClr for slots, srgbClr for hex, and the styl
   assert.match(theme, /<a:accent1><a:srgbClr val="0B5394"\/><\/a:accent1>/);
   assert.match(theme, /<a:accent2><a:srgbClr val="3E6A9E"\/><\/a:accent2>/);
   assert.deepEqual(readThemeColors(buildDeck(deck, m).pptx), { ...DEFAULT_THEME, accent1: '0B5394' });
+});
+
+test('theme: the deck\'s theme fonts read back (headings, body)', () => {
+  const deck: DeckSpec = { style: { font: '+mn-lt', themeFonts: { major: 'Aptos Display', minor: 'Aptos' } }, slides: [{ chart: stacked() }] };
+  assert.deepEqual(readThemeFonts(buildDeck(deck, m).pptx), { major: 'Aptos Display', minor: 'Aptos' });
 });
 
 test('theme: the add-in line format carries theme colour names for VBA', () => {

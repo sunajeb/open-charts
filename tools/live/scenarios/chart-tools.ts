@@ -66,11 +66,14 @@ set width of b to 440`);
   // Convert to plain text (a selected label), then Reset label position.
   const label = 'label:value:s0:c0';
   select('SelectRole', '1', label);
+  // A piece of a group selected by a macro can take a moment longer to show to the next one.
   out = applies(pp.macro('Probe', '1'));
+  for (let i = 0; i < 4 && !/btnPlainText/.test(out); i++) { sleep(600); out = applies(pp.macro('Probe', '1')); }
   ctx.check(/btnPlainText/.test(out), `Convert to plain text applies to a selected label (${out})`);
   out = pp.macro('Run', 'btnPlainText');
   ctx.check(/RESULT btnPlainText OK/.test(out) && specOf(byType('stacked'))?.overrides?.[label]?.detach === true, `Convert to plain text (${out})`);
-  select('SelectRole', '1', label);
+  // A label that is still the chart's (the converted one is plain text now), never moved.
+  select('SelectRole', '1', 'label:value:s0:c1');
   out = pp.macro('Run', 'btnResetLabel');
   ctx.check(/This label is where open-charts puts it already/.test(out), `Reset label position on a label that was not moved explains (${out})`);
   // A moved value label (pinned through Apply, as the toolbar / direct manipulation would), then reset.
@@ -83,6 +86,12 @@ set width of b to 440`);
   select('SelectRole', '1', 'label:value:s1:c1');
   out = pp.macro('Run', 'btnResetLabel');
   ctx.check(/RESULT btnResetLabel OK/.test(out) && !specOf(byType('stacked'))?.overrides?.['label:value:s1:c1']?.pin, `Reset label position (${out})`);
+  // Close the Edit data pop-up (Escape, as the user would): the Cmd+Z presses below must reach the
+  // slide, not the pop-up's grid. Its Cancel re-applies its opening chart: wait for that to land.
+  const closing = pp.logLines().length;
+  pp.key('key code 53');
+  pp.waitForLog(/APPLY \w+ (done|ran|failed)/, closing, 5000);
+  sleep(500);
 
   // Undo: Cmd+Z presses (System Events, as the user) until the slide is back to the state before the
   // action. Each action follows a keyboard edit of the user's (nudging chart 1 with the arrow key), so

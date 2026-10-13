@@ -210,7 +210,7 @@ export class PowerPoint {
   openDocuments(): string[] {
     if (!this.running()) return [];
     const out = this.exec('osascript', ['-e', `tell application "${APP}" to get name of every presentation`], 20_000);
-    return out ? out.split(', ').filter(Boolean) : [];
+    return out ? out.split(', ').filter((n) => n && n !== 'missing value') : [];
   }
 
   /** Keystrokes for PowerPoint only: refused when another app is frontmost (someone may be using the Mac). */

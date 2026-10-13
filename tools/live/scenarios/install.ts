@@ -11,4 +11,8 @@ export async function run(ctx: Ctx) {
   ctx.pp.ready = false; // the add-in (re)loaded: its VBA compiles before the first macro answers
   ctx.check(installedPrefix() === ctx.pp.prefix, `installed add-in is this build (prefix ${ctx.pp.prefix})`);
   ctx.pp.loaded = ctx.check(ctx.pp.tell('get loaded of add in "open-charts"') === 'true', 'PowerPoint loaded open-charts.ppam (a macro prompt? click "Enable Macros" and run again)');
+  // Loaded is not enough: this build's macros must answer (an add-in PowerPoint kept from before has another prefix).
+  let answered = false;
+  try { ctx.pp.macro('SelectionInfo'); answered = true; } catch { /* reported below */ }
+  ctx.pp.loaded &&= ctx.check(answered, `this build's macros answer (${ctx.pp.prefix}_SelectionInfo); if not, quit PowerPoint and run again`);
 }

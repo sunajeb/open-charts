@@ -8,7 +8,7 @@ import { PPAM_DIR } from '../../../src/addin/cli.ts';
 import { DEFAULT_THEME, defaultStyle, layoutChart } from '../../../src/core/index.ts';
 import { chartContent } from '../../../src/deck.ts';
 import { createMeasurer } from '../../../src/fonts.ts';
-import { readThemeColors } from '../../../src/ooxml/pptx-read.ts';
+import { readThemeColors, readThemeFonts } from '../../../src/ooxml/pptx-read.ts';
 import { writePptx } from '../../../src/render/pptx.ts';
 import { decodePng, diffImages, encodePng, type Image } from '../../../test/goldens/png.ts';
 import type { Ctx } from '../scenarios.ts';
@@ -24,19 +24,22 @@ export async function run(ctx: Ctx) {
   }
   // Charts use theme colours, which PowerPoint draws in the deck's theme (the new presentation's
   // Office theme): the CLI copy is laid out with, and written in, that same theme.
-  const deckTheme = { ...DEFAULT_THEME, ...readThemeColors(new Uint8Array(readFileSync(ins.deck))) };
+  // Likewise its theme fonts: new charts take the deck's body font (+mn-lt).
+  const deckBytes = new Uint8Array(readFileSync(ins.deck));
+  const deckTheme = { ...DEFAULT_THEME, ...readThemeColors(deckBytes) };
+  const themeFonts = readThemeFonts(deckBytes);
   const style = defaultStyle;
   const cliSlides = ins.slides.map((sl) => {
     const c = sl.charts[0];
     // A slide without a chart stays empty so slide numbers line up.
     if (!c?.spec || !c.frame) return { scenes: [] };
     const { style: overrides, ...chart } = JSON.parse(c.spec);
-    const scene = layoutChart(chart, c.frame, createMeasurer(), { ...style, ...overrides, theme: { ...overrides?.theme, ...deckTheme } });
+    const scene = layoutChart(chart, c.frame, createMeasurer(), { ...style, ...overrides, themeFonts, theme: { ...overrides?.theme, ...deckTheme } });
     return { scenes: [chartContent(chart, scene, style.font, overrides)] };
   });
   const compareDeck = join(PPAM_DIR, 'live-compare.pptx'); // a folder PowerPoint's sandbox may read
   const cliPng = join(ctx.out, 'cli-png');
-  writeFileSync(compareDeck, writePptx(cliSlides, style.font, deckTheme));
+  writeFileSync(compareDeck, writePptx(cliSlides, style.font, deckTheme, themeFonts));
   try {
     pp.open(compareDeck);
     pp.exportCopy(cliPng, 'png');
