@@ -26,7 +26,7 @@
 import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
-import { delimiter, join } from 'node:path';
+import { delimiter, join, posix, win32 } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { fontMetrics, measurerFromMetrics, type FontMetrics, type Measurer } from './core/text.ts';
 import { readFaces, type FaceInfo, type ReadAt } from './core/sfnt.ts';
@@ -58,20 +58,21 @@ const BOLD = [
 export function fontDirs(platform = process.platform, env = process.env, home = homedir()): string[] {
   if (env.OPEN_CHARTS_FONT_DIRS) return env.OPEN_CHARTS_FONT_DIRS.split(delimiter).filter(Boolean);
   const own = VENDOR_FONTS ? [VENDOR_FONTS] : [];
+  // Paths follow the target platform's rules, not the host's (the tests ask for every platform).
   if (platform === 'darwin') {
     return [
-      '/System/Library/Fonts', '/Library/Fonts', join(home, 'Library/Fonts'),
+      '/System/Library/Fonts', '/Library/Fonts', posix.join(home, 'Library/Fonts'),
       '/Applications/Microsoft PowerPoint.app/Contents/Resources/DFonts',
-      join(home, 'Library/Group Containers/UBF8T346G9.Office/FontCache'),
+      posix.join(home, 'Library/Group Containers/UBF8T346G9.Office/FontCache'),
       ...own,
     ];
   }
   if (platform === 'win32') {
-    const local = env.LOCALAPPDATA ?? join(home, 'AppData\\Local');
+    const local = env.LOCALAPPDATA ?? win32.join(home, 'AppData\\Local');
     const win = `${env.WINDIR ?? env.SystemRoot ?? 'C:\\Windows'}\\Fonts`;
     return [win, `${local}\\Microsoft\\Windows\\Fonts`, `${local}\\Microsoft\\FontCache\\4\\CloudFonts`, ...own];
   }
-  return ['/usr/share/fonts', '/usr/local/share/fonts', join(home, '.local/share/fonts'), join(home, '.fonts'), ...own];
+  return ['/usr/share/fonts', '/usr/local/share/fonts', posix.join(home, '.local/share/fonts'), posix.join(home, '.fonts'), ...own];
 }
 
 function load(p: string): ArrayBuffer {
