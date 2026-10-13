@@ -32,6 +32,8 @@ export {
   baseOf, mergeNativeEdits, rendered as renderedOf, sceneEntries, colorName,
 } from './overrides.ts';
 export type { ElementKind, ElementProperty, PropertyInfo, Dash, Arrowheads, MarkerStyle, Pattern, RenderedProps, RenderedMap, RenderedEntry } from './overrides.ts';
+export { CHART_COMMANDS, runCommand, newScaleGroup, selectedCategories, hasOption } from './commands.ts';
+export type { ChartCommand, CommandResult } from './commands.ts';
 export { minimumSize, TooSmall } from './minsize.ts';
 export type { Size } from './minsize.ts';
 export type { Issue, CheckOptions } from './quality.ts';

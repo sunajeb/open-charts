@@ -10,7 +10,7 @@ import { zip, type ZipInput } from '../render/zip.ts';
 import { ENGINE_VERSION } from '../version.ts';
 import { flatLabel, galleryItems, iconOf, tileDirections, type ChartTypeEntry } from './registry.ts';
 import { iconFile, iconPng, TILE, tilePng } from './icons.ts';
-import { DIRECTIONS } from '../core/spec.ts';
+import { DIRECTIONS, OPTIONS } from '../core/spec.ts';
 import { vbaProjectBin } from './vba-project.ts';
 import { reinstallCommand } from './launcher.ts';
 
@@ -87,12 +87,59 @@ export function ribbonXml(prefix: string, items: ChartTypeEntry[]): string {
 <button id="btnEditData" label="Edit data" imageMso="ChartEditDataSource" size="large" screentip="Edit data" supertip="Open the selected chart's datasheet. Apply there and the chart on the slide updates." onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>
 <button id="btnUpdate" label="Update chart" imageMso="RefreshAll" size="large" screentip="Update chart" supertip="Lay the selected chart out again at its current size and position, with any applied edits. Resized charts also update by themselves when you click elsewhere." onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>
 </group>
+${chartToolsGroup(cb)}
 ${agendaGroupXml(cb('onAction'))}
 </tab>
 </tabs></ribbon>
+${contextMenusXml(cb)}
 </customUI>
 `;
 }
+
+/** A chart command: ribbon button in the Chart tools group, and the same item in right-click menus. */
+export interface ChartTool { id: string; label: string; imageMso: string; tip: string; menu: boolean }
+
+/** Chart tools (the reference product's right-click and Same-scale commands; core/commands.ts). */
+export const CHART_TOOLS: ChartTool[] = [
+  { id: 'btnTotals', label: 'Totals', imageMso: 'AutoSum', tip: 'Show or hide the totals above the columns of the selected chart.', menu: true },
+  { id: 'btnCagr', label: 'CAGR arrow', imageMso: 'ChartTrendline', tip: 'Add a compound annual growth arrow to the selected chart, from the first to the last column, or between two columns you select (Shift-click their segments). Click again to remove it.', menu: true },
+  { id: 'btnDifference', label: 'Difference arrow', imageMso: 'ShapeStraightConnectorArrow', tip: 'Add an arrow showing the difference between two column totals: the first and last column, or two columns you select. Click again to remove it.', menu: true },
+  { id: 'btnSameScale', label: 'Same scale', imageMso: 'SizeToTallest', tip: 'Select two or more charts (Shift-click), then click: equal values are drawn equally tall in all of them, and stay so when you edit or resize one.', menu: true },
+  { id: 'btnUnscale', label: 'Remove from same scale', imageMso: 'ObjectsUngroup', tip: 'The selected charts go back to their own scale.', menu: true },
+  { id: 'btnPlainText', label: 'Convert to plain text', imageMso: 'TextBoxInsert', tip: 'Keep the selected label\'s text as it is now: data edits no longer change it. It still moves with the chart.', menu: true },
+  { id: 'btnResetLabel', label: 'Reset label position', imageMso: 'PictureReset', tip: 'Put the selected label (or every label you moved, when the whole chart is selected) back where open-charts places it.', menu: true },
+];
+
+function chartToolsGroup(cb: (name: string) => string): string {
+  const buttons = CHART_TOOLS.map((t) => `<button id="${t.id}" label="${esc(t.label)}" imageMso="${t.imageMso}" screentip="${esc(t.label)}" supertip="${esc(t.tip)}" onAction="${cb('onAction')}" getEnabled="${cb('getEnabled')}"/>`).join('\n');
+  return `<group id="grpChartTools" label="Chart tools" imageMso="ChartInsert">\n${buttons}\n</group>`;
+}
+
+/**
+ * PowerPoint's right-click menus that open on a chart (the group), one of its pieces (a shape, a
+ * freeform, a line), a label being edited, or several charts. Each item's id is
+ * ctx<menu>_<button id>: the dispatcher runs the button's command, and getVisible shows it only on
+ * open-charts charts, when the command applies to what is selected.
+ */
+export const CONTEXT_MENUS = ['ContextMenuObjectsGroup', 'ContextMenuShape', 'ContextMenuShapeFreeform', 'ContextMenuShapeConnector', 'ContextMenuTextEdit', 'ContextMenuMultipleItems'];
+
+export function contextMenusXml(cb: (name: string) => string): string {
+  const items: { id: string; label: string; imageMso: string }[] = [
+    { id: 'btnEditData', label: 'Edit data', imageMso: 'ChartEditDataSource' },
+    { id: 'btnUpdate', label: 'Update chart', imageMso: 'RefreshAll' },
+    ...CHART_TOOLS.filter((t) => t.menu),
+  ];
+  // No separator: one would show on every shape's menu (a separator has no getVisible).
+  const menus = CONTEXT_MENUS.map((menu) => {
+    const tag = menu.replace('ContextMenu', '');
+    const buttons = items.map((t) => `<button id="ctx${tag}_${t.id}" label="${esc(t.label)}" imageMso="${t.imageMso}" onAction="${cb('onAction')}" getVisible="${cb('getVisible')}"/>`).join('');
+    return `<contextMenu idMso="${menu}">${buttons}</contextMenu>`;
+  }).join('\n');
+  return `<contextMenus>\n${menus}\n</contextMenus>`;
+}
+
+/** The VBA's "|type|type|" constants for the commands that only some chart types take. */
+const TYPE_CONSTS: Record<string, keyof typeof OPTIONS> = { TOTALS_TYPES: 'totals', ARROW_TYPES: 'cagr', SCALE_TYPES: 'scaleGroup' };
 
 /** Agenda controls (docs/USER-GUIDE.md "Agenda"): [id suffix, label, imageMso, large, tip]. */
 export const AGENDA_BUTTONS: [string, string, string, boolean, string][] = [
@@ -134,9 +181,13 @@ export const directionTable = () => Object.entries(DIRECTIONS).map(([t, ds]) => 
 /** The module source: callback prefix filled in, and the reinstall command the error messages show. */
 export function vbaSource(prefix: string, bas = readFileSync(BAS_FILE, 'utf8')): string {
   const reinstall = `"${reinstallCommand().replace(/"/g, '""')}"`;
-  return bas.replace(PLACEHOLDER, prefix)
+  let out = bas.replace(PLACEHOLDER, prefix)
     .replace(/^(Private Const REINSTALL As String = ).*$/m, (_, decl) => decl + reinstall)
     .replace(/^(Private Const DIRECTIONS As String = ).*$/m, (_, decl) => `${decl}"${directionTable()}"`);
+  for (const [name, key] of Object.entries(TYPE_CONSTS)) {
+    out = out.replace(new RegExp(`^(Private Const ${name} As String = ).*$`, 'm'), (_, decl) => `${decl}"|${OPTIONS[key].types.join('|')}|"`);
+  }
+  return out;
 }
 
 export interface BuiltAddin { ppam: Uint8Array; prefix: string; ribbon: string; source: string }

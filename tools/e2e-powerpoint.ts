@@ -373,6 +373,151 @@ const THEME_PNG = join(OUT, 'theme-png');
   console.log(`Theme slide PNGs: ${THEME_PNG}`);
 }
 
+// 11. Chart commands (ribbon Chart tools group / right-click items) and undo, live. Two charts on a
+// fresh slide: Same scale, Remove from same scale, Totals, CAGR arrow, Convert to plain text, Reset
+// label position; which commands apply to which selection (the right-click items' getVisible); and
+// how many Cmd+Z presses undo one action (insert, Update chart, a command, a resize re-layout).
+const undoCounts: Record<string, string> = {};
+{
+  // PowerPoint for Mac shows a selection made by one macro to the next only after a moment.
+  const select = (proc: string, ...args: string[]) => { macro(proc, ...args); sleep(800); };
+  ppt('activate\nmake new presentation');
+  ready = false; // PowerPoint started again: the add-in compiles again
+  ppt('set s to make new slide at end of active presentation with properties {layout:slide layout blank}\ngo to slide view of document window 1 number 1');
+  results.push(macro('Run', 'chart_stacked'));
+  results.push(macro('Run', 'chart_clustered'));
+  ppt(`set a to shape 1 of slide 1 of active presentation
+set left position of a to 20
+set width of a to 440
+set b to shape 2 of slide 1 of active presentation
+set left position of b to 500
+set width of b to 440`);
+  select('SelectChart', '1'); macro('Run', 'btnUpdate');
+  select('SelectChart', '2'); macro('Run', 'btnUpdate');
+  const deckNow = () => { const f = join(OUT, 'commands.pptx'); macro('ExportCopy', f, 'pptx'); return readCharts(new Uint8Array(readFileSync(f)))[0]?.charts ?? []; };
+  const specOf = (c: { spec?: string } | undefined): any => (c?.spec ? JSON.parse(c.spec) : undefined);
+  const byType = (type: string) => deckNow().find((c) => specOf(c)?.type === type);
+  const expect = (ok: boolean, what: string) => { results.push(`${ok ? 'OK' : 'FAILED'} ${what}`); if (!ok) failures.push(what); };
+  const applies = (out: string) => /APPLIES.*$/m.exec(out.split('\n').filter((l) => / APPLIES/.test(l)).pop() ?? '')?.[0] ?? '';
+
+  // Which commands apply (the right-click items show exactly these).
+  select('SelectChart', '1');
+  let out = applies(macro('Probe', '1'));
+  expect(out === 'APPLIES btnEditData btnUpdate btnTotals btnCagr btnDifference btnResetLabel', `commands on a stacked chart (${out})`);
+  select('SelectCharts', '1,2');
+  out = applies(macro('Probe', '1'));
+  expect(out === 'APPLIES btnSameScale', `commands on two charts (${out})`);
+
+  // Same scale: one group in both specs, the partner re-laid out at the group's scale.
+  out = macro('Run', 'btnSameScale');
+  expect(/RESULT btnSameScale OK/.test(out) && /SAMESCALE scale1 2 of 2 charts/.test(out), `Same scale (${out})`);
+  const charts = deckNow();
+  expect(charts.length === 2 && charts.every((c) => specOf(c)?.options?.scaleGroup === 'scale1'), `both charts in scaleGroup scale1 (${charts.map((c) => specOf(c)?.options?.scaleGroup).join(', ')})`);
+  select('SelectCharts', '1,2');
+  out = applies(macro('Probe', '1'));
+  expect(out === 'APPLIES btnSameScale btnUnscale', `commands on two charts in a group (${out})`);
+  // Kept on later edits: Update on one re-lays out the other.
+  select('SelectChart', '1');
+  out = macro('Run', 'btnUpdate');
+  expect(/SYNC scale1 1 of 1 charts/.test(out), `Update keeps the same scale (${out})`);
+  // Remove from same scale.
+  select('SelectChart', '2');
+  out = macro('Run', 'btnUnscale');
+  expect(/RESULT btnUnscale OK/.test(out), `Remove from same scale (${out})`);
+  expect(!!byType('clustered') && !specOf(byType('clustered'))?.options?.scaleGroup, 'clustered chart left the group');
+
+  // Totals and CAGR arrow on the stacked chart (the sample has a CAGR arrow and totals).
+  select('SelectChart', '1');
+  out = macro('Run', 'btnTotals');
+  expect(/RESULT btnTotals OK/.test(out) && specOf(byType('stacked'))?.options?.totals === false, `Totals off (${out})`);
+  select('SelectChart', '1');
+  out = macro('Run', 'btnCagr');
+  expect(/RESULT btnCagr OK/.test(out) && !specOf(byType('stacked'))?.options?.cagr, `CAGR arrow removed (${out})`);
+  select('SelectChart', '2');
+  out = macro('Run', 'btnTotals');
+  expect(/Totals are not available/.test(out), `Totals on a clustered chart explains (${out})`);
+
+  // Convert to plain text (a selected label), then Reset label position.
+  const label = 'label:value:s0:c0';
+  select('SelectRole', '1', label);
+  out = applies(macro('Probe', '1'));
+  expect(/btnPlainText/.test(out), `Convert to plain text applies to a selected label (${out})`);
+  out = macro('Run', 'btnPlainText');
+  expect(/RESULT btnPlainText OK/.test(out) && specOf(byType('stacked'))?.overrides?.[label]?.detach === true, `Convert to plain text (${out})`);
+  select('SelectRole', '1', label);
+  out = macro('Run', 'btnResetLabel');
+  expect(/This label is where open-charts puts it already/.test(out), `Reset label position on a label that was not moved explains (${out})`);
+  {
+    // A moved value label (pinned through Apply; the totals are off by now, as the toolbar / direct manipulation would), then reset.
+    select('SelectChart', '1');
+    macro('Run', 'btnEditData');
+    const cur = byType('stacked')!;
+    const spec = specOf(cur);
+    const pinned = { ...spec, overrides: { ...spec.overrides, 'label:value:s1:c1': { pin: { x: 0.3, y: 0.1 } } } };
+    const a = await applyInEditor(specKey(cur.spec!), pinned);
+    expect(/APPLIED \w+ OK/.test(a.applied), `pin a label through Apply (${a.applied})`);
+    select('SelectRole', '1', 'label:value:s1:c1');
+    out = macro('Run', 'btnResetLabel');
+    expect(/RESULT btnResetLabel OK/.test(out) && !specOf(byType('stacked'))?.overrides?.['label:value:s1:c1']?.pin, `Reset label position (${out})`);
+  }
+
+  // Undo: Cmd+Z presses (System Events, as the user) until the slide is back to the state before the
+  // action. Each action follows a keyboard edit of the user's (nudging chart 1 with the arrow key), so
+  // an action that merged into the previous undo entry would overshoot instead of stopping there. The
+  // chart the action replaces is renamed first, so a replacement with the same geometry still shows.
+  const sig = () => ppt(`set acc to ""
+set sl to slide 1 of presentation 1
+repeat with i from 1 to (count of shapes of sl)
+  set s to shape i of sl
+  set n to 0
+  try
+    set n to count of group items of s
+  end try
+  set acc to acc & (get name of s) & "#" & n & "@" & ((get left position of s) as integer) & "," & ((get top of s) as integer) & "," & ((get width of s) as integer) & "," & ((get height of s) as integer) & "|"
+end repeat
+return acc`);
+  // Keystrokes go to the frontmost app: never send them anywhere but PowerPoint (someone may be
+  // using the Mac meanwhile).
+  const key = (what: string) => {
+    osa('tell application "Microsoft PowerPoint" to activate');
+    sleep(200);
+    if (osa('tell application "System Events" to get name of first process whose frontmost is true') !== 'Microsoft PowerPoint') throw new Error('PowerPoint is not the frontmost app');
+    osa(`tell application "System Events" to ${what}`);
+  };
+  const press = () => { key('keystroke "z" using command down'); sleep(400); };
+  const measure = (name: string, action: () => void, max = 8) => {
+    try {
+      macro('SelectChart', '1');
+      key('key code 124');
+      sleep(500);
+      try { ppt('set name of shape 3 of slide 1 of presentation 1 to "BEFORE"'); } catch { /* no third chart yet */ }
+      const pre = sig();
+      action();
+      sleep(300);
+      const states = [sig()];
+      for (let i = 0; i < max && states[states.length - 1] !== pre; i++) { press(); states.push(sig()); }
+      const k = states.indexOf(pre);
+      undoCounts[name] = k > 0 ? String(k) : `not back to the state before in ${max} presses`;
+    } catch (err) {
+      undoCounts[name] = `not measured: ${(err as Error).message.split('\n')[0]}`;
+    }
+    results.push(`UNDO ${name}: ${undoCounts[name]}`);
+  };
+  measure('insert', () => macro('Run', 'chart_stacked'));
+  macro('Run', 'chart_stacked');
+  measure('update', () => { macro('SelectChart', '3'); macro('Run', 'btnUpdate'); });
+  measure('totals', () => { macro('SelectChart', '3'); macro('Run', 'btnTotals'); });
+  measure('resize', () => {
+    macro('SelectChart', '3'); macro('ResizeChart', '3', '0.7');
+    const b = logLines().length; macro('SelectChart', '0'); waitForLog(/RELAYOUT/, b);
+  });
+  measure('same scale', () => { macro('SelectCharts', '1,3'); macro('Run', 'btnSameScale'); });
+  ppt('close active presentation saving no\nquit saving no');
+  console.log(`Undo entries per action (Cmd+Z presses): ${Object.entries(undoCounts).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  // One press per action; a resize is the user's drag plus the add-in's re-layout: two.
+  for (const [k, v] of Object.entries(undoCounts)) if (!v.startsWith('not measured') && v !== (k === 'resize' ? '2' : '1')) failures.push(`undo ${k}: ${v} presses`);
+}
+
 for (const sl of slides) {
   const a = join(PNG_DIR, `slide${sl.index}.png`), b = join(CLI_PNG_DIR, `slide${sl.index}.png`);
   if (!existsSync(a) || !existsSync(b)) { failures.push(`slide ${sl.index}: PNG missing for comparison`); continue; }

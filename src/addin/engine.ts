@@ -3,9 +3,10 @@
 // (format.ts) that VBA turns into native shapes.
 //
 // Request, one field per line:
-//   1  op       insert | update | relayout | edit | detach | direction | types | agenda (src/addin/agenda.ts)
+//   1  op       insert | update | relayout | edit | detach | direction | command | types | agenda (src/addin/agenda.ts)
 //   2  arg      gallery item (insert; "<item>@<direction>" inserts in that direction), edit-session id
-//               (update, optional), element role (detach) or the direction (direction: up | down | left | right)
+//               (update, optional), element role (detach), the direction (direction: up | down | left
+//               | right) or chart command (command: core/commands.ts CHART_COMMANDS)
 //   3  frame    "x,y,w,h" pt: target frame (insert) or the chart's OC_FRAME tag
 //   4  bounds   "x,y,w,h" pt: the group's current bounds on the slide (update, relayout)
 //   then, optional, one "key=value" per line:
@@ -20,6 +21,8 @@
 //                     overrides (mergeNativeEdits) instead of being drawn over
 //      screen=…, window=…  (edit) where the chart is on screen, for the Edit data pop-up
 //                     (src/addin/popup.ts ChartWhere); not part of the layout context
+//      roles=a,b,…    (command) OC_ROLE values of the selected elements; none = the whole chart
+//      group=NAME     (command scaleGroup) the same-scale group to join; empty = leave it
 //   (edit sends the same lines 3–4 and params, so the server can lay an Apply out by itself:
 //    layoutForApply)
 //   5… spec     the chart's OC_SPEC tag, reassembled (update, relayout, edit); always starts with "{"
@@ -31,8 +34,11 @@
 // detach   converts one label to plain text ("Convert to plain text"): its text as drawn now is
 //          frozen in the spec (custom content, `detach: true`), so data edits no longer rewrite it;
 //          it stays in the chart group and moves with the chart
+// command  a ribbon / right-click command that changes the chart's options or overrides, not its
+//          data (totals, cagr, difference, unpin, scaleGroup: core/commands.ts runCommand); laid
+//          out like update, keeping formatting changed in PowerPoint (base= / native=)
 import { createHash } from 'node:crypto';
-import { defaultStyle, detachElement, kindOf, layoutChart, mergeNativeEdits, migrate, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
+import { defaultStyle, detachElement, runCommand, kindOf, layoutChart, mergeNativeEdits, migrate, renderedOf, THEME_SLOTS, type ChartSpec, type RenderedEntry, type RenderedMap, type Frame, type LayoutHints, type Measurer, type Scene, type Style, type ThemeColors } from '../core/index.ts';
 import { chartContent } from '../deck.ts';
 import { directionsOf, type Direction } from '../core/spec.ts';
 import { shapeName } from '../render/pptx.ts';
@@ -60,6 +66,9 @@ export interface AddinRequest {
   context?: string;
   /** Edit data: where the chart is on screen (`screen=`, `window=`), to put the pop-up next to it. */
   where?: ChartWhere;
+  /** Command: the selected elements' roles (`roles=`) and the same-scale group (`group=`). */
+  roles?: string[];
+  group?: string;
 }
 
 /** Context of one layout in PowerPoint: the slide's theme and the chart's same-scale group. */
@@ -100,7 +109,7 @@ export function parseRequest(text: string): AddinRequest {
   const scale = Number(params.scale);
   // base= / native= describe the shapes, screen= / window= where the chart is on screen (Edit data
   // pop-up): neither is the layout's context.
-  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|view)=/.test(l)).map((l) => `${l}\n`).join('') : '';
+  const context = lines.length > 2 ? lines.slice(2, i).filter((l) => !/^(base|native|screen|window|view|roles|group)=/.test(l)).map((l) => `${l}\n`).join('') : '';
   const json = (v?: string) => { try { return v ? JSON.parse(v) : undefined; } catch { return undefined; } };
   const base = json(params.base), native = json(params.native);
   const where = parseWhere(params);
@@ -115,6 +124,8 @@ export function parseRequest(text: string): AddinRequest {
     ...(context ? { context } : {}),
     ...(base && typeof base === 'object' && !Array.isArray(base) && Array.isArray(native) ? { base, native } : {}),
     ...(where ? { where } : {}),
+    ...(params.roles ? { roles: params.roles.split(',').filter(Boolean) } : {}),
+    ...('group' in params ? { group: params.group } : {}),
   };
 }
 
@@ -223,6 +234,17 @@ export async function handleRequest(req: AddinRequest, m: Measurer, sessions?: S
         const spec = detachElement(chart, before, role);
         if (!spec) return error('This label is not drawn any more; update the chart and try again.');
         return respond(spec, style, frame, m, env);
+      }
+      case 'command': {
+        if (!req.spec) return error(SELECT_FIRST);
+        const read = readSpec(req.spec);
+        let chart = read.chart;
+        if (req.base && req.native) chart = mergeNativeEdits(chart, req.base, renderedOf(req.native)).spec;
+        const done = runCommand(chart, req.arg, req.roles ?? [], req.group ?? '');
+        if ('error' in done) return error(done.error);
+        // The frame as the chart is now (before the command): a command never moves the chart.
+        const frame = resolveFrame(chart, read.style, req.frame, req.bounds, m, env);
+        return respond(done.spec, read.style, frame, m, env);
       }
       case 'agenda': {
         // Agenda commands (src/addin/agenda.ts): frame = the slide size, bounds = the agenda

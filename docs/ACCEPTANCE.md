@@ -390,6 +390,55 @@ Not verified yet, and to look for in the PC run's zip:
 - whether `WindowSelectionChange` fires for selection changes made through COM (the resize check),
 - first start time of the unsigned exe under the PC's antivirus.
 
+## 13. Chart commands, right-click menu and undo
+
+The **Chart tools** ribbon group (Totals, CAGR arrow, Difference arrow, Same scale, Remove from same
+scale, Convert to plain text, Reset label position) and the right-click items (the same plus Edit
+data and Update chart) run engine op `command` (`src/core/commands.ts`). Step 11 of
+`npm run e2e:powerpoint`; live runs in PowerPoint for Mac 16 on 13 Oct 2026 (step 11 alone, the rest
+of the e2e not re-run for these changes):
+
+| Check | Result |
+|---|---|
+| Same scale on two charts: `options.scaleGroup` = `scale1` in both OC_SPECs, partner re-laid out (`SAMESCALE scale1 2 of 2`) | **Pass** |
+| Update on a member re-lays out its partner (`SYNC scale1 1 of 1`) | **Pass** |
+| Remove from same scale: the chart leaves the group, the one left behind is re-laid out | **Pass** |
+| Totals off on a stacked chart; CAGR arrow removed; Totals on a clustered chart explains "Totals are not available for this chart type." | **Pass** |
+| Convert to plain text from the ribbon on a selected label (`detach: true` in the override) | **Pass** |
+| Pin a label through Apply | **Pass** |
+| Which commands apply (= the right-click items getVisible shows): stacked chart → Edit data, Update, Totals, CAGR, Difference, Reset label | **Pass** |
+| Two charts selected → only Same scale (and Remove when grouped) | **Failed, fixed, not re-run**: the per-chart commands were offered too (they took the first chart); `CommandApplies` now offers them only with one chart selected |
+| Convert to plain text offered with a label selected; Reset label position on a selected label | **Failed in the test, not re-run**: a selection made by one `run VB macro` reached the next macro only after a moment on the Mac (the convert itself worked). The test now waits 0.8 s after each scripted selection |
+| Ribbon controls unit-checked: group, ids unique, every right-click item has `getVisible`, type lists from `OPTIONS`, `StartNewUndoEntry` call | **Pass** (`test/commands.test.ts`) |
+
+**Undo** (Cmd+Z presses, sent through System Events, until the slide matches its state before the
+action; each action follows a keyboard edit of the user's, so merging into it would show):
+
+| Action | Before (master 51c4215) | After |
+|---|---|---|
+| Insert chart | 1 | 1 |
+| Update chart | 1 | 1 |
+| Totals (Chart tools command) | n/a | 1 |
+| Same scale on two charts (three re-layouts in one click) | n/a | 1 |
+| Resize (drag, simulated by a macro) + automatic re-layout | 2 | 2 |
+
+PowerPoint for Mac makes each macro run one undo step, so every add-in action was already one step;
+the change keeps it so for the new commands (each runs as one macro) and adds `StartNewUndoEntry`
+(late bound, ignored where missing) for Windows, where a macro's changes otherwise join the user's
+last edit. A resize stays two steps on the Mac: the drag and the re-layout run as two (the re-layout
+happens on the next selection change). Not done: reusing shapes in place on update (not needed for
+undo on the Mac: a whole replace is already one step). A second undo run while the Mac was in use
+could not bring PowerPoint to the front, so it measured nothing; the test now refuses to send
+keystrokes unless PowerPoint is frontmost.
+
+**Right-click menu on the Mac: not shown.** After three right-clicks on a selected chart (CGEvent at
+the chart's centre), PowerPoint had called the items' `getVisible` 0 times (`VISIBLECALLS 0` from
+`Probe`). PowerPoint for Mac 16 builds its own context menu (`SwiftPPT.ContextMenu`) and does not
+add customUI `contextMenus` items. One caveat: accessibility could not see PowerPoint's windows during
+the check, so it is not proven that the clicks reached the slide; the result matches what is generally reported:
+context menus can be customised only in Office for Windows. The ribbon has every
+command. Windows: not verified live.
+
 
 ## 12. Drag handles (Mac)
 
