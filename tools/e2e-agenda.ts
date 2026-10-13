@@ -37,11 +37,32 @@ await addinMain(['install'], { register: true });
 const { prefix } = buildAddin();
 if (ppt('get loaded of add in "open-charts"') !== 'true') throw new Error('PowerPoint did not load open-charts.ppam.');
 
+/** The text of a dialog PowerPoint shows (a VBA error, a message box), after pressing its default button. */
+function dismissDialog(): string {
+  try {
+    return osa(`tell application "System Events" to tell process "Microsoft PowerPoint"
+set t to ""
+repeat with w in windows
+  try
+    set t to t & (value of every static text of w as text) & " | "
+  end try
+end repeat
+key code 36
+return t
+end tell`, 20);
+  } catch (err) { return `(could not read the dialog: ${(err as Error).message.split('\n')[0]})`; }
+}
+
 let ready = false;
 function macro(proc: string, ...args: string[]): string {
   const before = logLines().length;
   for (let attempt = 1; ; attempt++) {
-    try { ppt(`run VB macro macro name ${q(`${prefix}_${proc}`)} list of parameters {${args.map(q).join(', ')}}`, 300); break; } catch (err) {
+    try { ppt(`run VB macro macro name ${q(`${prefix}_${proc}`)} list of parameters {${args.map(q).join(', ')}}`, ready ? 90 : 300); break; } catch (err) {
+      const msg = (err as Error).message;
+      if (/-1712|timed out/.test(msg)) {
+        console.error(`${proc}(${args.join(', ')}) timed out. Dialog: ${dismissDialog()}\nLog:\n${logLines().slice(before).join('\n')}`);
+        throw err;
+      }
       if (ready || attempt >= 8) throw err;
       sleep(5000);
     }

@@ -1584,8 +1584,10 @@ Private Sub AgendaCommand(ByVal cmd As String)
         Case Else: engineCmd = "update"
     End Select
     response = Engine(AgendaRequest(engineCmd))
+    If gSilent Then Report "AGENDA " & engineCmd & ": engine answered " & Len(response) & " chars"
     If response = "" Then Exit Sub
     moved = ApplyAgenda(response, newId)
+    If gSilent Then Report "AGENDA " & engineCmd & ": applied" & IIf(moved, ", slides inserted or moved", "")
     ' After slides were inserted or moved, every agenda slide is laid out again.
     If moved Then
         response = Engine(AgendaRequest("update"))
@@ -1992,33 +1994,33 @@ End Function
 ' ---- Agenda test entry points (scripted live tests; no dialogs) -------------------------------
 
 ' Types `text` over chapter `title`'s heading on slide n and sets its text level (0 = unchanged).
-Public Sub OCPREFIX_AgendaEdit(ByVal n As String, ByVal title As String, ByVal text As String, ByVal level As String)
+Public Sub OCPREFIX_AgendaEdit(ByVal n As String, ByVal heading As String, ByVal newText As String, ByVal level As String)
     Dim grp As Object, k As Long, tr As Object
     On Error GoTo Failed
     Set grp = AgendaGroup(ActivePresentation.Slides(CLng(n)))
     For k = 1 To grp.GroupItems.Count
         Set tr = grp.GroupItems(k).TextFrame2.TextRange
-        If HeadingText(tr) = title Then
-            If text <> "" Then tr.Text = text
+        If HeadingText(tr) = heading Then
+            If newText <> "" Then tr.Text = newText
             If Val(level) > 0 Then tr.Paragraphs(1).ParagraphFormat.IndentLevel = CLng(Val(level))
             Report "AGENDAEDIT OK"
             Exit Sub
         End If
     Next k
 Failed:
-    Report "AGENDAEDIT failed: no heading """ & title & """ on slide " & n
+    Report "AGENDAEDIT failed: no heading """ & heading & """ on slide " & n
 End Sub
 
 ' Goes to slide n and selects the heading `title` there ("" = select nothing), as a click would.
-Public Sub OCPREFIX_AgendaSelect(ByVal n As String, ByVal title As String)
+Public Sub OCPREFIX_AgendaSelect(ByVal n As String, ByVal heading As String)
     Dim grp As Object, k As Long
     On Error Resume Next
     ActiveWindow.View.GotoSlide CLng(n)
     ActiveWindow.Selection.Unselect
-    If title = "" Then Exit Sub
+    If heading = "" Then Exit Sub
     Set grp = AgendaGroup(ActivePresentation.Slides(CLng(n)))
     For k = 1 To grp.GroupItems.Count
-        If HeadingText(grp.GroupItems(k).TextFrame2.TextRange) = title Then grp.GroupItems(k).Select: Exit Sub
+        If HeadingText(grp.GroupItems(k).TextFrame2.TextRange) = heading Then grp.GroupItems(k).Select: Exit Sub
     Next k
 End Sub
 
